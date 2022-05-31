@@ -1,0 +1,22 @@
+###
+GET http://localhost:8080/users
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRAZy5jb20iLCJ1c2VySWQiOjQsImlhdCI6MTY1MTEwODI2MiwiZXhwIjoxNjUxMTEwMDYyfQ.1X7ceyAu5r4Sy-xRSKpdTb2JAqdddiTGQGr0HCmlfZA
+
+###
+POST http://localhost:8080/auth/signup
+Content-Type: application/json
+
+{
+    "email": "t@g.com",
+    "password": "12345",
+    "name": "t"
+}
+
+###
+POST http://localhost:8080/auth/login
+Content-Type: application/json
+
+{
+    "email": "t@g.com",
+    "password": "12345"
+}
