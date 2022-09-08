@@ -1,10 +1,10 @@
-const mediaService = require('../services/media-service.js')
-const utilService = require('../util/util.js')
+import * as mediaService from '../services/media-service.js';
+import {readFile} from '../util/util.js';
 
-exports.getMediaFiles = async function (req, res) {
+async function getMediaFiles(req, res) {
   const projectId = req.params.id
   // ///////////////////////////////////////////////////
-  // const data = await utilService.readFile(
+  // const data = await readFile(
   //   `/Users/trilok/software/code/morphobank/mb4-service/data/media_files/prj_${projectId}.json`
   // )
   // res.json(data)
@@ -22,3 +22,5 @@ exports.getMediaFiles = async function (req, res) {
     res.status(500).json({ message: 'Error while fetching media files.' })
   }
 }
+
+export {getMediaFiles}

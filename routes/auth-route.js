@@ -1,11 +1,12 @@
-const express = require('express')
-const authController = require('../controllers/auth-controller.js')
-const userController = require('../controllers/user-controller.js')
-const { body } = require('express-validator')
-const UserModel = require('../models/user.js')
-const router = express.Router()
+import express from 'express';
+import {body} from 'express-validator';
+import * as authController from '../controllers/auth-controller.js';
+import * as userController from '../controllers/user-controller.js';
+import UserModel from '../models/user.js'
 
-router.post(
+const authRouter = express.Router()
+
+authRouter.post(
   '/signup',
   [
     body('email')
@@ -30,7 +31,7 @@ router.post(
   userController.signup
 )
 
-router.post(
+authRouter.post(
   '/login',
   [
     body('email')
@@ -45,4 +46,4 @@ router.post(
   authController.login
 )
 
-module.exports = router
+export default authRouter;

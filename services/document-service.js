@@ -1,7 +1,7 @@
-const sequelize = require('../util/db.js')
+import sequelizeConn from '../util/db.js';
 
 async function getDocumentFolders(project_id) {
-  const [rows, metadata] = await sequelize.query(
+  const [rows, metadata] = await sequelizeConn.query(
     `select folder_id, title 
       from project_document_folders 
       where project_id=${project_id} order by title`
@@ -10,7 +10,7 @@ async function getDocumentFolders(project_id) {
 }
 
 async function getDocumentByFolderId(project_id, folder_id) {
-  const [rows, metadata] = await sequelize.query(
+  const [rows, metadata] = await sequelizeConn.query(
     `select document_id, title from project_documents
       where project_id=${project_id} and folder_id=${folder_id}`
   )
@@ -30,6 +30,4 @@ async function getDocuments(project_id) {
   return result
 }
 
-module.exports = {
-  getDocuments,
-}
+export {getDocuments}

@@ -1,8 +1,7 @@
-require('dotenv').config() // this will load .env file
-const jwt = require('jsonwebtoken')
-const bcrypt = require('bcrypt')
-const UserModel = require('../models/user.js')
-const { validationResult } = require('express-validator')
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
+import UserModel from '../models/user.js';
+import {validationResult} from 'express-validator';
 
 function isTokenExpired(token) {
   const expiry = JSON.parse(atob(token.split('.')[1])).exp
@@ -11,7 +10,7 @@ function isTokenExpired(token) {
 
 // add a middleware to authenticate
 // isAuth
-exports.authenticateToken = function (req, res, next) {
+function authenticateToken(req, res, next) {
   // split 'Bearer TOKEN'
   const authHeader = req.headers['authorization']
   const token = authHeader && authHeader.split(' ')[1]
@@ -34,7 +33,7 @@ exports.authenticateToken = function (req, res, next) {
   })
 }
 
-exports.login = function (req, res, next) {
+function login (req, res, next) {
   const errors = validationResult(req)
   if (!errors.isEmpty()) {
     const error = new Error('Validation failed.')
@@ -89,3 +88,5 @@ function generateAccessToken(user) {
     expiresIn: process.env.JWT_TOKEN_EXPIRES_IN,
   })
 }
+
+export {authenticateToken, login}

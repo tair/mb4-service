@@ -13,6 +13,10 @@ Content-Type: application/json
 }
 
 ###
+sample request
+curl -d "email=xingguo.chen@arabidopsis.org&password=techteam123&name=Xingguo" -X POST http://localhost:8080/auth/signup
+
+###
 POST http://localhost:8080/auth/login
 Content-Type: application/json
 
@@ -20,3 +24,7 @@ Content-Type: application/json
     "email": "t@g.com",
     "password": "12345"
 }
+
+
+###
+GET http://localhost:8080/projects/data_dump

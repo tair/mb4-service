@@ -1,17 +1,17 @@
-const sequelize = require('../util/db.js')
-const matrixService = require('./matrix-service')
-const statsService = require('./stats-service.js')
-const mediaService = require('./media-service.js')
-const instService = require('./inst-service.js')
-const membersService = require('./members-service.js')
-const taxaService = require('../services/taxa-service.js')
-const specimenService = require('../services/specimen-service.js')
-const bibService = require('../services/bibliography-service.js')
-const partitionService = require('../services/partition-service.js')
-const docsService = require('../services/document-service.js')
+import sequelizeConn from '../util/db.js';
+import * as matrixService from './matrix-service.js';
+import * as statsService from './stats-service.js';
+import * as mediaService from './media-service.js';
+import * as instService from './inst-service.js';
+import * as membersService from './members-service.js';
+import * as taxaService from '../services/taxa-service.js';
+import * as specimenService from '../services/specimen-service.js';
+import * as bibService from '../services/bibliography-service.js';
+import * as partitionService from '../services/partition-service.js';
+import * as docsService from '../services/document-service.js';
 
 async function getProjectViews(project_id) {
-  let [rows, metadata] = await sequelize.query(
+  let [rows, metadata] = await sequelizeConn.query(
     `select hit_type, count(*) as count from stats_pub_hit_log
     where project_id=${project_id} group by hit_type`
   )
@@ -29,7 +29,7 @@ async function getProjectViews(project_id) {
 }
 
 async function getProjectDownloads(project_id) {
-  let [rows, metadata] = await sequelize.query(
+  let [rows, metadata] = await sequelizeConn.query(
     `SELECT download_type, count(*) as count
     FROM stats_pub_download_log
     WHERE project_id=${project_id} group by download_type`
@@ -76,7 +76,7 @@ async function getProjectOverview(project_id) {
 
 async function getProjectSummary(project_id) {
   let [rows, metadata] =
-    await sequelize.query(`SELECT project_id, name, description, 
+    await sequelizeConn.query(`SELECT project_id, name, description, 
   user_id, published, created_on, 
   journal_title, journal_url, journal_volume, journal_number, journal_cover, journal_year,
   article_authors, article_title, article_pp,
@@ -119,6 +119,4 @@ async function getProjectDetails(projectId) {
   }
 }
 
-module.exports = {
-  getProjectDetails,
-}
+export {getProjectDetails}

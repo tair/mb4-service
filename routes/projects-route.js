@@ -1,16 +1,15 @@
-const express = require('express')
-const router = express.Router()
+import express from 'express';
+import * as projectsController from '../controllers/projects-controller.js';
+import * as mediaController from '../controllers/media-controller.js';
+import * as dataDumpController from '../controllers/datadump-controller.js';
+import * as authController from '../controllers/auth-controller.js';
 
-const projectsController = require('../controllers/projects-controller.js')
-const mediaController = require('../controllers/media-controller.js')
-const datadumbController = require('../controllers/datadump-controller.js')
+const projectRouter = express.Router()
 
-const isAuth = require('../controllers/auth-controller.js').authenticateToken
+projectRouter.get('/data_dump', dataDumpController.dataDump)
 
-router.get('/data_dump', datadumbController.dataDump)
+projectRouter.get('/', projectsController.getProjects)
+projectRouter.get('/:id', projectsController.getProjectsById)
+projectRouter.get('/media_files/:id', mediaController.getMediaFiles)
 
-router.get('/', projectsController.getProjects)
-router.get('/:id', projectsController.getProjectsById)
-router.get('/media_files/:id', mediaController.getMediaFiles)
-
-module.exports = router
+export default projectRouter;

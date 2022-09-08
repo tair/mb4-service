@@ -1,9 +1,9 @@
-const express = require('express')
-const bcrypt = require('bcrypt')
-const userModel = require('../models/user')
-const { validationResult } = require('express-validator')
+import express from 'express';
+import bcrypt from 'bcrypt';
+import userModel from '../models/user.js';
+import {validationResult} from 'express-validator';
 
-exports.getUsers = function (req, res, next) {
+function getUsers(req, res, next) {
   userModel
     .findAll({ attributes: ['user_id', 'email'] })
     .then((users) => {
@@ -17,7 +17,7 @@ exports.getUsers = function (req, res, next) {
     })
 }
 
-exports.signup = function (req, res, next) {
+function signup(req, res, next) {
   const errors = validationResult(req)
   if (!errors.isEmpty()) {
     const error = new Error('Validation failed.')
@@ -50,3 +50,5 @@ exports.signup = function (req, res, next) {
       next(err)
     })
 }
+
+export {getUsers, signup}

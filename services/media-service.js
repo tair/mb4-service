@@ -1,7 +1,7 @@
-const sequelize = require('../util/db.js')
+import sequelizeConn from '../util/db.js';
 
 async function getImageProps(project_id, type) {
-  const [rows, metadata] = await sequelize.query(
+  const [rows, metadata] = await sequelizeConn.query(
     `select media from media_files m where 
       m.project_id=${project_id} and m.media <> '' order by m.media_id limit 1`
   )
@@ -13,7 +13,7 @@ async function getImageProps(project_id, type) {
 }
 
 async function getMediaFiles(project_id) {
-  var [rows, metadata] = await sequelize.query(
+  var [rows, metadata] = await sequelizeConn.query(
     `select * from media_files where project_id=${project_id} and media != ''`
   )
 
@@ -30,7 +30,7 @@ async function getMediaFiles(project_id) {
 }
 
 async function getMediaViews(project_id) {
-  let [rows, metadata] = await sequelize.query(
+  let [rows, metadata] = await sequelizeConn.query(
     `select name from media_views where project_id=${project_id}`
   )
 
@@ -42,8 +42,4 @@ async function getMediaViews(project_id) {
   return res
 }
 
-module.exports = {
-  getImageProps,
-  getMediaViews,
-  getMediaFiles,
-}
+export {getImageProps, getMediaFiles, getMediaViews}

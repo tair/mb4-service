@@ -1,7 +1,7 @@
-const sequelize = require('../util/db.js')
+import sequelizeConn from '../util/db.js';
 
 async function getMatricesByProject(project_id) {
-  const [rows, metadata] = await sequelize.query(
+  const [rows, metadata] = await sequelizeConn.query(
     `select matrix_id, title, user_id
       from matrices
       where project_id=${project_id}`
@@ -9,6 +9,4 @@ async function getMatricesByProject(project_id) {
   return rows
 }
 
-module.exports = {
-  getMatricesByProject,
-}
+export {getMatricesByProject}

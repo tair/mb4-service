@@ -1,7 +1,7 @@
-const sequelize = require('../util/db.js')
+import sequelizeConn from '../util/db.js';
 
 async function getBibliography(project_id) {
-  const [rows, metadata] = await sequelize.query(
+  const [rows, metadata] = await sequelizeConn.query(
     `select 
       reference_id, article_title, journal_title,
       authors, vol, pubyear, collation
@@ -10,6 +10,4 @@ async function getBibliography(project_id) {
   return rows
 }
 
-module.exports = {
-  getBibliography,
-}
+export {getBibliography}

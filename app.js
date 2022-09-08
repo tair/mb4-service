@@ -1,11 +1,9 @@
-const express = require('express')
-const sequelize = require('./util/db.js')
-const cors = require('cors')
+import express from 'express';
+import projectRouter from './routes/projects-route.js';
+import authRouter from './routes/auth-route.js';
+import userRouter from './routes/user-route.js';
+
 const app = express()
-const port = 8000
-const project_route = require('./routes/projects-route')
-const auth_route = require('./routes/auth-route')
-const user_route = require('./routes/user-route')
 
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -28,9 +26,9 @@ app.get('/', (req, res) => {
   res.json({ message: 'The API service is alive!' })
 })
 
-app.use('/projects', project_route)
-app.use('/auth', auth_route)
-app.use('/users', user_route)
+app.use('/projects', projectRouter)
+app.use('/auth', authRouter)
+app.use('/users', userRouter)
 
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500
@@ -39,13 +37,4 @@ app.use((err, req, res, next) => {
   return
 })
 
-sequelize
-  .sync()
-  .then((result) => {
-    app.listen(process.env.PORT, () => {
-      console.log(`App listening at http://localhost:${process.env.PORT}`)
-    })
-  })
-  .catch((err) => {
-    console.log(err)
-  })
+export default app;
