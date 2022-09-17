@@ -2,10 +2,10 @@ const express = require('express')
 const sequelize = require('./util/db.js')
 const app = express()
 
-const auth_route = require('./routes/auth-route')
-const matrix_route = require('./routes/matrix-route')
-const project_route = require('./routes/projects-route')
-const user_route = require('./routes/user-route')
+const authRoute = require('./routes/auth-route')
+const projectRoute = require('./routes/project-route')
+const projectsRoute = require('./routes/projects-route')
+const userRoute = require('./routes/user-route')
 
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -28,10 +28,10 @@ app.get('/', (req, res) => {
   res.json({ message: 'The API service is alive!' })
 })
 
-app.use('/', matrix_route)
-app.use('/projects', project_route)
-app.use('/auth', auth_route)
-app.use('/users', user_route)
+app.use('/auth', authRoute)
+app.use('/home/project', projectRoute)
+app.use('/projects', projectsRoute)
+app.use('/users', userRoute)
 
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500
@@ -42,7 +42,7 @@ app.use((err, req, res, next) => {
 
 sequelize
   .sync()
-  .then((result) => {
+  .then(() => {
     app.listen(process.env.PORT, () => {
       console.log(`App listening at http://localhost:${process.env.PORT}`)
     })

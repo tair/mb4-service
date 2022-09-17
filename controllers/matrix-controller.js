@@ -2,7 +2,7 @@ const matrixService = require('../services/matrix-service.js')
 const partitionService = require('../services/partition-service')
 
 async function getMatrices(req, res) {
-  const projectId = req.params.id
+  const projectId = req.params.projectId
   try {
     const matrices = await matrixService.getMatrices(projectId)
     const partitions = await partitionService.getPartitions(projectId)
