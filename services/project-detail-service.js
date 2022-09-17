@@ -55,7 +55,7 @@ async function getProjectDownloads(projectId) {
 
 async function getProjectOverview(projectId) {
   const summary = await getProjectSummary(projectId)
-  const matrices = await matrixService.getMatricesByProject(projectId)
+  const matrices = await matrixService.getMatrices(projectId)
   const taxas = await taxaService.buildTaxa(projectId, matrices)
   const prj_stats = await statsService.getProjectStats(projectId)
   const image_props = await mediaService.getImageProps(projectId, 'small')

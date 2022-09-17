@@ -1,10 +1,10 @@
 const express = require('express')
 const sequelize = require('./util/db.js')
-const cors = require('cors')
 const app = express()
-const port = 8000
-const project_route = require('./routes/projects-route')
+
 const auth_route = require('./routes/auth-route')
+const matrix_route = require('./routes/matrix-route')
+const project_route = require('./routes/projects-route')
 const user_route = require('./routes/user-route')
 
 app.use((req, res, next) => {
@@ -28,6 +28,7 @@ app.get('/', (req, res) => {
   res.json({ message: 'The API service is alive!' })
 })
 
+app.use('/', matrix_route)
 app.use('/projects', project_route)
 app.use('/auth', auth_route)
 app.use('/users', user_route)
