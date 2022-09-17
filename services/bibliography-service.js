@@ -5,7 +5,7 @@ async function getBibliography(projectId) {
       SELECT reference_id, article_title, journal_title, authors, vol, pubyear,
           collation
       FROM bibliographic_references
-      WHERE project_id= ? `,
+      WHERE project_id = ? `,
     { replacements: [projectId] }
   )
   return rows

@@ -7,7 +7,7 @@ async function getSpecimenDetails(projectId) {
           t.*
       FROM specimens s
       INNER JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
-      INNER JOIN taxa t ON t.taxon_id=ts.taxon_id
+      INNER JOIN taxa t ON t.taxon_id = ts.taxon_id
       INNER JOIN ca_users u ON u.user_id = s.user_id AND s.project_id = ?`,
     { replacements: [projectId] }
   )
