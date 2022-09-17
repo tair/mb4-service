@@ -11,6 +11,6 @@ router.get('/data_dump', datadumbController.dataDump)
 
 router.get('/', projectsController.getProjects)
 router.get('/:id', projectsController.getProjectsById)
-router.get('/media_files/:id', mediaController.getMediaFiles)
+router.get('/:id/media', mediaController.getMediaFiles)
 
 module.exports = router

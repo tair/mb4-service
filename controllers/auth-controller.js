@@ -11,7 +11,7 @@ function isTokenExpired(token) {
 
 // add a middleware to authenticate
 // isAuth
-exports.authenticateToken = function (req, res, next) {
+function authenticateToken(req, res, next) {
   // split 'Bearer TOKEN'
   const authHeader = req.headers['authorization']
   const token = authHeader && authHeader.split(' ')[1]
@@ -34,7 +34,7 @@ exports.authenticateToken = function (req, res, next) {
   })
 }
 
-exports.login = function (req, res, next) {
+function login(req, res, next) {
   const errors = validationResult(req)
   if (!errors.isEmpty()) {
     const error = new Error('Validation failed.')
@@ -88,4 +88,9 @@ function generateAccessToken(user) {
   return jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
     expiresIn: process.env.JWT_TOKEN_EXPIRES_IN,
   })
+}
+
+module.exports = {
+  authenticateToken,
+  login,
 }

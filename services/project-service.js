@@ -3,11 +3,11 @@ const media = require('./media-service.js')
 const statsService = require('./stats-service.js')
 
 async function getProjects() {
-  let [rows, metadata] = await sequelize.query(
-    `select
-      p.project_id, journal_year, article_authors, article_title
-    from projects p where p.published=1 and p.deleted=0
-    order by p.published_on desc`
+  let [rows] = await sequelize.query(`
+      SELECT p.project_id, journal_year, article_authors, article_title
+      FROM projects p
+      WHERE p.published = 1 AND p.deleted = 0
+      ORDER BY p.published_on desc`
   )
 
   for (let i = 0; i < rows.length; i++) {

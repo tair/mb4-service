@@ -1,9 +1,11 @@
 const sequelize = require('../util/db.js')
 
-async function getPartitions(project_id) {
-  const [rows, metadata] = await sequelize.query(
-    `select partition_id, name 
-      from partitions where project_id=${project_id} order by name`
+async function getPartitions(projectId) {
+  const [rows] = await sequelize.query(`
+      SELECT partition_id, name 
+      FROM partitions
+      WHERE project_id = ? order by name`,
+    { replacements: [projectId] }
   )
   return rows
 }

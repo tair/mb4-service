@@ -1,18 +1,33 @@
 const sequelize = require('../util/db.js')
 
-async function getDocumentFolders(project_id) {
-  const [rows, metadata] = await sequelize.query(
-    `select folder_id, title 
-      from project_document_folders 
-      where project_id=${project_id} order by title`
+async function getDocumentFolders(projectId) {
+  const [rows] = await sequelize.query(`
+      SELECT folder_id, title 
+      FROM project_document_folders 
+      WHERE project_id = ?
+      ORDER BY title`,
+    { replacements: [projectId] }
   )
   return rows
 }
 
-async function getDocumentByFolderId(project_id, folder_id) {
-  const [rows, metadata] = await sequelize.query(
-    `select document_id, title from project_documents
-      where project_id=${project_id} and folder_id=${folder_id}`
+async function getDocuments(projectId) {
+  const [rows] = await sequelize.query(`
+      SELECT document_id, folder_id, title
+      FROM project_documents 
+      WHERE project_id = ?
+      ORDER BY title`,
+    { replacements: [projectId] }
+  )
+  return rows
+}
+
+async function getDocumentByFolderId(projectId, folderId) {
+  const [rows] = await sequelize.query(`
+      SELECT document_id, title
+      FROM project_documents
+      WHERE project_id = ? and folder_id = ?`,
+    { replacements: [projectId, folderId] }
   )
   return rows
 }
@@ -26,7 +41,6 @@ async function getDocuments(project_id) {
     fld.docs = await getDocumentByFolderId(project_id, fld.folder_id)
     result.push(fld)
   }
-
   return result
 }
 

@@ -1,19 +1,22 @@
-const sequelize = require('../util/db.js')
-const matrixService = require('./matrix-service')
-const statsService = require('./stats-service.js')
-const mediaService = require('./media-service.js')
-const instService = require('./inst-service.js')
-const membersService = require('./members-service.js')
-const taxaService = require('../services/taxa-service.js')
-const specimenService = require('../services/specimen-service.js')
 const bibService = require('../services/bibliography-service.js')
-const partitionService = require('../services/partition-service.js')
 const docsService = require('../services/document-service.js')
+const institutionService = require('./institution-service.js')
+const matrixService = require('./matrix-service')
+const mediaService = require('./media-service.js')
+const membersService = require('./members-service.js')
+const partitionService = require('../services/partition-service.js')
+const sequelize = require('../util/db.js')
+const specimenService = require('../services/specimen-service.js')
+const statsService = require('./stats-service.js')
+const taxaService = require('../services/taxa-service.js')
 
-async function getProjectViews(project_id) {
-  let [rows, metadata] = await sequelize.query(
-    `select hit_type, count(*) as count from stats_pub_hit_log
-    where project_id=${project_id} group by hit_type`
+async function getProjectViews(projectId) {
+  let [rows] = await sequelize.query(`
+      SELECT hit_type, count(*) as count
+      FROM stats_pub_hit_log
+      WHERE project_id = ?
+      GROUP BY hit_type`,
+    { replacements: [projectId] }
   )
   let total = 0
   let views = {}
@@ -28,11 +31,13 @@ async function getProjectViews(project_id) {
   return views
 }
 
-async function getProjectDownloads(project_id) {
-  let [rows, metadata] = await sequelize.query(
-    `SELECT download_type, count(*) as count
-    FROM stats_pub_download_log
-    WHERE project_id=${project_id} group by download_type`
+async function getProjectDownloads(projectId) {
+  let [rows] = await sequelize.query(`
+      SELECT download_type, count(*) as count
+      FROM stats_pub_download_log
+      WHERE project_id = ?
+      GROUP BY download_type`,
+    { replacements: [projectId] }
   )
 
   let total = 0
@@ -48,16 +53,16 @@ async function getProjectDownloads(project_id) {
   return res
 }
 
-async function getProjectOverview(project_id) {
-  const summary = await getProjectSummary(project_id)
-  const matrices = await matrixService.getMatricesByProject(project_id)
-  const taxas = await taxaService.buildTaxas(project_id, matrices)
-  const prj_stats = await statsService.getProjectStats(project_id)
-  const image_props = await mediaService.getImageProps(project_id, 'small')
-  const insts = await instService.fetchInstitutions(project_id)
-  const project_views = await getProjectViews(project_id)
-  const project_downloads = await getProjectDownloads(project_id)
-  const members = await membersService.getMembersList(project_id)
+async function getProjectOverview(projectId) {
+  const summary = await getProjectSummary(projectId)
+  const matrices = await matrixService.getMatricesByProject(projectId)
+  const taxas = await taxaService.buildTaxa(projectId, matrices)
+  const prj_stats = await statsService.getProjectStats(projectId)
+  const image_props = await mediaService.getImageProps(projectId, 'small')
+  const insts = await institutionService.fetchInstitutions(projectId)
+  const project_views = await getProjectViews(projectId)
+  const project_downloads = await getProjectDownloads(projectId)
+  const members = await membersService.getMembersList(projectId)
 
   const result = {
     members: members,
@@ -74,17 +79,16 @@ async function getProjectOverview(project_id) {
   return result
 }
 
-async function getProjectSummary(project_id) {
-  let [rows, metadata] =
-    await sequelize.query(`SELECT project_id, name, description, 
-  user_id, published, created_on, 
-  journal_title, journal_url, journal_volume, journal_number, journal_cover, journal_year,
-  article_authors, article_title, article_pp,
-  group_id, published_on, 
-  exemplar_media_id, partition_published_on, 
-  article_doi, project_doi
-  FROM projects
-  WHERE project_id=${project_id}`)
+async function getProjectSummary(projectId) {
+  let [rows] = await sequelize.query(`
+      SELECT project_id, name, description, user_id, published, created_on,
+          journal_title, journal_url, journal_volume, journal_number,
+          journal_cover, journal_year, article_authors, article_title,
+          article_pp, group_id, published_on, exemplar_media_id,
+          partition_published_on, article_doi, project_doi
+      FROM projects
+      WHERE project_id = ?`,
+    { replacements: [projectId] })
 
   if (rows) return rows[0]
   return {}

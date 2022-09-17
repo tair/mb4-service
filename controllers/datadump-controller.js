@@ -1,9 +1,9 @@
-const projectsService = require('../services/projects-service.js')
+const projectsService = require('../services/project-service.js')
 const mediaService = require('../services/media-service.js')
 const utilService = require('../util/util.js')
 const projectDetailService = require('../services/project-detail-service.js')
 
-exports.dataDump = async function (req, res) {
+async function dataDump(req, res) {
   try {
     const projects = await projectsService.getProjects()
     utilService.writeToFile(
@@ -17,9 +17,7 @@ exports.dataDump = async function (req, res) {
       console.log(`Dumping data for ${project.project_id}`)
       const project_id = project.project_id
       const media_files = await mediaService.getMediaFiles(project_id)
-      const project_details = await projectDetailService.getProjectDetails(
-        project_id
-      )
+      const project_details = await projectDetailService.getProjectDetails(project_id)
 
       await utilService.writeToFile(
         `/Users/trilok/software/code/morphobank/mb4-service/data/prj_details/prj_${project_id}.json`,
@@ -37,4 +35,8 @@ exports.dataDump = async function (req, res) {
     console.error(`Error while dumping data. `, err.message)
     res.status(500).json({ message: 'Error while running dump process.' })
   }
+}
+
+module.exports = {
+  dataDump,
 }
