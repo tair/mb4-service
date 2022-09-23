@@ -1,11 +1,11 @@
-const express = require('express')
-const router = express.Router({ mergeParams: true })
+import express from 'express';
+import * as matrixController from '../controllers/matrix-controller.js';
+import * as matrixEditorController from '../controllers/matrix-editor-controller.js';
 
-const matrixController = require('../controllers/matrix-controller.js')
-const matrixEditorController = require('../controllers/matrix-editor-controller.js')
+const matrixRouter = express.Router({ mergeParams: true })
 
-router.get('/', matrixController.getMatrices)
+matrixRouter.get('/', matrixController.getMatrices)
 
-router.get('/:matrixId/getMatrixData', matrixEditorController.getMatrixData)
+matrixRouter.get('/:matrixId/getMatrixData', matrixEditorController.getMatrixData)
 
-module.exports = router
+export default matrixRouter;

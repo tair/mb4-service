@@ -1,7 +1,7 @@
-const express = require('express')
-const bcrypt = require('bcrypt')
-const userModel = require('../models/user')
-const { validationResult } = require('express-validator')
+import express from 'express';
+import bcrypt from 'bcrypt';
+import userModel from '../models/user.js';
+import {validationResult} from 'express-validator';
 
 function getUsers(req, res, next) {
   userModel
@@ -51,7 +51,4 @@ function signup(req, res, next) {
     })
 }
 
-module.exports = {
-  getUsers,
-  signup,
-}
+export {getUsers, signup}

@@ -1,0 +1,9 @@
+version: '3.4'
+
+services:
+    mb4-service:
+        build: .
+        image: mb4-service:1.0
+        container_name: mb4-service-container
+        ports:
+            - "4001:80"

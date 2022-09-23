@@ -1,8 +1,9 @@
-const express = require('express')
-const userController = require('../controllers/user-controller.js')
-const isAuth = require('../controllers/auth-controller.js').authenticateToken
-const router = express.Router()
+import express from 'express';
+import * as userController from '../controllers/user-controller.js';
+import {authenticateToken} from '../controllers/auth-controller.js';
 
-router.get('/', isAuth, userController.getUsers)
+const userRouter = express.Router()
 
-module.exports = router
+userRouter.get('/', authenticateToken, userController.getUsers)
+
+export default userRouter;

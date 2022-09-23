@@ -1,12 +1,12 @@
-require('dotenv').config() // this will load .env file
-const Sequelize = require('sequelize')
-let config = require('../config')
-config = config[process.env.MB_ENV].db
+import Sequelize from "sequelize";
+import config from "../config.js";
 
-const sequelize = new Sequelize(config.database, config.user, config.password, {
-  logging: config.logging,
-  dialect: config.dialect,
-  host: config.host,
+let dbConfig = config.db
+
+const sequelizeConn = new Sequelize(dbConfig.database, dbConfig.user, dbConfig.password, {
+  logging: dbConfig.logging,
+  dialect: dbConfig.dialect,
+  host: dbConfig.host,
   pool: {
     max: 10,
     min: 5,
@@ -15,4 +15,4 @@ const sequelize = new Sequelize(config.database, config.user, config.password, {
   },
 })
 
-module.exports = sequelize
+export default sequelizeConn;

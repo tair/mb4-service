@@ -1,9 +1,9 @@
-const express = require('express')
-const router = express.Router()
+import express from 'express';
+import matrixRouter from './matrix-route.js';
+import {authenticateToken} from '../controllers/auth-controller.js';
 
-const isAuth = require('../controllers/auth-controller.js').authenticateToken
+const projectRouter = express.Router()
 
-const matrixRoute = require('./matrix-route.js')
-router.use('/:projectId/matrix', matrixRoute)
+projectRouter.use('/:projectId/matrix', matrixRouter)
 
-module.exports = router
+export default projectRouter;

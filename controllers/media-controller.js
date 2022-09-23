@@ -1,7 +1,8 @@
-const mediaService = require('../services/media-service.js')
+import * as mediaService from '../services/media-service.js';
 
 async function getMediaFiles(req, res) {
   const projectId = req.params.id
+
   try {
     const media_files = await mediaService.getMediaFiles(projectId)
     res.status(200).json(media_files)
@@ -11,6 +12,4 @@ async function getMediaFiles(req, res) {
   }
 }
 
-module.exports = {
-  getMediaFiles,
-}
+export {getMediaFiles}

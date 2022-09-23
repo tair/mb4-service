@@ -1,7 +1,7 @@
-const sequelize = require('../util/db.js')
+import sequelizeConn from '../util/db.js';
 
 async function getSpecimenDetails(projectId) {
-  const [rows] = await sequelize.query(`
+  const [rows] = await sequelizeConn.query(`
       SELECT s.reference_source, s.institution_code,s.user_id,
           s.collection_code, s.catalog_number, s.created_on, u.fname, u.lname,
           t.*
@@ -14,6 +14,4 @@ async function getSpecimenDetails(projectId) {
   return rows
 }
 
-module.exports = {
-  getSpecimenDetails,
-}
+export {getSpecimenDetails}

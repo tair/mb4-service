@@ -1,4 +1,4 @@
-const sequelize = require('../util/db.js')
+import sequelizeConn from '../util/db.js';
 
 async function getTaxaDetails(projectId) {
   const taxa_browser = await getTaxaByBrowseType(projectId)
@@ -9,7 +9,7 @@ async function getTaxaDetails(projectId) {
 }
 
 async function getTaxaByBrowseType(projectId) {
-  const [rows] = await sequelize.query(`
+  const [rows] = await sequelizeConn.query(`
       SELECT taxon_id, genus, specific_epithet, subspecific_epithet,
           supraspecific_clade, higher_taxon_kingdom, higher_taxon_phylum,
           higher_taxon_class, higher_taxon_order, higher_taxon_family,
@@ -23,7 +23,7 @@ async function getTaxaByBrowseType(projectId) {
 }
 
 async function getTaxaStatsByMatrixId(projectId, matrixId) {
-  let [rows] = await sequelize.query(
+  let [rows] = await sequelizeConn.query(
     `SELECT 
       taxon_name, unscored_cells, scored_cells,
       cell_warnings, npa_cells,
@@ -49,7 +49,4 @@ async function buildTaxa(projectId, matrices) {
   return taxaStats
 }
 
-module.exports = {
-  getTaxaDetails,
-  buildTaxa,
-}
+export {getTaxaDetails, buildTaxa}

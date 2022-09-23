@@ -1,13 +1,11 @@
-const sequelize = require('../util/db.js')
+import sequelizeConn from '../util/db.js';
 
 async function getProjectStats(projectId) {
-  const [rows] = await sequelize.query(
+  const [rows] = await sequelizeConn.query(
     'SELECT * FROM stats_projects_overview WHERE project_id = ?',
     { replacements: [projectId] }
   )
   return rows[0]
 }
 
-module.exports = {
-  getProjectStats,
-}
+export {getProjectStats}

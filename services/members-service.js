@@ -1,7 +1,7 @@
-const sequelize = require('../util/db.js')
+import sequelizeConn from '../util/db.js';
 
 async function getMembersList(projectId) {
-  const [rows] = await sequelize.query(`
+  const [rows] = await sequelizeConn.query(`
     SELECT smo.*
     FROM stats_members_overview smo
     LEFT JOIN projects_x_users AS pxu ON smo.project_id = pxu.project_id AND smo.user_id = pxu.user_id
@@ -12,6 +12,4 @@ async function getMembersList(projectId) {
   return rows
 }
 
-module.exports = {
-  getMembersList,
-}
+export {getMembersList}

@@ -14,6 +14,4 @@ function getMatrixData(req, res) {
   }
 }
 
-module.exports = {
-  getMatrixData,
-}
+export {getMatrixData}

@@ -1,9 +1,9 @@
-const projectsService = require('../services/project-service.js')
-const projectDetailService = require('../services/project-detail-service.js')
+import * as projectService from '../services/projects-service.js';
+import * as ProjectDetailService from '../services/project-detail-service.js';
 
 async function getProjects(req, res, next) {
   try {
-    const projects = await projectsService.getProjects()
+    const projects = await projectService.getProjects()
     res.status(200).json(projects)
   } catch (e) {
     console.error('Error while getting projects list.', e)
@@ -11,10 +11,11 @@ async function getProjects(req, res, next) {
   }
 }
 
-async function getProjectsById (req, res) {
+async function getProjectsById(req, res) {
+
   const projectId = req.params.id
   try {
-    const result = await projectDetailService.getProjectDetails(projectId)
+    const result = await ProjectDetailService.getProjectDetails(projectId)
     res.status(200).json(result)
   } catch (e) {
     console.error('Error while getting project details (controller).', e)
@@ -22,7 +23,5 @@ async function getProjectsById (req, res) {
   }
 }
 
-module.exports = {
-  getProjects,
-  getProjectsById,
-}
+
+export {getProjects, getProjectsById}

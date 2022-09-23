@@ -1,7 +1,7 @@
-const sequelize = require('../util/db.js')
+import sequelizeConn from '../util/db.js';
 
 async function getImageProps(projectId, type) {
-  const [rows] = await sequelize.query(`
+  const [rows] = await sequelizeConn.query(`
     SELECT media
     FROM media_files m
     WHERE m.project_id = ? AND m.media <> ''
@@ -17,7 +17,7 @@ async function getImageProps(projectId, type) {
 }
 
 async function getMediaFiles(projectId) {
-  const [rows] = await sequelize.query(
+  const [rows] = await sequelizeConn.query(
     "SELECT * FROM media_files WHERE project_id = ? AND media != ''",
     { replacements: [projectId] }
   )
@@ -35,7 +35,7 @@ async function getMediaFiles(projectId) {
 }
 
 async function getMediaViews(projectId) {
-  let [rows] = await sequelize.query(
+  let [rows] = await sequelizeConn.query(
     "SELECT name FROM media_views WHERE project_id = ? ",
     { replacements: [projectId] }
   )
@@ -47,8 +47,4 @@ async function getMediaViews(projectId) {
   return res
 }
 
-module.exports = {
-  getImageProps,
-  getMediaViews,
-  getMediaFiles,
-}
+export {getImageProps, getMediaFiles, getMediaViews}

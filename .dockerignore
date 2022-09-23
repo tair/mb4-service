@@ -1,0 +1,14 @@
+data
+db-dev
+node_modules
+npm-debug.log
+Dockerfile*
+docker-compose*
+.dockerignore
+.git
+.gitignore
+.prettierignore
+.prettierrc
+README.md
+LICENSE
+.vscode

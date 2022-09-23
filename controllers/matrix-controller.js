@@ -1,5 +1,5 @@
-const matrixService = require('../services/matrix-service.js')
-const partitionService = require('../services/partition-service')
+import * as matrixService from '../services/matrix-service.js';
+import * as partitionService from '../services/partition-service.js';
 
 async function getMatrices(req, res) {
   const projectId = req.params.projectId
@@ -20,6 +20,4 @@ async function getMatrices(req, res) {
   }
 }
 
-module.exports = {
-  getMatrices,
-}
+export {getMatrices}

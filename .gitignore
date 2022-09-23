@@ -7,6 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# data and dependancies
 data
 node_modules
 .DS_Store
@@ -14,6 +15,14 @@ dist
 dist-ssr
 coverage
 *.local
+
+# local database data files and database environment files
+db-dev/*.sql
+!db-dev/schema.sql
+db-dev/*.env
+
+# env files
+*.env
 
 # Editor directories and files
 .vscode/*

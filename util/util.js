@@ -1,4 +1,4 @@
-const fs = require('fs')
+import fs from 'fs';
 
 // function buildImageProps(mediaObj, type) {
 //   try {
@@ -19,7 +19,7 @@ const fs = require('fs')
 //   }
 // }
 
-async function readFile(fileName) {
+export async function readFile(fileName) {
   console.log('READING...')
   try {
     const data = fs.readFileSync(fileName, 'utf8')
@@ -30,7 +30,7 @@ async function readFile(fileName) {
   }
 }
 
-async function writeToFile(fileName, content) {
+export async function writeToFile(fileName, content) {
   try {
     const data = fs.writeFileSync(fileName, content)
   } catch (err) {
@@ -38,8 +38,12 @@ async function writeToFile(fileName, content) {
   }
 }
 
-module.exports = {
-  // buildImageProps,
-  readFile,
-  writeToFile,
+export async function createDir(dir) {
+  try {
+    if (!fs.existsSync(dir)){
+      fs.mkdirSync(dir, {recursive:true});
+    }
+  } catch (err) {
+    console.error(`Error creating directory ${dir}. `, err.message)
+  }
 }

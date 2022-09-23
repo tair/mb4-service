@@ -1,15 +1,17 @@
+import dotenv from 'dotenv';
+
+// read .env file
+dotenv.config();
+
 const config = {
-  dev: {
-    db: {
-      host: 'localhost',
-      user: 'morphobank',
-      database: 'morphobank',
-      password: 'sunnyday',
-      dialect: 'mysql',
-      logging: console.log,
-      // logging: false,
-    },
+  db: {
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    database: process.env.DB_SCHEMA,
+    password: process.env.DB_PASSWORD,
+    dialect: 'mysql',
+    logging: console.logging
   },
 }
 
-module.exports = config
+export default config;

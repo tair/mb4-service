@@ -1,8 +1,7 @@
-const { count } = require('console');
-const sequelize = require('../util/db.js')
+import sequelizeConn from '../util/db.js';
 
 async function getMatrices(projectId) {
-  const [rows] = await sequelize.query(`
+  const [rows] = await sequelizeConn.query(`
       SELECT matrix_id, title, user_id
       FROM matrices
       WHERE project_id = ?`,
@@ -16,28 +15,28 @@ async function getCounts(matrixIds) {
     return {};
   }
 
-  const [cellCount] = await sequelize.query(`
+  const [cellCount] = await sequelizeConn.query(`
         SELECT matrix_id, count(*) c
         FROM cells
         WHERE matrix_id IN (?)
         GROUP BY matrix_id`,
   { replacements: [matrixIds] });
 
-  const [taxaCount] = await sequelize.query(`
+  const [taxaCount] = await sequelizeConn.query(`
         SELECT matrix_id, count(*) c
         FROM matrix_taxa_order
         WHERE matrix_id IN (?)
         GROUP BY matrix_id`,
   { replacements: [matrixIds] });
 
-  const [characterCount] = await sequelize.query(`
+  const [characterCount] = await sequelizeConn.query(`
         SELECT matrix_id, count(*) c
         FROM matrix_character_order
         WHERE matrix_id IN (?)
         GROUP BY matrix_id`,
   { replacements: [matrixIds] });
 
-  const [continuousCharacterCount] = await sequelize.query(`
+  const [continuousCharacterCount] = await sequelizeConn.query(`
         SELECT mco.matrix_id, count(*) c
         FROM matrix_character_order mco
         INNER JOIN characters AS c ON c.character_id = mco.character_id
@@ -45,7 +44,7 @@ async function getCounts(matrixIds) {
         GROUP BY mco.matrix_id`,
   { replacements: [matrixIds] });
 
-  const [characterRulesCount] = await sequelize.query(`
+  const [characterRulesCount] = await sequelizeConn.query(`
 				SELECT mco.matrix_id, count(*) c
 				FROM character_rules cr
 				INNER JOIN matrix_character_order AS mco 
@@ -54,14 +53,14 @@ async function getCounts(matrixIds) {
         GROUP BY mco.matrix_id`,
   { replacements: [matrixIds] });
 
-  const cellMediaCount = await sequelize.query(`
+  const cellMediaCount = await sequelizeConn.query(`
         SELECT cxm.matrix_id, count(*) c
         FROM cells_x_media cxm
         WHERE cxm.matrix_id IN (?)
         GROUP BY cxm.matrix_id`,
   { replacements: [matrixIds] });
 
-  const [characterMediaCount] = await sequelize.query(`
+  const [characterMediaCount] = await sequelizeConn.query(`
         SELECT mco.matrix_id, count(*) c
         FROM matrix_character_order AS mco
         INNER JOIN characters_x_media AS cxm
@@ -70,7 +69,7 @@ async function getCounts(matrixIds) {
         GROUP BY mco.matrix_id`,
   { replacements: [matrixIds] });
 
-  const [mediaLabelCount] = await sequelize.query(`
+  const [mediaLabelCount] = await sequelizeConn.query(`
         SELECT cxm.matrix_id, count(*) c
         FROM cells_x_media cxm
         INNER JOIN media_labels AS ml
@@ -83,7 +82,7 @@ async function getCounts(matrixIds) {
   // contain '-' and an actual character  score). This is because we don't need
   // the numerical value but rather we only need to check that the matrix does
   // or does not contain that score.
-  const [polymorphoricCellCount] = await sequelize.query(`
+  const [polymorphoricCellCount] = await sequelizeConn.query(`
        SELECT DISTINCT matrix_id, 1 AS c
         FROM cells
         WHERE matrix_id IN(?)
@@ -112,7 +111,4 @@ async function getCounts(matrixIds) {
   }
 }
 
-module.exports = {
-  getCounts,
-  getMatrices,
-}
+export {getCounts,getMatrices}
