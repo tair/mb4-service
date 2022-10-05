@@ -1,7 +1,10 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import UserModel from '../models/user.js';
 import {validationResult} from 'express-validator';
+import {initModels} from "../models/init-models.js";
+import sequelizeConn from '../util/db.js';
+
+const models = initModels(sequelizeConn);
 
 function isTokenExpired(token) {
   const expiry = JSON.parse(atob(token.split('.')[1])).exp
@@ -35,7 +38,7 @@ function authenticateToken(req, res, next) {
 
 
 function login(req, res, next) {
-  const errors = validationResult(req)
+  const errors = validationResult(req.body)
   if (!errors.isEmpty()) {
     const error = new Error('Validation failed.')
     error.statusCode = 422
@@ -49,7 +52,7 @@ function login(req, res, next) {
   const password = req.body.password
   let loadedUser = null
 
-  UserModel.findOne({ where: { email: email } })
+  models.User.findOne({ where: { email: email } })
     .then((user) => {
       if (!user) {
         const error = new Error('A user with this email could not be found.')

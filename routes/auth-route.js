@@ -2,7 +2,10 @@ import express from 'express';
 import {body} from 'express-validator';
 import * as authController from '../controllers/auth-controller.js';
 import * as userController from '../controllers/user-controller.js';
-import UserModel from '../models/user.js'
+import {initModels} from "../models/init-models.js";
+import sequelizeConn from '../util/db.js';
+
+const models = initModels(sequelizeConn);
 
 const authRouter = express.Router()
 
@@ -13,7 +16,7 @@ authRouter.post(
       .isEmail()
       .withMessage('Please enter a valid email.')
       .custom((value, { req }) => {
-        return UserModel.findOne({ where: { email: value } }).then(
+        return models.User.findOne({ where: { email: value } }).then(
           (userDoc) => {
             if (userDoc) {
               return Promise.reject('E-Mail address already exists!')

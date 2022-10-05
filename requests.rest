@@ -1,6 +1,11 @@
 ###
 GET http://localhost:8080/users
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRAZy5jb20iLCJ1c2VySWQiOjQsImlhdCI6MTY1MTEwODI2MiwiZXhwIjoxNjUxMTEwMDYyfQ.1X7ceyAu5r4Sy-xRSKpdTb2JAqdddiTGQGr0HCmlfZA
+Authorization: Bearer {token from the login end point}
+
+
+###
+sample request
+curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InhpbmdndW8uY2hlbkBhcmFiaWRvcHNpcy5vcmciLCJ1c2VySWQiOjEsIm5hbWUiOiJYaW5nZ3VvIiwiaWF0IjoxNjY1MTgzMjQ0LCJleHAiOjE2NjUxODUwNDR9.HHO1m351NKLSGYAMgOhed-fg7mBF-9ZCtIk9Huud3mQ" http://localhost:8080/users
 
 ###
 POST http://localhost:8080/auth/signup
@@ -25,9 +30,14 @@ Content-Type: application/json
     "password": "12345"
 }
 
+###
+sample request
+curl -d "email=xingguo.chen@arabidopsis.org&password=techteam123" -X POST http://localhost:8080/auth/login
 
 ###
 GET http://localhost:8080/projects/data_dump
+sample request
+curl http://localhost:8080/projects/data_dump
 
 ###
 GET http://localhost:8080/home/project/:projectId/matrix

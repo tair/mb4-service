@@ -1,10 +1,13 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
-import userModel from '../models/user.js';
 import {validationResult} from 'express-validator';
+import {initModels} from "../models/init-models.js";
+import sequelizeConn from '../util/db.js';
+
+const models = initModels(sequelizeConn);
 
 function getUsers(req, res, next) {
-  userModel
+  models.User
     .findAll({ attributes: ['user_id', 'email'] })
     .then((users) => {
       return res.status(200).json(users)
@@ -18,7 +21,7 @@ function getUsers(req, res, next) {
 }
 
 function signup(req, res, next) {
-  const errors = validationResult(req)
+  const errors = validationResult(req.body)
   if (!errors.isEmpty()) {
     const error = new Error('Validation failed.')
     error.statusCode = 422
@@ -29,16 +32,15 @@ function signup(req, res, next) {
   const email = req.body.email
   const name = req.body.name
   const password = req.body.password
-
   bcrypt
     .hash(password, 10)
     .then((hashedPw) => {
-      const user = new userModel({
+      const userModel = new models.User({
         email: email,
         password: hashedPw,
         name: name,
       })
-      return user.save()
+      return userModel.save()
     })
     .then((result) => {
       res.status(201).json({ message: 'User created!', userId: result._id })
