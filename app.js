@@ -1,6 +1,6 @@
 import express from 'express';
-import projectRouter from './routes/project-route.js';
 import projectsRouter from './routes/projects-route.js';
+import publicProjectsRouter from './routes/public/projects-route.js';
 import authRouter from './routes/auth-route.js';
 import userRouter from './routes/user-route.js';
 
@@ -28,8 +28,8 @@ app.get('/', (req, res) => {
 })
 
 app.use('/auth', authRouter)
-app.use('/home/project', projectRouter)
 app.use('/projects', projectsRouter)
+app.use('/public/projects', publicProjectsRouter)
 app.use('/users', userRouter)
 
 app.use((err, req, res, next) => {

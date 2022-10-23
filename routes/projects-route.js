@@ -1,15 +1,8 @@
 import express from 'express';
-import * as projectsController from '../controllers/projects-controller.js';
-import * as mediaController from '../controllers/media-controller.js';
-import * as dataDumpController from '../controllers/datadump-controller.js';
-import * as authController from '../controllers/auth-controller.js';
+import matrixRouter from './matrix-route.js';
 
-const projectsRouter = express.Router()
+const projectRouter = express.Router({ mergeParams: true })
 
-projectsRouter.get('/data_dump', dataDumpController.dataDump)
+projectRouter.use('/:projectId/matrix', matrixRouter)
 
-projectsRouter.get('/', projectsController.getProjects)
-projectsRouter.get('/:id', projectsController.getProjectsById)
-projectsRouter.get('/:id/media', mediaController.getMediaFiles)
-
-export default projectsRouter;
+export default projectRouter;

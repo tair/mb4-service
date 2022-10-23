@@ -3,7 +3,6 @@ import http from "http";
 
 import sequelizeConn from './util/db.js';
 
-
 const normalizePort = val => {
   var port = parseInt(val, 10);
 
