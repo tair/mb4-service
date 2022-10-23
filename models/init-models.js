@@ -4,10 +4,6 @@ import _AnnotationEvent from  "./annotation-event.js";
 import _Annotation from  "./annotation.js";
 import _BibliographicAuthor from  "./bibliographic-author.js";
 import _BibliographicReference from  "./bibliographic-reference.js";
-import _CaTaskQueue from  "./ca-task-queue.js";
-import _CaUserRole from  "./ca-user-role.js";
-import _CaUser from  "./ca-user.js";
-import _CaUsersXRole from  "./ca-users-x-role.js";
 import _CellBatchLog from  "./cell-batch-log.js";
 import _CellNote from  "./cell-note.js";
 import _Cell from  "./cell.js";
@@ -50,23 +46,21 @@ import _Project from  "./project.js";
 import _ProjectsXUser from  "./projects-x-user.js";
 import _Specimen from  "./specimen.js";
 import _SpecimensXBibliographicReference from  "./specimens-x-bibliographic-reference.js";
+import _TaskQueue from "./task-queue.js";
 import _Taxa from  "./taxa.js";
 import _TaxaXBibliographicReference from  "./taxa-x-bibliographic-reference.js";
 import _TaxaXMedium from  "./taxa-x-medium.js";
 import _TaxaXPartition from  "./taxa-x-partition.js";
 import _TaxaXSpecimen from  "./taxa-x-specimen.js";
-import _User from  "./user.js";
-import sequelizeConn from '../util/db.js';
+import _User from "./user.js";
+import _UserRole from "./user-role.js";
+import _UsersXRole from "./users-x-role.js";
 
 function initModels(sequelizeConn) {
   const AnnotationEvent = _AnnotationEvent.init(sequelizeConn, DataTypes);
   const Annotation = _Annotation.init(sequelizeConn, DataTypes);
   const BibliographicAuthor = _BibliographicAuthor.init(sequelizeConn, DataTypes);
   const BibliographicReference = _BibliographicReference.init(sequelizeConn, DataTypes);
-  const CaTaskQueue = _CaTaskQueue.init(sequelizeConn, DataTypes);
-  const CaUserRole = _CaUserRole.init(sequelizeConn, DataTypes);
-  const CaUser = _CaUser.init(sequelizeConn, DataTypes);
-  const CaUsersXRole = _CaUsersXRole.init(sequelizeConn, DataTypes);
   const CellBatchLog = _CellBatchLog.init(sequelizeConn, DataTypes);
   const CellNote = _CellNote.init(sequelizeConn, DataTypes);
   const Cell = _Cell.init(sequelizeConn, DataTypes);
@@ -109,12 +103,15 @@ function initModels(sequelizeConn) {
   const ProjectsXUser = _ProjectsXUser.init(sequelizeConn, DataTypes);
   const Specimen = _Specimen.init(sequelizeConn, DataTypes);
   const SpecimensXBibliographicReference = _SpecimensXBibliographicReference.init(sequelizeConn, DataTypes);
+  const TaskQueue = _TaskQueue.init(sequelizeConn, DataTypes);
   const Taxa = _Taxa.init(sequelizeConn, DataTypes);
   const TaxaXBibliographicReference = _TaxaXBibliographicReference.init(sequelizeConn, DataTypes);
   const TaxaXMedium = _TaxaXMedium.init(sequelizeConn, DataTypes);
   const TaxaXPartition = _TaxaXPartition.init(sequelizeConn, DataTypes);
   const TaxaXSpecimen = _TaxaXSpecimen.init(sequelizeConn, DataTypes);
   const User = _User.init(sequelizeConn, DataTypes);
+  const UserRole = _UserRole.init(sequelizeConn, DataTypes);
+  const UsersXRole = _UsersXRole.init(sequelizeConn, DataTypes);
 
   AnnotationEvent.belongsTo(Annotation, { as: "annotation", foreignKey: "annotation_id"});
   Annotation.hasMany(AnnotationEvent, { as: "annotation_events", foreignKey: "annotation_id"});
@@ -130,14 +127,14 @@ function initModels(sequelizeConn) {
   BibliographicReference.hasMany(SpecimensXBibliographicReference, { as: "specimens_x_bibliographic_references", foreignKey: "reference_id"});
   TaxaXBibliographicReference.belongsTo(BibliographicReference, { as: "reference", foreignKey: "reference_id"});
   BibliographicReference.hasMany(TaxaXBibliographicReference, { as: "taxa_x_bibliographic_references", foreignKey: "reference_id"});
-  CaUsersXRole.belongsTo(CaUserRole, { as: "role", foreignKey: "role_id"});
-  CaUserRole.hasMany(CaUsersXRole, { as: "ca_users_x_roles", foreignKey: "role_id"});
-  CaUsersXRole.belongsTo(CaUser, { as: "user", foreignKey: "user_id"});
-  CaUser.hasMany(CaUsersXRole, { as: "ca_users_x_roles", foreignKey: "user_id"});
-  CuratorPotentialProject.belongsTo(CaUser, { as: "approved_by", foreignKey: "approved_by_id"});
-  CaUser.hasMany(CuratorPotentialProject, { as: "curator_potential_projects", foreignKey: "approved_by_id"});
-  InstitutionsXUser.belongsTo(CaUser, { as: "user", foreignKey: "user_id"});
-  CaUser.hasMany(InstitutionsXUser, { as: "institutions_x_users", foreignKey: "user_id"});
+  UsersXRole.belongsTo(UserRole, { as: "role", foreignKey: "role_id"});
+  UserRole.hasMany(UsersXRole, { as: "ca_users_x_roles", foreignKey: "role_id"});
+  UsersXRole.belongsTo(User, { as: "user", foreignKey: "user_id"});
+  User.hasMany(UsersXRole, { as: "ca_users_x_roles", foreignKey: "user_id"});
+  CuratorPotentialProject.belongsTo(User, { as: "approved_by", foreignKey: "approved_by_id"});
+  User.hasMany(CuratorPotentialProject, { as: "curator_potential_projects", foreignKey: "approved_by_id"});
+  InstitutionsXUser.belongsTo(User, { as: "user", foreignKey: "user_id"});
+  User.hasMany(InstitutionsXUser, { as: "institutions_x_users", foreignKey: "user_id"});
   CharacterRuleAction.belongsTo(CharacterRule, { as: "rule", foreignKey: "rule_id"});
   CharacterRule.hasMany(CharacterRuleAction, { as: "character_rule_actions", foreignKey: "rule_id"});
   Cell.belongsTo(CharacterState, { as: "state", foreignKey: "state_id"});
@@ -290,10 +287,6 @@ function initModels(sequelizeConn) {
     Annotation,
     BibliographicAuthor,
     BibliographicReference,
-    CaTaskQueue,
-    CaUserRole,
-    CaUser,
-    CaUsersXRole,
     CellBatchLog,
     CellNote,
     Cell,
@@ -336,12 +329,15 @@ function initModels(sequelizeConn) {
     ProjectsXUser,
     Specimen,
     SpecimensXBibliographicReference,
+    TaskQueue,
     Taxa,
     TaxaXBibliographicReference,
     TaxaXMedium,
     TaxaXPartition,
     TaxaXSpecimen,
     User,
+    UserRole,
+    UsersXRole,
   };
 }
 

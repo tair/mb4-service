@@ -1,43 +1,42 @@
-import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import {validationResult} from 'express-validator';
-import {initModels} from "../models/init-models.js";
+import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import sequelizeConn from '../util/db.js';
-
-const models = initModels(sequelizeConn);
+import { initModels } from "../models/init-models.js";
+import {validationResult} from 'express-validator';
 
 function isTokenExpired(token) {
-  const expiry = JSON.parse(atob(token.split('.')[1])).exp
+  const payload = Buffer.from(token.split('.')[1], 'base64')
+  const expiry = JSON.parse(payload).exp
   return Math.floor(new Date().getTime() / 1000) >= expiry
 }
 
-// add a middleware to authenticate
-// isAuth
 function authenticateToken(req, res, next) {
-  // split 'Bearer TOKEN'
   const authHeader = req.headers['authorization']
   const token = authHeader && authHeader.split(' ')[1]
 
-  // 401 - token is not found
-  if (token == null)
+  // Return 401 when token is not present in the header.
+  if (token == null) {
     return res.status(401).json({ message: 'Auth token not found.' })
+  }
 
   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
-    // 403 - we see that you have a token, but its not valid
-    if (err) return res.status(403).json({ message: 'Auth token is invalid.' })
+    // Return 403 when the token is present but invalid.
+    if (err) {
+      return res.status(403).json({ message: 'Auth token is invalid.' })
+    }
 
-    if (isTokenExpired(token))
+    if (isTokenExpired(token)) {
       return res.status(403).json({ message: 'Auth token expired.' })
+    }
 
-    // if everything OK, then we set user to the req,
-    // so that it will be available to the next request ('/posts')
     req.user = user
     next()
   })
 }
 
 
-function login(req, res, next) {
+async function login(req, res, next) {
   const errors = validationResult(req.body)
   if (!errors.isEmpty()) {
     const error = new Error('Validation failed.')
@@ -46,45 +45,42 @@ function login(req, res, next) {
     throw error
   }
 
-  // Authenticate user
-  // code goes here to authentication
   const email = req.body.email
+
+  const models = initModels(sequelizeConn);
+  const user = await models.User.findOne({ where: { email: email } })
+
+  if (!user) {
+    const error = new Error('A user with this email could not be found.')
+    error.statusCode = 401
+    next(error)
+    return;
+  }
+
   const password = req.body.password
-  let loadedUser = null
+  const passwordHash = crypto.createHash('md5').update(password).digest("hex")
 
-  models.User.findOne({ where: { email: email } })
-    .then((user) => {
-      if (!user) {
-        const error = new Error('A user with this email could not be found.')
-        error.statusCode = 401
-        throw error
-      }
-      loadedUser = user
-      return bcrypt.compare(password, user.password)
-    })
-    .then((isEqual) => {
-      if (!isEqual) {
-        const error = new Error('Wrong password!')
-        error.statusCode = 401
-        throw error
-      }
+  // The password stored in the MorphoBank database uses the password_hash and password_verify
+  // methods which use the Crypt algorithm instead. To make this compatible with the Bcrypt
+  // algorithm, we replace the algorithm part of the string, as suggested by:
+  // https://stackoverflow.com/questions/23015043
+  const storedPassword = user.password_hash.replace('$2y$', '$2a$')
 
-      // once the authentication is done,
-      // we need to serialize the user object to JWT token
-      const user = {
-        email: loadedUser.email,
-        userId: loadedUser.user_id,
-        name: loadedUser.name,
-      }
-      const accessToken = generateAccessToken(user)
-      res.status(200).json({ accessToken: accessToken, user: user })
-    })
-    .catch((err) => {
-      if (!err.statusCode) {
-        err.statusCode = 500
-      }
-      next(err)
-    })
+  const passwordMatch = await bcrypt.compare(passwordHash, storedPassword)
+  if (!passwordMatch) {
+    const error = new Error('Wrong password!')
+    error.statusCode = 401
+    next(error)
+    return;
+  }
+
+  const userResponse = {
+    email: user.email,
+    userId: user.user_id,
+    name: user.name,
+  }
+  const accessToken = generateAccessToken(userResponse)
+  res.status(200).json({ accessToken: accessToken, user: userResponse })
 }
 
 function generateAccessToken(user) {

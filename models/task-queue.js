@@ -1,7 +1,7 @@
 import _sequelize from 'sequelize';
-const { Model, Sequelize } = _sequelize;
+const { Model } = _sequelize;
 
-export default class CaTaskQueue extends Model {
+export default class TaskQueue extends Model {
   static init(sequelize, DataTypes) {
   return super.init({
     task_id: {

@@ -1,5 +1,5 @@
-import express from 'express';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import {validationResult} from 'express-validator';
 import {initModels} from "../models/init-models.js";
 import sequelizeConn from '../util/db.js';
@@ -30,15 +30,18 @@ function signup(req, res, next) {
   }
 
   const email = req.body.email
-  const name = req.body.name
+  const firstName = req.body.fname
+  const lastName = req.body.lname
   const password = req.body.password
+  const md5Password = crypto.createHash('md5').update(password).digest("hex")
   bcrypt
-    .hash(password, 10)
-    .then((hashedPw) => {
+    .hash(md5Password, 10)
+    .then(passwordHash => {
       const userModel = new models.User({
         email: email,
-        password: hashedPw,
-        name: name,
+        password_hash: passwordHash,
+        fname: firstName,
+        lname: lastName,
       })
       return userModel.save()
     })

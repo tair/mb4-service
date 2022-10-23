@@ -1,7 +1,7 @@
 import _sequelize from 'sequelize';
-const { Model, Sequelize } = _sequelize;
+const { Model } = _sequelize;
 
-export default class CaUsersXRole extends Model {
+export default class UsersXRole extends Model {
   static init(sequelize, DataTypes) {
   return super.init({
     relation_id: {
