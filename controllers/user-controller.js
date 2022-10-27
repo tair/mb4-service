@@ -1,10 +1,7 @@
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import {validationResult} from 'express-validator';
-import {initModels} from "../models/init-models.js";
-import sequelizeConn from '../util/db.js';
-
-const models = initModels(sequelizeConn);
+import {models} from "../models/init-models.js";
 
 function getUsers(req, res, next) {
   models.User

@@ -1,11 +1,11 @@
 import express from 'express';
+import matrixEditorRouter from './matrix-editor-route.js';
 import * as matrixController from '../controllers/matrix-controller.js';
-import * as matrixEditorController from '../controllers/matrix-editor-controller.js';
 
 const matrixRouter = express.Router({ mergeParams: true })
 
-matrixRouter.get('/', matrixController.getMatrices)
+matrixRouter.use('/:matrixId/edit', matrixEditorRouter)
 
-matrixRouter.get('/:matrixId/getMatrixData', matrixEditorController.getMatrixData)
+matrixRouter.get('/', matrixController.getMatrices)
 
 export default matrixRouter;

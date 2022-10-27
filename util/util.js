@@ -47,3 +47,7 @@ export async function createDir(dir) {
     console.error(`Error creating directory ${dir}. `, err.message)
   }
 }
+
+export function capitalizeFirstLetter(string) {
+  return string.charAt(0).toUpperCase() + string.slice(1);
+}

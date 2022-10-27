@@ -55,6 +55,7 @@ import _TaxaXSpecimen from  "./taxa-x-specimen.js";
 import _User from "./user.js";
 import _UserRole from "./user-role.js";
 import _UsersXRole from "./users-x-role.js";
+import sequelizeConn from '../util/db.js';
 
 function initModels(sequelizeConn) {
   const AnnotationEvent = _AnnotationEvent.init(sequelizeConn, DataTypes);
@@ -341,4 +342,6 @@ function initModels(sequelizeConn) {
   };
 }
 
-export {initModels}
+const models = initModels(sequelizeConn)
+
+export { models }

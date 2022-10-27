@@ -1,11 +1,8 @@
 import express from 'express';
-import sequelizeConn from '../util/db.js';
 import {body} from 'express-validator';
-import {initModels} from "../models/init-models.js";
+import {models} from "../models/init-models.js";
 import {login} from '../controllers/auth-controller.js';
 import {signup} from '../controllers/user-controller.js';
-
-const models = initModels(sequelizeConn);
 
 const authRouter = express.Router()
 

@@ -1,8 +1,7 @@
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import sequelizeConn from '../util/db.js';
-import { initModels } from "../models/init-models.js";
+import { models } from "../models/init-models.js";
 import {validationResult} from 'express-validator';
 
 function isTokenExpired(token) {
@@ -35,7 +34,6 @@ function authenticateToken(req, res, next) {
   })
 }
 
-
 async function login(req, res, next) {
   const errors = validationResult(req.body)
   if (!errors.isEmpty()) {
@@ -47,7 +45,6 @@ async function login(req, res, next) {
 
   const email = req.body.email
 
-  const models = initModels(sequelizeConn);
   const user = await models.User.findOne({ where: { email: email } })
 
   if (!user) {
