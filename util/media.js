@@ -1,4 +1,7 @@
-const URL_PATH = 'https://morphobank.org/media'
+import config from "../config.js";
+
+const MEDIA_PORT = config.media.port ? `:${config.media.port}`: ''
+const URL_PATH = `${config.media.scheme}://${config.media.domain}${MEDIA_PORT}/media/MorphoBank/images`
 
 function getMedia(media, version) {
   return {

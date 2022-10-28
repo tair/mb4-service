@@ -1,7 +1,7 @@
 import Sequelize from "sequelize";
 import config from "../config.js";
 
-let dbConfig = config.db
+const dbConfig = config.db
 
 const sequelizeConn = new Sequelize(dbConfig.database, dbConfig.user, dbConfig.password, {
   logging: dbConfig.logging,
