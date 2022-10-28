@@ -3,6 +3,9 @@ import * as matrixEditorController from '../controllers/matrix-editor-controller
 
 const matrixEditorRouter = express.Router({ mergeParams: true })
 
+
+matrixEditorRouter.post('/addTaxaToMatrix', matrixEditorController.addTaxaToMatrix)
+
 matrixEditorRouter.post('/getAllCellNotes', matrixEditorController.getAllCellNotes)
 matrixEditorRouter.post('/getCellCounts', matrixEditorController.getCellCounts)
 matrixEditorRouter.post('/getCellData', matrixEditorController.getCellData)

@@ -373,6 +373,70 @@ class MatrixEditorService {
     return rules
   }
 
+  async addTaxa(taxaIds, afterTaxonId) {
+    if (!this.canDo('addTaxon')) {
+      throw 'You are not allowed to add taxa'
+    }
+
+    // Ensure that all of the taxa belongs to this project. This ensures that the user is not
+    // passing in invalid taxa.
+    const [[{count}]] = await sequelizeConn.query(`
+      SELECT COUNT(*) AS count
+      FROM taxa WHERE project_id = ? AND taxon_id IN (?)`,
+      {replacements: [this.project.project_id, taxaIds]})
+    if (count != taxaIds.length) {
+      throw 'Taxa is not in this project'
+    }
+
+    let position
+    if (afterTaxonId > 0) {
+      const insertion = await models.MatrixTaxaOrder.findOne(
+          { where: { 'taxon_id': afterTaxonId, 'matrix_id': this.matrix.matrix_id } })
+      if (insertion == null) {
+        throw 'Insertion position is not valid'
+      }
+      position = insertion.position + 1
+    } else {
+      position = 1
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    await sequelizeConn.query(`
+        UPDATE matrix_taxa_order 
+        SET position = position + ? 
+        WHERE position >= ? AND matrix_id = ? 
+        ORDER BY position DESC`,
+        { 
+          replacements: [taxaIds.length, position, this.matrix.matrix_id],
+          transaction: transaction,
+         })
+
+    const values = []
+    for (const taxonId of taxaIds) {
+      values.push(`(${this.matrix.matrix_id}, ${taxonId}, '', ${position++})`)
+    }
+
+    await sequelizeConn.query(`
+      INSERT IGNORE INTO matrix_taxa_order(matrix_id, taxon_id, notes, position)
+      VALUES ${values.join(',')}`, { transaction: transaction })
+
+    await sequelizeConn.query(`
+      UPDATE matrix_taxa_order 
+      SET position=@tmp_position:=@tmp_position+1 
+      WHERE matrix_id = ? AND (@tmp_position:=0)+1 
+      ORDER BY position`,
+      { replacements: [this.matrix.matrix_id], transaction: transaction })
+
+    this.logMatrixChange(transaction)
+
+    await transaction.commit()
+    return {
+        'taxa_ids': taxaIds,
+        'after_taxon_id': afterTaxonId
+    }
+  }
+
   getMatrixInfo() {
     return {
       'id': this.matrix.matrix_id,
@@ -384,7 +448,7 @@ class MatrixEditorService {
   getOptions() {
     const options = {}
     for (const key of MATRIX_OPTIONS) {
-      options[key] = parseInt(this.matrix.other_options[key]);
+      options[key] = parseInt(this.matrix.other_options[key])
     }
     return options
   }
@@ -396,7 +460,7 @@ class MatrixEditorService {
     return {
       'available_groups': await this.getMemberGroups(),
       'user_groups': this.getUserMemberGroups(),
-      'is_admin': this.isAdminLike(),
+      'is_admin': await this.isAdminLike(),
       'user_id': parseInt(this.user.user_id),
       'last_login': 0, // TODO(alvaro): Implement this.
       'allowable_actions': [], // TODO(alvaro): Implement this.
@@ -422,7 +486,7 @@ getPublishAllowableActions() {
     "publish_change_logs": this.project.publish_change_logs,
     "publish_bibliography": this.project.publish_bibliography,
     "publish_cell_notes": this.project.publish_cell_notes
-  };
+  }
 }
 
   // TODO(alvaro): Implement this.
@@ -611,7 +675,7 @@ getPublishAllowableActions() {
       })
     }
 
-    return media;
+    return media
   }
 
   async getMembers() {
@@ -623,7 +687,7 @@ getPublishAllowableActions() {
         ORDER BY u.lname, u.fname`,  
         { replacements: [this.project.project_id] }
     )
-    return rows;
+    return rows
   }
 
   async getUploadedTimes() {
@@ -633,7 +697,7 @@ getPublishAllowableActions() {
 
     const uploadTimes = []
     for (const row of rows) {
-      uploadTimes.push(parseInt(row.uploaded_on));
+      uploadTimes.push(parseInt(row.uploaded_on))
     }
     return uploadTimes
   }
@@ -650,16 +714,22 @@ getPublishAllowableActions() {
     return []
   }
 
-  // TODO(alvaro): Implement this.
-  isAdminLike() {
-    return true
+  async isAdminLike() {
+    if (this.project.user_id == this.user.user_id) {
+      return true
+    }
+    if (this.matrix.user_id == this.user.user_id) {
+      return true
+    }
+    const roles = await this.getRoles()
+    return roles.includes('admin')
   }
 
   convertCellQueryToResults(rows) {
-    const cells = [];
+    const cells = []
     for (const row of rows) {
       const taxonId = parseInt(row.taxon_id)
-      const characterId = parseInt(row.character_id);
+      const characterId = parseInt(row.character_id)
       const cell = {
         'id': parseInt(row.cell_id),
         'tid': taxonId,
@@ -667,32 +737,119 @@ getPublishAllowableActions() {
         'uid': parseInt(row.user_id),
         'c': parseInt(row.created_on)
       }
-      const stateId = parseInt(row.state_id);
+      const stateId = parseInt(row.state_id)
       if (stateId) {
-        cell['sid'] = stateId;
+        cell['sid'] = stateId
       }
       if (row.is_npa) {
-        cell['npa'] = 1;
+        cell['npa'] = 1
       }
       if (row.is_uncertain) {
-        cell['uct'] = 1;
+        cell['uct'] = 1
       }
       // This is a shortcut to evaluate discrete characters to false and continuous and mestric
       // characters to true since they are numeric.
-      const isNumeric = !!row.type;
+      const isNumeric = !!row.type
       if (isNumeric) {
-        const convertFunction = parseInt(row.type) == 1 ? parseFloat : parseInt;
+        const convertFunction = parseInt(row.type) == 1 ? parseFloat : parseInt
         if (row.start_value) {
-          cell['sv'] = convertFunction(row.start_value);
+          cell['sv'] = convertFunction(row.start_value)
         }
         if (row.end_value) {
-          cell['ev'] = convertFunction(row.end_value);
+          cell['ev'] = convertFunction(row.end_value)
         }
       }
       cells.push(cell)
     }
-    return cells;
+    return cells
+  }
+
+  async canDo(action) {
+    const actions = await this.getUserAllowableActions()
+    return actions.includes(action)
+  }
+
+  async getUserAllowableActions() {
+    // If this project is published, the user is not allowed to perform any action.
+    if (this.project.status > 0) {
+      return []
+    }
+    const [rows] = await sequelizeConn.query(
+      'SELECT membership_type FROM projects_x_users WHERE project_id = ? AND user_id = ?',
+      { replacements: [this.project.project_id, this.user.user_id] })
+    if (rows.length == 0) {
+      return []
+    }
+
+    const membershipType = parseInt(row[0].membership_type)
+    switch (membershipType) {
+      case 0:  // full user
+        return FULL_USER_CAPABILITIES
+      case 1:  // observer
+        return OBSERVER_CAPABILITES
+      case 2:  // char limitation
+        return CHARACTER_ANNOTATOR_CAPABILITIES
+      case 3:  // bibliography maintainer
+      case 4:  // anonymous user
+      default:
+        return []
+    }
+  }
+
+  logMatrixChange(transaction) {
+    const time = Date.now()
+    sequelizeConn.query(`
+      INSERT INTO ca_change_log(log_datetime, user_id, unit_id, changetype, rolledback, logged_table_num, logged_row_id)
+			VALUES(?, ?, ?, ?, 0, 5, ?)`,
+      {
+        replacements: [time, this.user.user_id, null, 'U', this.matrix.matrix_id],
+        transaction: transaction
+      })
   }
 }
+
+const FULL_USER_CAPABILITIES = [
+  'addCharacter',
+  'editCharacter', 
+  'deleteCharacter', 
+  'addCharacterComment',
+  'addCharacterState', 
+  'editCharacterState', 
+  'deleteCharacterState',
+  'addCharacterMedia', 
+  'deleteCharacterMedia', 
+  'reorderCharacters', 
+  'addCharacterCitation', 
+  'deleteCharacterCitation',
+  'addTaxon', 
+  'addTaxonMedia', 
+  'deleteTaxonMedia',
+  'editCellData', 
+  'editTaxon', 
+  'addCellComment',
+  'addCharacterToPartition', 
+  'addTaxonToPartition', 
+  'setMatrixOptions'
+]
+
+const OBSERVER_CAPABILITES = [
+  'addCharacterComment',
+  'addCellComment'
+]
+
+const CHARACTER_ANNOTATOR_CAPABILITIES = [
+  'addCellComment',
+  'addCharacterMedia',
+  'deleteCharacterMedia',
+  'addCharacterComment', 
+  'addCharacterCitation',
+  'deleteCharacterCitation',
+  'editCellData', 
+  'editTaxon', 
+  'addTaxonMedia', 
+  'deleteTaxonMedia',
+  'addCharacterToPartition',
+  'addTaxonToPartition'
+]
 
 export default MatrixEditorService
