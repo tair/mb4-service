@@ -1,5 +1,5 @@
 import _sequelize from 'sequelize';
-const { Model, Sequelize } = _sequelize;
+const { Model } = _sequelize;
 
 export default class MatrixAdditionalBlock extends Model {
   static init(sequelize, DataTypes) {
