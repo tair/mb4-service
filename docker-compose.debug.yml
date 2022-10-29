@@ -1,0 +1,34 @@
+version: '3.4'
+
+services:
+  # mysql image creates an anonymous volume for /var/lib/mysql to preserve data
+  # need to use docker-compose version > 2.2.3 otherwise won't stop gracefully
+  # https://github.com/docker/compose/issues/8523
+  mb4-db-dev:
+    restart: always
+    image: mysql:8.0.30
+    command: --default-authentication-plugin=mysql_native_password
+    container_name: mb4-db-container-dev
+    env_file:
+      - ./db-dev/.env
+    ports:
+      - '3306:3306'
+
+  mb4-service-dev:
+    depends_on:
+      - mb4-db-dev
+    build:
+      context: .
+      target: debug-stage
+    image: mb4-service-dev:1.0
+    container_name: mb4-service-container-dev
+    volumes:
+      # bind volumes to local repository
+      - .:/app
+      - ./data:/data
+      # anonymous volume
+      - /app/node_modules
+    ports:
+      - '8080:8080'
+      # Port 9229 is the default node.js debugging port
+      - '9229:9229'
