@@ -35,8 +35,11 @@ app.use('/users', userRouter)
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500
   console.error(err.message, err.stack)
-  res.status(statusCode).json({ message: err.message, data: err.data })
-  return
+  if (req.xhr) {
+    res.status(statusCode).json({ message: err.message, data: err.data })
+  } else {
+    next(err)
+  }
 })
 
 export default app;
