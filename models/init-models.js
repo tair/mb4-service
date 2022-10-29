@@ -47,11 +47,11 @@ import _ProjectsXUser from  "./projects-x-user.js";
 import _Specimen from  "./specimen.js";
 import _SpecimensXBibliographicReference from  "./specimens-x-bibliographic-reference.js";
 import _TaskQueue from "./task-queue.js";
-import _Taxa from  "./taxa.js";
 import _TaxaXBibliographicReference from  "./taxa-x-bibliographic-reference.js";
 import _TaxaXMedium from  "./taxa-x-medium.js";
 import _TaxaXPartition from  "./taxa-x-partition.js";
 import _TaxaXSpecimen from  "./taxa-x-specimen.js";
+import _Taxon from "./taxon.js";
 import _User from "./user.js";
 import _UserRole from "./user-role.js";
 import _UsersXRole from "./users-x-role.js";
@@ -105,11 +105,11 @@ function initModels(sequelizeConn) {
   const Specimen = _Specimen.init(sequelizeConn, DataTypes);
   const SpecimensXBibliographicReference = _SpecimensXBibliographicReference.init(sequelizeConn, DataTypes);
   const TaskQueue = _TaskQueue.init(sequelizeConn, DataTypes);
-  const Taxa = _Taxa.init(sequelizeConn, DataTypes);
   const TaxaXBibliographicReference = _TaxaXBibliographicReference.init(sequelizeConn, DataTypes);
   const TaxaXMedium = _TaxaXMedium.init(sequelizeConn, DataTypes);
   const TaxaXPartition = _TaxaXPartition.init(sequelizeConn, DataTypes);
   const TaxaXSpecimen = _TaxaXSpecimen.init(sequelizeConn, DataTypes);
+  const Taxon = _Taxon.init(sequelizeConn, DataTypes);
   const User = _User.init(sequelizeConn, DataTypes);
   const UserRole = _UserRole.init(sequelizeConn, DataTypes);
   const UsersXRole = _UsersXRole.init(sequelizeConn, DataTypes);
@@ -224,38 +224,38 @@ function initModels(sequelizeConn) {
   ProjectGroup.hasMany(Project, { as: "projects", foreignKey: "group_id"});
   ProjectMembersXGroup.belongsTo(ProjectMemberGroup, { as: "group", foreignKey: "group_id"});
   ProjectMemberGroup.hasMany(ProjectMembersXGroup, { as: "project_members_x_groups", foreignKey: "group_id"});
-  BibliographicReference.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  BibliographicReference.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasMany(BibliographicReference, { as: "bibliographic_references", foreignKey: "project_id"});
-  Character.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  Character.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasMany(Character, { as: "characters", foreignKey: "project_id"});
-  CuratorPotentialProject.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  CuratorPotentialProject.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasOne(CuratorPotentialProject, { as: "curator_potential_project", foreignKey: "project_id"});
-  Folio.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  Folio.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasMany(Folio, { as: "folios", foreignKey: "project_id"});
-  InstitutionsXProject.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  InstitutionsXProject.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasMany(InstitutionsXProject, { as: "institutions_x_projects", foreignKey: "project_id"});
-  Matrix.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  Matrix.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasMany(Matrix, { as: "matrices", foreignKey: "project_id"});
-  MediaFile.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  MediaFile.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasMany(MediaFile, { as: "media_files", foreignKey: "project_id"});
-  MediaView.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  MediaView.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasMany(MediaView, { as: "media_views", foreignKey: "project_id"});
-  Partition.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  Partition.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasMany(Partition, { as: "partitions", foreignKey: "project_id"});
-  ProjectDocumentFolder.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  ProjectDocumentFolder.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasMany(ProjectDocumentFolder, { as: "project_document_folders", foreignKey: "project_id"});
-  ProjectDocument.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  ProjectDocument.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasMany(ProjectDocument, { as: "project_documents", foreignKey: "project_id"});
-  ProjectDuplicationRequest.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  ProjectDuplicationRequest.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasMany(ProjectDuplicationRequest, { as: "project_duplication_requests", foreignKey: "project_id"});
-  ProjectMemberGroup.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  ProjectMemberGroup.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasMany(ProjectMemberGroup, { as: "project_member_groups", foreignKey: "project_id"});
-  ProjectsXUser.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  ProjectsXUser.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasMany(ProjectsXUser, { as: "projects_x_users", foreignKey: "project_id"});
-  Specimen.belongsTo(Project, { as: "project", foreignKey: "project_id"});
+  Specimen.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
   Project.hasMany(Specimen, { as: "specimens", foreignKey: "project_id"});
-  Taxa.belongsTo(Project, { as: "project", foreignKey: "project_id"});
-  Project.hasMany(Taxa, { as: "taxas", foreignKey: "project_id"});
+  Taxon.belongsTo(Project, { as: "projects", foreignKey: "project_id"});
+  Project.hasMany(Taxon, { as: "taxa", foreignKey: "project_id"});
   ProjectMembersXGroup.belongsTo(ProjectsXUser, { as: "membership", foreignKey: "membership_id"});
   ProjectsXUser.hasMany(ProjectMembersXGroup, { as: "project_members_x_groups", foreignKey: "membership_id"});
   MediaFile.belongsTo(Specimen, { as: "specimen", foreignKey: "specimen_id"});
@@ -264,24 +264,24 @@ function initModels(sequelizeConn) {
   Specimen.hasMany(SpecimensXBibliographicReference, { as: "specimens_x_bibliographic_references", foreignKey: "specimen_id"});
   TaxaXSpecimen.belongsTo(Specimen, { as: "specimen", foreignKey: "specimen_id"});
   Specimen.hasMany(TaxaXSpecimen, { as: "taxa_x_specimens", foreignKey: "specimen_id"});
-  CellNote.belongsTo(Taxa, { as: "taxon", foreignKey: "taxon_id"});
-  Taxa.hasMany(CellNote, { as: "cell_notes", foreignKey: "taxon_id"});
-  Cell.belongsTo(Taxa, { as: "taxon", foreignKey: "taxon_id"});
-  Taxa.hasMany(Cell, { as: "cells", foreignKey: "taxon_id"});
-  CellsXBibliographicReference.belongsTo(Taxa, { as: "taxon", foreignKey: "taxon_id"});
-  Taxa.hasMany(CellsXBibliographicReference, { as: "cells_x_bibliographic_references", foreignKey: "taxon_id"});
-  CellsXMedium.belongsTo(Taxa, { as: "taxon", foreignKey: "taxon_id"});
-  Taxa.hasMany(CellsXMedium, { as: "cells_x_media", foreignKey: "taxon_id"});
-  MatrixTaxaOrder.belongsTo(Taxa, { as: "taxon", foreignKey: "taxon_id"});
-  Taxa.hasMany(MatrixTaxaOrder, { as: "matrix_taxa_orders", foreignKey: "taxon_id"});
-  TaxaXBibliographicReference.belongsTo(Taxa, { as: "taxon", foreignKey: "taxon_id"});
-  Taxa.hasMany(TaxaXBibliographicReference, { as: "taxa_x_bibliographic_references", foreignKey: "taxon_id"});
-  TaxaXMedium.belongsTo(Taxa, { as: "taxon", foreignKey: "taxon_id"});
-  Taxa.hasMany(TaxaXMedium, { as: "taxa_x_media", foreignKey: "taxon_id"});
-  TaxaXPartition.belongsTo(Taxa, { as: "taxon", foreignKey: "taxon_id"});
-  Taxa.hasMany(TaxaXPartition, { as: "taxa_x_partitions", foreignKey: "taxon_id"});
-  TaxaXSpecimen.belongsTo(Taxa, { as: "taxon", foreignKey: "taxon_id"});
-  Taxa.hasMany(TaxaXSpecimen, { as: "taxa_x_specimens", foreignKey: "taxon_id"});
+  CellNote.belongsTo(Taxon, { as: "taxa", foreignKey: "taxon_id"});
+  Taxon.hasMany(CellNote, { as: "cell_notes", foreignKey: "taxon_id"});
+  Cell.belongsTo(Taxon, { as: "taxa", foreignKey: "taxon_id"});
+  Taxon.hasMany(Cell, { as: "cells", foreignKey: "taxon_id"});
+  CellsXBibliographicReference.belongsTo(Taxon, { as: "taxa", foreignKey: "taxon_id"});
+  Taxon.hasMany(CellsXBibliographicReference, { as: "cells_x_bibliographic_references", foreignKey: "taxon_id"});
+  CellsXMedium.belongsTo(Taxon, { as: "taxa", foreignKey: "taxon_id"});
+  Taxon.hasMany(CellsXMedium, { as: "cells_x_media", foreignKey: "taxon_id"});
+  MatrixTaxaOrder.belongsTo(Taxon, { as: "taxa", foreignKey: "taxon_id"});
+  Taxon.hasMany(MatrixTaxaOrder, { as: "matrix_taxa_orders", foreignKey: "taxon_id"});
+  TaxaXBibliographicReference.belongsTo(Taxon, { as: "taxa", foreignKey: "taxon_id"});
+  Taxon.hasMany(TaxaXBibliographicReference, { as: "taxa_x_bibliographic_references", foreignKey: "taxon_id"});
+  TaxaXMedium.belongsTo(Taxon, { as: "taxa", foreignKey: "taxon_id"});
+  Taxon.hasMany(TaxaXMedium, { as: "taxa_x_media", foreignKey: "taxon_id"});
+  TaxaXPartition.belongsTo(Taxon, { as: "taxa", foreignKey: "taxon_id"});
+  Taxon.hasMany(TaxaXPartition, { as: "taxa_x_partitions", foreignKey: "taxon_id"});
+  TaxaXSpecimen.belongsTo(Taxon, { as: "taxa", foreignKey: "taxon_id"});
+  Taxon.hasMany(TaxaXSpecimen, { as: "taxa_x_specimens", foreignKey: "taxon_id"});
 
   return {
     AnnotationEvent,
@@ -331,11 +331,11 @@ function initModels(sequelizeConn) {
     Specimen,
     SpecimensXBibliographicReference,
     TaskQueue,
-    Taxa,
     TaxaXBibliographicReference,
     TaxaXMedium,
     TaxaXPartition,
     TaxaXSpecimen,
+    Taxon,
     User,
     UserRole,
     UsersXRole,

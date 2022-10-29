@@ -8,6 +8,7 @@ matrixEditorRouter.post('/getAvailableTaxa', matrixEditorController.getAvailable
 matrixEditorRouter.post('/addTaxaToMatrix', matrixEditorController.addTaxaToMatrix)
 matrixEditorRouter.post('/removeTaxaFromMatrix', matrixEditorController.removeTaxaFromMatrix)
 matrixEditorRouter.post('/reorderTaxa', matrixEditorController.reorderTaxa)
+matrixEditorRouter.post('/setTaxaNotes', matrixEditorController.setTaxaNotes)
 
 matrixEditorRouter.post('/getAllCellNotes', matrixEditorController.getAllCellNotes)
 matrixEditorRouter.post('/getCellCounts', matrixEditorController.getCellCounts)

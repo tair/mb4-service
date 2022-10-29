@@ -1,7 +1,7 @@
 import _sequelize from 'sequelize';
 const { Model, Sequelize } = _sequelize;
 
-export default class Taxa extends Model {
+export default class Taxon extends Model {
   static init(sequelize, DataTypes) {
   return super.init({
     taxon_id: {

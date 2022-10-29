@@ -69,6 +69,16 @@ export async function reorderTaxa(req, res) {
   res.status(200).json(data)
 }
 
+export async function setTaxaNotes(req, res) {
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  const notes = req.body.notes
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.setTaxaNotes(taxaIds, notes)
+  data.ok = true
+  res.status(200).json(data)
+}
+
+
 export async function logError(req) {
   console.log('Error: ', req.body)
 }

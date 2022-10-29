@@ -1,3 +1,4 @@
+import _sequelize from "sequelize";
 import sequelizeConn from '../util/db.js'
 import { models } from '../models/init-models.js'
 import { getRoles } from '../services/user-roles-service.js'
@@ -522,12 +523,12 @@ class MatrixEditorService {
   }
 
   async reorderTaxa(taxaIds, index) {
-    if (!this.canDo('editCellData')) {
-      throw 'You are not allowed to reorder this matrix'
-    }
-
     if (!taxaIds.length) {
       throw 'No taxa were specified'
+    }
+
+    if (!this.canDo('editCellData')) {
+      throw 'You are not allowed to reorder this matrix'
     }
 
     const transaction = await sequelizeConn.transaction()
@@ -559,6 +560,37 @@ class MatrixEditorService {
     return { 
       'taxa_ids': taxaIds, 
       'index': index 
+    }
+  }
+
+  async setTaxaNotes(taxaIds, notes) {
+    if (!taxaIds.length) {
+      throw 'You must specify taxa to modify the notes'
+    }
+
+    if (!this.canDo("editTaxon")) {
+      throw 'You are not allowed to modify taxa in this matrix'
+    }
+
+    if (!this.canEditTaxa(taxaIds)) {
+      throw 'You are not allowed to modify one or more of the selected taxa'
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    const Op = _sequelize.Op;
+    await models.Taxon.update(
+      { notes: notes },
+      {
+        where: { taxon_id: { [Op.in]: taxaIds } },
+        transaction: transaction
+      }
+    )
+
+    await transaction.commit()
+    return {
+      'taxa_ids': taxaIds,
+      'notes': notes
     }
   }
 
@@ -956,6 +988,20 @@ getPublishAllowableActions() {
       })
     }
     return media
+  }
+
+  async canEditTaxa(taxaIds) {
+    const [[{count}]] = await sequelizeConn.query(`
+			SELECT COUNT(mto.taxon_id) AS count
+			FROM matrix_taxa_order mto
+			INNER JOIN matrices AS m ON mto.matrix_id = m.matrix_id
+			INNER JOIN projects_x_users AS pxu ON m.project_id = pxu.project_id
+			LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
+			WHERE
+				m.matrix_id = ? AND pxu.user_id = ? AND mto.taxon_id IN (?) AND
+        (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.user_id = 0 OR mto.user_id = ?)`,
+      { replacements: [taxaIds, this.matrix.matrix_id, this.user.user_id, this.user.user_id] })
+    return count == taxaIds.length
   }
 }
 
