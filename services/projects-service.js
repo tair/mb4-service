@@ -27,7 +27,7 @@ async function getProjects() {
 }
 
 async function getProjectTitles(order) {
-  console.log('#### ' + order)
+  console.log('tet')
   let sort_by = 'ASC'
   if (order.toUpperCase() === 'DESC') sort_by = 'DESC'
 
@@ -39,4 +39,33 @@ async function getProjectTitles(order) {
   return rows
 }
 
-export { getProjects, getProjectTitles }
+async function getAuthorsWithProjects() {
+  let [rows] =
+    await sequelizeConn.query(`select CONCAT(u.fname, ' ', u.lname) as author, 
+    p.project_id, 
+    p.name
+ from projects_x_users pu, ca_users u, projects p
+ where pu.user_id = u.user_id and p.project_id=pu.project_id
+ and p.published=1 and p.deleted=0
+ order by CONCAT(u.fname, ' ', u.lname)`)
+
+  let authors = {}
+
+  for (let i = 0; i < rows.length; i++) {
+    let author = rows[i].author
+    let project = {
+      id: rows[i].project_id,
+      name: rows[i].name,
+    }
+
+    if (!authors[author]) {
+      authors[author] = [project]
+    } else {
+      authors[author].push(project)
+    }
+  }
+
+  return authors
+}
+
+export { getProjects, getProjectTitles, getAuthorsWithProjects }

@@ -34,4 +34,19 @@ async function getProjectTitles(req, res) {
   }
 }
 
-export { getProjects, getProjectsById, getProjectTitles }
+async function getAuthorsWithProjects(req, res) {
+  try {
+    const result = await projectService.getAuthorsWithProjects()
+    res.status(200).json(result)
+  } catch (e) {
+    console.error('Error while getting authors (controller).', e)
+    res.status(500).json({ message: 'Error while fetching authors.' })
+  }
+}
+
+export {
+  getProjects,
+  getProjectsById,
+  getProjectTitles,
+  getAuthorsWithProjects,
+}

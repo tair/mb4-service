@@ -8,8 +8,13 @@ const projectsRouter = express.Router()
 projectsRouter.get('/data_dump', dataDumpController.dataDump)
 
 projectsRouter.get('/', projectsController.getProjects)
+projectsRouter.get(
+  '/authors_projects',
+  projectsController.getAuthorsWithProjects
+)
 projectsRouter.get('/:id', projectsController.getProjectsById)
 projectsRouter.get('/titles/:sort_by', projectsController.getProjectTitles)
+
 projectsRouter.get('/:id/media', mediaController.getMediaFiles)
 
 export default projectsRouter
