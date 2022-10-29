@@ -8,7 +8,7 @@ async function getRoles(userId) {
 		WHERE ur.user_id = ?`,
     { replacements: [userId] }
   )
-  return rows
+  return rows.map(row => row.name)
 }
 
 export {

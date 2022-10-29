@@ -356,7 +356,8 @@ class MatrixEditorService {
 			LEFT JOIN character_states AS csa ON cra.state_id = csa.state_id
 			INNER JOIN matrix_character_order AS mcoa ON mcoa.character_id = cra.character_id AND mcoa.matrix_id = mco.matrix_id
 			WHERE mco.matrix_id = ?
-      ORDER BY mco.position, mcoa.position`, { replacements: [this.matrix.matrix_id] })
+      ORDER BY mco.position, mcoa.position`,
+      { replacements: [this.matrix.matrix_id] })
 
     const rules = []
     for (const row of rows) {
@@ -373,7 +374,42 @@ class MatrixEditorService {
     return rules
   }
 
-  async addTaxa(taxaIds, afterTaxonId) {
+  async getAvailableTaxa() {
+    const columnNames = TAXA_FIELD_NAMES.map(f => 't.' + f).join()
+    const [rows] = await sequelizeConn.query(`
+			SELECT DISTINCT
+				t.taxon_id, ${columnNames},
+        t.scientific_name_author, t.scientific_name_year,
+        t.color, t.user_id, t.notes, t.is_extinct,
+        wu.fname, wu.lname, wu.email
+			FROM taxa t
+			INNER JOIN ca_users AS wu ON wu.user_id = t.user_id
+			WHERE
+				t.project_id = ? AND
+				t.taxon_id NOT IN (SELECT taxon_id FROM matrix_taxa_order WHERE matrix_id = ?)
+			ORDER BY t.genus, t.specific_epithet`,
+      { replacements: [this.project.project_id, this.matrix.matrix_id] })
+
+    const media = await this.getTaxonMedia()
+
+    const taxa = []
+    for (const row of rows) {
+      const taxonId = parseInt(row.taxon_id)
+      const userId = parseInt(row.user_id)
+      const taxonName = getTaxonName(row, null, true, false, true)
+      taxa.push({
+        'id': taxonId,
+        'uid': userId,
+        'n': row.notes,
+        'dn': taxonName,
+        'on': taxonName,
+        'm': media.get(taxonId) ?? {}
+      })
+    }
+    return { 'taxa': taxa }
+  }
+
+  async addTaxaToMatrix(taxaIds, afterTaxonId) {
     if (!this.canDo('addTaxon')) {
       throw 'You are not allowed to add taxa'
     }
@@ -414,11 +450,11 @@ class MatrixEditorService {
 
     const values = []
     for (const taxonId of taxaIds) {
-      values.push(`(${this.matrix.matrix_id}, ${taxonId}, '', ${position++})`)
+      values.push(`(${this.matrix.matrix_id}, ${taxonId}, ${this.user.user_id}, '', ${position++})`)
     }
 
     await sequelizeConn.query(`
-      INSERT IGNORE INTO matrix_taxa_order(matrix_id, taxon_id, notes, position)
+      INSERT IGNORE INTO matrix_taxa_order(matrix_id, taxon_id, user_id, notes, position)
       VALUES ${values.join(',')}`, { transaction: transaction })
 
     await sequelizeConn.query(`
@@ -428,12 +464,60 @@ class MatrixEditorService {
       ORDER BY position`,
       { replacements: [this.matrix.matrix_id], transaction: transaction })
 
-    this.logMatrixChange(transaction)
+    await this.logMatrixChange(transaction)
 
     await transaction.commit()
     return {
         'taxa_ids': taxaIds,
         'after_taxon_id': afterTaxonId
+    }
+  }
+
+  async removeTaxaFromMatrix(taxaIds) {
+    if (!await this.isAdminLike()) {
+      throw 'You must be an administrator to remove a taxon from this matrix'
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    // Delete all references to the cells related to the taxa.
+    await sequelizeConn.query(`
+				DELETE ml FROM media_labels ml
+				INNER JOIN cells_x_media AS cm ON ml.link_id = cm.link_id
+				WHERE ml.table_num = 7 AND cm.taxon_id IN (?) AND cm.matrix_id = ?`, 
+      { replacements: [taxaIds, this.matrix.matrix_id], transaction: transaction })
+    await sequelizeConn.query(
+      'DELETE FROM cells_x_media WHERE taxon_id IN (?) AND matrix_id = ?',
+      { replacements: [taxaIds, this.matrix.matrix_id], transaction: transaction })
+    await sequelizeConn.query(
+      'DELETE FROM cells WHERE taxon_id IN (?) AND matrix_id = ?',
+      { replacements: [taxaIds, this.matrix.matrix_id], transaction: transaction })
+    await sequelizeConn.query(
+      'DELETE FROM cell_notes WHERE taxon_id IN (?) AND matrix_id = ?',
+      { replacements: [taxaIds, this.matrix.matrix_id], transaction: transaction })
+    await sequelizeConn.query(
+      'DELETE FROM cells_x_bibliographic_references WHERE taxon_id IN (?) AND matrix_id = ?',
+      { replacements: [taxaIds, this.matrix.matrix_id], transaction: transaction })
+    await sequelizeConn.query(
+      'DELETE FROM annotations WHERE table_num = 5 AND subspecifier_id IN (?) AND row_id = ?',
+      { replacements: [taxaIds, this.matrix.matrix_id], transaction: transaction })
+    await sequelizeConn.query(
+      'DELETE FROM matrix_taxa_order WHERE taxon_id IN (?) AND matrix_id = ?',
+    { replacements: [taxaIds, this.matrix.matrix_id], transaction: transaction })
+
+    // Renumber the taxa position in the matrix is that is monotonically increasing.
+    await sequelizeConn.query(`
+      UPDATE matrix_taxa_order 
+      SET position=@tmp_position:=@tmp_position+1 
+      WHERE matrix_id = ? AND (@tmp_position:=0)+1 
+      ORDER BY position`,
+      { replacements: [this.matrix.matrix_id], transaction: transaction })
+
+    await this.logMatrixChange(transaction)
+
+    await transaction.commit()
+    return {
+      'taxa_ids': taxaIds,
     }
   }
 
@@ -463,7 +547,7 @@ class MatrixEditorService {
       'is_admin': await this.isAdminLike(),
       'user_id': parseInt(this.user.user_id),
       'last_login': 0, // TODO(alvaro): Implement this.
-      'allowable_actions': [], // TODO(alvaro): Implement this.
+      'allowable_actions': await this.getUserAllowableActions(),
       'allowable_publish': this.getPublishAllowableActions(),
       'preferences': {...this.getPreferences(), ... await this.getPublicAccessInfo()}
     }
@@ -781,7 +865,7 @@ getPublishAllowableActions() {
       return []
     }
 
-    const membershipType = parseInt(row[0].membership_type)
+    const membershipType = parseInt(rows[0].membership_type)
     switch (membershipType) {
       case 0:  // full user
         return FULL_USER_CAPABILITIES
@@ -796,15 +880,41 @@ getPublishAllowableActions() {
     }
   }
 
-  logMatrixChange(transaction) {
-    const time = Date.now()
-    sequelizeConn.query(`
+  async logMatrixChange(transaction) {
+    const time = parseInt(Date.now() / 1000)
+    await sequelizeConn.query(`
       INSERT INTO ca_change_log(log_datetime, user_id, unit_id, changetype, rolledback, logged_table_num, logged_row_id)
 			VALUES(?, ?, ?, ?, 0, 5, ?)`,
       {
         replacements: [time, this.user.user_id, null, 'U', this.matrix.matrix_id],
         transaction: transaction
       })
+  }
+
+	async getTaxonMedia() {
+    const [rows] = await sequelizeConn.query(`
+      SELECT txm.link_id, t.taxon_id, mf.media_id, mf.media
+      FROM taxa_x_media txm
+      INNER JOIN media_files AS mf ON mf.media_id = txm.media_id
+      INNER JOIN taxa AS t ON t.taxon_id = txm.taxon_id
+      WHERE mf.project_id = ? 
+      ORDER BY t.taxon_id`,
+      { replacements: [this.project.project_id] })
+
+    const media = new Map()
+    for (const row of rows) {
+      const taxonId = parseInt(row.taxon_id)
+      if (!media.has(taxonId)) {
+        media.set(taxonId, [])
+      }
+      media.get(taxonId).push({
+        'taxon_id': taxonId,
+        'link_id': parseInt(row.link_id),
+        'media_id': parseInt(row.media_id),
+        'tiny': getMedia(row.media, 'tiny')
+      })
+    }
+    return media
   }
 }
 

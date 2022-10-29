@@ -23,13 +23,13 @@ export const TAXA_FIELD_NAMES = [
   "subspecific_epithet"
 ]
 
-export function getTaxonName(record, otu = "", showExtinctMarker = true, showAuthor = false, skipSubgenus = false) {
+export function getTaxonName(record, otu = null, showExtinctMarker = true, showAuthor = false, skipSubgenus = false) {
   const names = [];
   if (record.is_extinct && showExtinctMarker) {
     names.push("†")
   }
 
-  if (otu == null || otu == "subgenus" || otu == "specific_epithet" || otu == "subspecific_epithet") {
+  if (!TAXA_FIELD_NAMES.includes(otu) || otu == "subgenus" || otu == "specific_epithet" || otu == "subspecific_epithet") {
     otu = "genus";
   }
 

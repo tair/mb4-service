@@ -4,7 +4,9 @@ import * as matrixEditorController from '../controllers/matrix-editor-controller
 const matrixEditorRouter = express.Router({ mergeParams: true })
 
 
+matrixEditorRouter.post('/getAvailableTaxa', matrixEditorController.getAvailableTaxa)
 matrixEditorRouter.post('/addTaxaToMatrix', matrixEditorController.addTaxaToMatrix)
+matrixEditorRouter.post('/removeTaxaFromMatrix', matrixEditorController.removeTaxaFromMatrix)
 
 matrixEditorRouter.post('/getAllCellNotes', matrixEditorController.getAllCellNotes)
 matrixEditorRouter.post('/getCellCounts', matrixEditorController.getCellCounts)

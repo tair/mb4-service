@@ -1,54 +1,70 @@
 import MatrixEditorService from '../services/matrix-editor-service.js'
 
-async function getMatrixData(req, res) {
+export async function getMatrixData(req, res) {
   const matrixEditorService = await getMatrix(req)
   const data = await matrixEditorService.getMatrixData()
   data.ok = true
   res.status(200).json(data)
 }
 
-async function getCellData(req, res) {
+export async function getCellData(req, res) {
   const matrixEditorService = await getMatrix(req)
   const data = await matrixEditorService.getCellData()
   data.ok = true
   res.status(200).json(data)
 }
 
-async function getCellCounts(req, res) {
+export async function getCellCounts(req, res) {
   const matrixEditorService = await getMatrix(req)
   const data = await matrixEditorService.getCellCounts()
   data.ok = true
   res.status(200).json(data)
 }
 
-async function getAllCellNotes(req, res) {
+export async function getAllCellNotes(req, res) {
   const matrixEditorService = await getMatrix(req)
   const data = await matrixEditorService.getAllCellNotes()
   data.ok = true
   res.status(200).json(data)
 }
 
-async function getCellMedia(req, res) {
+export async function getCellMedia(req, res) {
   const matrixEditorService = await getMatrix(req)
   const data = await matrixEditorService.getCellMedia()
   data.ok = true
   res.status(200).json(data)
 }
 
-async function addTaxaToMatrix(req, res) {
-  const taxaIds = parseIntArray(req.body.taxaIds)
-  const afterTaxonId = parseInt(req.body.afterTaxonId)
+
+export async function getAvailableTaxa(req, res) {
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.getAvailableTaxa()
+  data.ok = true
+  res.status(200).json(data)
+}
+
+export async function addTaxaToMatrix(req, res) {
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  const afterTaxonId = parseInt(req.body.after_taxon_id)
   const matrixEditorService = await getMatrix(req)
   const data = await matrixEditorService.addTaxaToMatrix(taxaIds, afterTaxonId)
   data.ok = true
   res.status(200).json(data)
 }
 
-async function logError(req) {
+export async function removeTaxaFromMatrix(req, res) {
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.removeTaxaFromMatrix(taxaIds)
+  data.ok = true
+  res.status(200).json(data)
+}
+
+export async function logError(req) {
   console.log('Error: ', req.body)
 }
 
-async function getMatrix(req) {
+export async function getMatrix(req) {
   const projectId = parseInt(req.params.projectId)
   const matrixId = parseInt(req.params.matrixId)
   const userId = 683 // (req.body.userId)
@@ -61,14 +77,5 @@ function parseIntArray(array) {
   if (Array.isArray(array)) {
     return Array.from(new Set(array.map(i => parseInt(i))))
   }
-}
-
-export {
-  addTaxaToMatrix,
-  getAllCellNotes,
-  getCellCounts,
-  getCellData,
-  getCellMedia,
-  getMatrixData,
-  logError,
+  return []
 }
