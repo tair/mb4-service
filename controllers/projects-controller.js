@@ -1,5 +1,5 @@
-import * as projectService from '../services/projects-service.js';
-import * as ProjectDetailService from '../services/project-detail-service.js';
+import * as projectService from '../services/projects-service.js'
+import * as ProjectDetailService from '../services/project-detail-service.js'
 
 async function getProjects(req, res, next) {
   try {
@@ -12,7 +12,6 @@ async function getProjects(req, res, next) {
 }
 
 async function getProjectsById(req, res) {
-
   const projectId = req.params.id
   try {
     const result = await ProjectDetailService.getProjectDetails(projectId)
@@ -23,5 +22,31 @@ async function getProjectsById(req, res) {
   }
 }
 
+async function getProjectTitles(req, res) {
+  const sort_by = req.params.sort_by
 
-export {getProjects, getProjectsById}
+  try {
+    const result = await projectService.getProjectTitles(sort_by)
+    res.status(200).json(result)
+  } catch (e) {
+    console.error('Error while getting project titles (controller).', e)
+    res.status(500).json({ message: 'Error while fetching project titles.' })
+  }
+}
+
+async function getAuthorsWithProjects(req, res) {
+  try {
+    const result = await projectService.getAuthorsWithProjects()
+    res.status(200).json(result)
+  } catch (e) {
+    console.error('Error while getting authors (controller).', e)
+    res.status(500).json({ message: 'Error while fetching authors.' })
+  }
+}
+
+export {
+  getProjects,
+  getProjectsById,
+  getProjectTitles,
+  getAuthorsWithProjects,
+}
