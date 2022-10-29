@@ -1,4 +1,4 @@
-import _sequelize from "sequelize";
+import _sequelize from "sequelize"
 import sequelizeConn from '../util/db.js'
 import { models } from '../models/init-models.js'
 import { getRoles } from '../services/user-roles-service.js'
@@ -347,7 +347,7 @@ class MatrixEditorService {
     const [rows] = await sequelizeConn.query(`
 			SELECT
 				cr.rule_id, cr.character_id, cr.state_id, cra.action_id,
-      cra.character_id action_character_id, cra.state_id action_state_id, cra.action
+        cra.character_id action_character_id, cra.state_id action_state_id, cra.action
 			FROM character_rules cr
 			INNER JOIN character_rule_actions AS cra ON cr.rule_id = cra.rule_id
 			INNER JOIN matrix_character_order AS mco ON mco.character_id = cr.character_id
@@ -355,7 +355,8 @@ class MatrixEditorService {
 			LEFT JOIN character_states AS cs ON cr.state_id = cs.state_id
 			INNER JOIN characters AS ca ON cra.character_id = ca.character_id
 			LEFT JOIN character_states AS csa ON cra.state_id = csa.state_id
-			INNER JOIN matrix_character_order AS mcoa ON mcoa.character_id = cra.character_id AND mcoa.matrix_id = mco.matrix_id
+			INNER JOIN matrix_character_order AS mcoa 
+        ON mcoa.character_id = cra.character_id AND mcoa.matrix_id = mco.matrix_id
 			WHERE mco.matrix_id = ?
       ORDER BY mco.position, mcoa.position`,
       { replacements: [this.matrix.matrix_id] })
@@ -578,7 +579,7 @@ class MatrixEditorService {
 
     const transaction = await sequelizeConn.transaction()
 
-    const Op = _sequelize.Op;
+    const Op = _sequelize.Op
     await models.Taxon.update(
       { notes: notes },
       {
@@ -605,10 +606,10 @@ class MatrixEditorService {
 
     const transaction = await sequelizeConn.transaction()
 
-    const Op = _sequelize.Op;
+    const Op = _sequelize.Op
     await models.MatrixTaxaOrder.update(
       { 
-        'user_id': notes,
+        'user_id': userId,
         'group_id': groupId,
       },
       {
@@ -625,6 +626,135 @@ class MatrixEditorService {
       'taxa_ids': taxaIds,
       'user_id': userId,
       'group_id': groupId,
+    }
+  }
+
+  async addTaxonMedia(taxaIds, mediaIds) {
+    if (!await this.canDo('addTaxonMedia')) {
+      throw 'You are not allowed to add media to this taxon'
+    }
+
+    if (!await this.canEditTaxa(taxaIds)) {
+      throw 'You are not allowed to modify one or more of the selected taxa'
+    }
+
+    const media = await this.getMediaByIds(mediaIds)
+    if (media.size != mediaIds.length) {
+      throw 'One or more of the media do not belong to the project'
+    }
+
+    const transaction = await sequelizeConn.transaction()
+    const mediaList = []
+    const time = parseInt(Date.now() / 1000)
+    for (const mediaId of mediaIds) {
+      const tinyMedia = getMedia(media.get(mediaId), 'tiny')
+      for (const taxonId of taxaIds) {
+        const [taxonMedia, isCreated] = await models.TaxaXMedium.findOrCreate(
+          {
+            where: { 
+              taxon_id: taxonId,
+              media_id: mediaId,
+            },
+            defaults: {
+              taxon_id: taxonId,
+              media_id: mediaId,
+              user_id: this.user.user_id,
+              created_on: time,
+            },
+            transaction: transaction
+          }
+        )
+        if (!isCreated) {
+          continue
+        }
+
+        mediaList.push({
+          'link_id': taxonMedia.link_id,
+          'media_id': taxonMedia.media_id,
+          'taxon_id': taxonMedia.taxon_id,
+          'tiny': tinyMedia,      
+        })
+      }
+    }
+
+    await transaction.commit()
+    return {
+      'media': mediaList
+    }
+  }
+
+  async loadTaxaMedia(taxonId, search) {
+    const media = []
+    const mediaIds = []
+  
+    if (search) {
+      //TODO(kenzley): Implement search functionality using Elastic Search.
+    } else {
+      const replacements = [this.project.project_id]
+      let clause = ''
+      const taxon = await models.Taxon.findByPk(taxonId)
+      if (taxon != null) {
+        // Instead of searching by a single taxon, we are searching for media belonging to similar taxa which match
+        // the genus, species, and subspecies if available. If none are available, let's instead return all media
+        // associated with the project.
+        const fields = ['subspecific_epithet', 'specific_epithet', 'genus']
+        for (const field of fields) {
+          const unit = taxon[field]
+          if (unit) {
+            clause += ` AND t.${field} = ?`
+            replacements.push(unit)
+          }
+        }
+      }
+
+      const [rows] = await sequelizeConn.query(`
+          SELECT
+            DISTINCT mf.media_id, mf.media
+          FROM media_files mf
+          INNER JOIN specimens AS s ON s.specimen_id = mf.specimen_id
+          INNER JOIN taxa_x_specimens AS txs ON s.specimen_id = txs.specimen_id
+          INNER JOIN taxa AS t ON txs.taxon_id = t.taxon_id
+          WHERE
+            mf.project_id = ? AND mf.cataloguing_status = 0 ${clause}
+          ORDER BY mf.media_id`,
+        { replacements: replacements })
+      for (const row of rows) {
+        const mediaId = parseInt(row.media_id)
+        mediaIds.push(mediaId)
+        media.push({
+          'media_id': mediaId,
+          'icon': getMedia(row.media, 'icon'),
+          'tiny': getMedia(row.media, 'tiny'),
+        })
+      }
+    }
+
+    // Sort by the last the time user recently used the media. This ensures that recently used media
+    // is at the top of the media grid.
+    if (mediaIds.length) {
+      const [rows] = await sequelizeConn.query(`
+      SELECT media_id, MAX(created_on) AS created_on
+      FROM cells_x_media
+      WHERE matrix_id = ? AND user_id = ? AND media_id IN(?)
+      GROUP BY media_id`,
+      { replacements: [this.matrix.matrix_id, this.user.user_id, mediaIds] })
+
+      const mediaTimes = new Map()
+      for (const row of rows) {
+        const mediaId = parseInt(row.media_id)
+        const createdOn = parseInt(row.created_on)
+        mediaTimes.set(mediaId, createdOn)
+      }
+
+      media.sort((a, b) => {
+        const aTime = mediaTimes.get(a['media_id']) ?? 0
+        const bTime = mediaTimes.get(b['media_id']) ?? 0
+        return Math.sign(bTime - aTime)
+      })
+    }
+
+    return {
+      'media': media
     }
   }
 
@@ -650,13 +780,14 @@ class MatrixEditorService {
   async getUserAccessInfo() {
     return {
       'available_groups': await this.getMemberGroups(),
-      'user_groups': this.getUserMemberGroups(),
+      'user_groups': await this.getUserMemberGroups(),
       'is_admin': await this.isAdminLike(),
       'user_id': parseInt(this.user.user_id),
       'last_login': 0, // TODO(alvaro): Implement this.
       'allowable_actions': await this.getUserAllowableActions(),
       'allowable_publish': this.getPublishAllowableActions(),
-      'preferences': {...this.getPreferences(), ... await this.getPublicAccessInfo()}
+      'preferences': this.getPreferences(),
+      ... await this.getPublicAccessInfo()
     }
   }
 
@@ -665,7 +796,7 @@ class MatrixEditorService {
       'created_on': parseInt(this.matrix.created_on),
       'upload_times': await this.getUploadedTimes(),
       'status': parseInt(this.project.published),
-      'members': await  this.getMembers()
+      'members': await this.getMembers()
     }
   }
 
@@ -698,7 +829,8 @@ getPublishAllowableActions() {
       FROM annotations a
       INNER JOIN matrix_character_order AS mco ON mco.character_id = a.row_id
       WHERE a.table_num = 3 AND mco.matrix_id = ?
-      GROUP BY mco.character_id`, { replacements: [this.matrix.matrix_id] })
+      GROUP BY mco.character_id`,
+      { replacements: [this.matrix.matrix_id] })
     for (const row of characterCountRows) {
       const characterId = parseInt(row.character_id)
       const commentCount = parseInt(row.comment_count)
@@ -797,7 +929,7 @@ getPublishAllowableActions() {
   async getCharacterLastUserScoringTimes() {
     const times = new Map()
 
-    const time = Date.now()
+    const time = parseInt(Date.now() / 1000)
     const [characterRows] = await sequelizeConn.query(`
         SELECT character_id 
         FROM matrix_character_order AS mco
@@ -818,7 +950,7 @@ getPublishAllowableActions() {
 			LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
 			WHERE
 				ccl.matrix_id = ? AND pxu.user_id = ? AND 
-        (mto.group_id = pmxg.group_id OR mto.user_id = ? OR mto.user_id IS NULL OR mto.group_id = NULL)
+        (mto.group_id = pmxg.group_id OR mto.user_id = ? OR mto.user_id IS NULL OR mto.group_id IS NULL)
 			GROUP BY ccl.character_id`,
       { replacements: [this.matrix.matrix_id, this.user.user_id, this.user.user_id] })
     for (const row of lastScoredTimesRows) {
@@ -900,9 +1032,14 @@ getPublishAllowableActions() {
     return rows
   }
 
-  // TODO(alvaro): Implement this.
-  getUserMemberGroups() {
-    return []
+  async getUserMemberGroups() {
+    const [rows] = await sequelizeConn.query(`
+      SELECT pmg.group_id
+      FROM projects_x_users AS pu
+			INNER JOIN project_members_x_groups AS pmg ON pmg.membership_id = pu.link_id
+			WHERE pu.project_id = ? AND pu.user_id = ?`,
+      { replacements: [this.project.project_id, this.user.user_id] })
+    return rows.map(row => parseInt(row.group_id))
   }
 
   async isAdminLike() {
@@ -1033,9 +1170,23 @@ getPublishAllowableActions() {
 			LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
 			WHERE
 				m.matrix_id = ? AND pxu.user_id = ? AND mto.taxon_id IN (?) AND
-        (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.user_id = 0 OR mto.user_id = ?)`,
-      { replacements: [taxaIds, this.matrix.matrix_id, this.user.user_id, this.user.user_id] })
+        (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id IS NULL OR mto.user_id = ?)`,
+      { replacements: [this.matrix.matrix_id, this.user.user_id, taxaIds, this.user.user_id] })
     return count == taxaIds.length
+  }
+
+  async getMediaByIds(mediaIds) {
+    const [rows] = await sequelizeConn.query(`
+			SELECT media_id, media
+			FROM media_files
+			WHERE project_id = ? AND media_id IN (?)`,
+      { replacements: [this.project.project_id, mediaIds] })
+    const media = new Map()
+    for (const row of rows) {
+      const mediaId = parseInt(row.media_id)
+      media.set(mediaId, row.media)
+    }
+    return media
   }
 }
 

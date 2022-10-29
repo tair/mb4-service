@@ -79,10 +79,28 @@ export async function setTaxaNotes(req, res) {
 
 export async function setTaxaAccess(req, res) {
   const taxaIds = parseIntArray(req.body.taxa_ids)
-  const userId = parseInt(req.body.userId) || null
-  const groupId = parseInt(req.body.groupId) || null
+  const userId = parseInt(req.body.user_id) || null
+  const groupId = parseInt(req.body.group_id) || null
   const matrixEditorService = await getMatrix(req)
   const data = await matrixEditorService.setTaxaAccess(taxaIds, userId, groupId)
+  data.ok = true
+  res.status(200).json(data)
+}
+
+export async function addTaxonMedia(req, res) {
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  const mediaIds = parseIntArray(req.body.media_ids)
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.addTaxonMedia(taxaIds, mediaIds)
+  data.ok = true
+  res.status(200).json(data)
+}
+
+export async function loadTaxaMedia(req, res) {
+  const taxonId = parseInt(req.body.taxon_id)
+  const search = req.body.search
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.loadTaxaMedia(taxonId, search)
   data.ok = true
   res.status(200).json(data)
 }
