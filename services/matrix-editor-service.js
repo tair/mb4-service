@@ -521,6 +521,47 @@ class MatrixEditorService {
     }
   }
 
+  async reorderTaxa(taxaIds, index) {
+    if (!this.canDo('editCellData')) {
+      throw 'You are not allowed to reorder this matrix'
+    }
+
+    if (!taxaIds.length) {
+      throw 'No taxa were specified'
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    await sequelizeConn.query(`
+      UPDATE matrix_taxa_order 
+      SET position=position + ? 
+      WHERE matrix_id = ? AND position > ? 
+      ORDER BY position DESC`, 
+      { replacements: [taxaIds.length, this.matrix.matrix_id, index], transaction: transaction })
+
+    await sequelizeConn.query(`
+      UPDATE matrix_taxa_order 
+      SET position=@tmp_position:=@tmp_position+1 
+      WHERE (@tmp_position:=?)+1 AND matrix_id = ? AND taxon_id IN (?) 
+      ORDER BY position`, 
+      { replacements: [index, this.matrix.matrix_id, taxaIds], transaction: transaction })
+
+    await sequelizeConn.query(`
+      UPDATE matrix_taxa_order 
+      SET position=@tmp_position:=@tmp_position+1 
+      WHERE matrix_id = ? AND (@tmp_position:=0)+1 
+      ORDER BY position`,
+      { replacements: [this.matrix.matrix_id], transaction: transaction })
+
+    await this.logMatrixChange(transaction)
+
+    await transaction.commit()
+    return { 
+      'taxa_ids': taxaIds, 
+      'index': index 
+    }
+  }
+
   getMatrixInfo() {
     return {
       'id': this.matrix.matrix_id,

@@ -60,6 +60,15 @@ export async function removeTaxaFromMatrix(req, res) {
   res.status(200).json(data)
 }
 
+export async function reorderTaxa(req, res) {
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  const index = parseInt(req.body.index)
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.reorderTaxa(taxaIds, index)
+  data.ok = true
+  res.status(200).json(data)
+}
+
 export async function logError(req) {
   console.log('Error: ', req.body)
 }
