@@ -1,10 +1,11 @@
 import app from "./app.js";
 import http from "http";
+import process from 'node:process';
 
 import sequelizeConn from './util/db.js';
 
 const normalizePort = val => {
-  var port = parseInt(val, 10);
+  const port = parseInt(val, 10);
 
   if (isNaN(port)) {
     // named pipe
@@ -23,6 +24,7 @@ const onError = error => {
   if (error.syscall !== "listen") {
     throw error;
   }
+  const addr = server.address();
   const bind = typeof addr === "string" ? "pipe " + addr : "port " + port;
   switch (error.code) {
     case "EACCES":
@@ -53,7 +55,7 @@ server.on("listening", onListening);
 
 sequelizeConn
   .sync()
-  .then((result) => {
+  .then(() => {
     server.listen(port);
   })
   .catch((err) => {

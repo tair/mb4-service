@@ -67,12 +67,12 @@ export function getTaxonName(record, otu = null, showExtinctMarker = true, showA
   }
 
   if (showAuthor) {
-    if (row.scientific_name_author || row.scientific_name_year) {
-      let author = row.scientific_name_author
-      if (row.scientific_name_year) { 
-        author += ", " + row.scientific_name_year;
+    if (record.scientific_name_author || record.scientific_name_year) {
+      let author = record.scientific_name_author
+      if (record.scientific_name_year) { 
+        author += ", " + record.scientific_name_year;
       }
-      if (row.use_parens_for_author) {
+      if (record.use_parens_for_author) {
         names.push('(' + author + ')');
       } else {
         names.push(author);

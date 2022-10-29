@@ -3,11 +3,6 @@ import * as matrixEditorController from '../controllers/matrix-editor-controller
 
 const matrixEditorRouter = express.Router({ mergeParams: true })
 
-matrixEditorRouter.use((err, req, res, next) => {
-  console.error(err.stack)
-  res.status(500).send('Something broke')
-})
-
 // Taxa related endpoints.
 matrixEditorRouter.post('/addTaxonMedia', matrixEditorController.addTaxonMedia)
 matrixEditorRouter.post('/addTaxaToMatrix', matrixEditorController.addTaxaToMatrix)
