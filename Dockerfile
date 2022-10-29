@@ -12,6 +12,12 @@ RUN apk update && apk add bash
 EXPOSE 8080
 CMD [ "npm", "run", "dev" ]
 
+# debug stage
+FROM build-stage as debug-stage
+RUN apk update && apk add bash
+EXPOSE 8080
+CMD [ "npm", "run", "debug" ]
+
 # production stage
 FROM nginx:stable-alpine as production-stage
 COPY --from=build-stage /app/dist /usr/share/nginx/html
