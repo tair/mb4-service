@@ -35,7 +35,6 @@ export async function getCellMedia(req, res) {
   res.status(200).json(data)
 }
 
-
 export async function getAvailableTaxa(req, res) {
   const matrixEditorService = await getMatrix(req)
   const data = await matrixEditorService.getAvailableTaxa()
@@ -78,6 +77,15 @@ export async function setTaxaNotes(req, res) {
   res.status(200).json(data)
 }
 
+export async function setTaxaAccess(req, res) {
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  const userId = parseInt(req.body.userId) || null
+  const groupId = parseInt(req.body.groupId) || null
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.setTaxaAccess(taxaIds, userId, groupId)
+  data.ok = true
+  res.status(200).json(data)
+}
 
 export async function logError(req) {
   console.log('Error: ', req.body)

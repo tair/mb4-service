@@ -9,6 +9,7 @@ matrixEditorRouter.post('/addTaxaToMatrix', matrixEditorController.addTaxaToMatr
 matrixEditorRouter.post('/removeTaxaFromMatrix', matrixEditorController.removeTaxaFromMatrix)
 matrixEditorRouter.post('/reorderTaxa', matrixEditorController.reorderTaxa)
 matrixEditorRouter.post('/setTaxaNotes', matrixEditorController.setTaxaNotes)
+matrixEditorRouter.post('/setTaxaAccess', matrixEditorController.setTaxaAccess)
 
 matrixEditorRouter.post('/getAllCellNotes', matrixEditorController.getAllCellNotes)
 matrixEditorRouter.post('/getCellCounts', matrixEditorController.getCellCounts)

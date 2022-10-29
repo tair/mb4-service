@@ -411,7 +411,7 @@ class MatrixEditorService {
   }
 
   async addTaxaToMatrix(taxaIds, afterTaxonId) {
-    if (!this.canDo('addTaxon')) {
+    if (!await this.canDo('addTaxon')) {
       throw 'You are not allowed to add taxa'
     }
 
@@ -527,7 +527,7 @@ class MatrixEditorService {
       throw 'No taxa were specified'
     }
 
-    if (!this.canDo('editCellData')) {
+    if (!await this.canDo('editCellData')) {
       throw 'You are not allowed to reorder this matrix'
     }
 
@@ -568,11 +568,11 @@ class MatrixEditorService {
       throw 'You must specify taxa to modify the notes'
     }
 
-    if (!this.canDo("editTaxon")) {
+    if (!await this.canDo("editTaxon")) {
       throw 'You are not allowed to modify taxa in this matrix'
     }
 
-    if (!this.canEditTaxa(taxaIds)) {
+    if (!await this.canEditTaxa(taxaIds)) {
       throw 'You are not allowed to modify one or more of the selected taxa'
     }
 
@@ -591,6 +591,40 @@ class MatrixEditorService {
     return {
       'taxa_ids': taxaIds,
       'notes': notes
+    }
+  }
+
+  async setTaxaAccess(taxaIds, userId, groupId) {
+    if (!await this.canDo('editTaxon')) {
+      throw 'You are not allowed to modify taxa in this matrix'
+    }
+
+    if (!await this.isAdminLike()) {
+      throw 'You are not allowed to modify one or more of the selected taxa'
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    const Op = _sequelize.Op;
+    await models.MatrixTaxaOrder.update(
+      { 
+        'user_id': notes,
+        'group_id': groupId,
+      },
+      {
+        where: { 
+          'taxon_id': { [Op.in]: taxaIds },
+          'matrix_id': this.matrix.matrix_id,
+        },
+        transaction: transaction
+      }
+    )
+
+    await transaction.commit()
+    return {
+      'taxa_ids': taxaIds,
+      'user_id': userId,
+      'group_id': groupId,
     }
   }
 
@@ -784,9 +818,9 @@ getPublishAllowableActions() {
 			LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
 			WHERE
 				ccl.matrix_id = ? AND pxu.user_id = ? AND 
-        (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id = NULL OR mto.user_id = 0 OR mto.group_id = 0)
+        (mto.group_id = pmxg.group_id OR mto.user_id = ? OR mto.user_id IS NULL OR mto.group_id = NULL)
 			GROUP BY ccl.character_id`,
-      { replacements: [this.matrix.matrix_id, this.user.user_id] })
+      { replacements: [this.matrix.matrix_id, this.user.user_id, this.user.user_id] })
     for (const row of lastScoredTimesRows) {
       const characterId = parseInt(row.character_id)
       const lastScoredOn = parseInt(row.last_scored_on)
