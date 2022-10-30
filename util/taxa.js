@@ -24,24 +24,24 @@ export const TAXA_FIELD_NAMES = [
 ]
 
 export function getTaxonName(record, otu = null, showExtinctMarker = true, showAuthor = false, skipSubgenus = false) {
-  const names = [];
+  const names = []
   if (record.is_extinct && showExtinctMarker) {
     names.push("†")
   }
 
   if (!TAXA_FIELD_NAMES.includes(otu) || otu == "subgenus" || otu == "specific_epithet" || otu == "subspecific_epithet") {
-    otu = "genus";
+    otu = "genus"
   }
 
-  let lastNameFound = "";
-  let gotOtu = false;
+  let lastNameFound = ""
+  let gotOtu = false
   for (const fieldName of TAXA_FIELD_NAMES) {
     if (skipSubgenus && fieldName == 'subgenus') {
-      continue;
+      continue
     }
 
     if (fieldName == otu) {
-      gotOtu = true;
+      gotOtu = true
     }
 
     let name = record[fieldName]
@@ -49,17 +49,17 @@ export function getTaxonName(record, otu = null, showExtinctMarker = true, showA
       switch (fieldName) {
         case "genus":
           name = '<i>' + capitalizeFirstLetter(name) + '</i>'
-          break;
+          break
         case "specific_epithet":
           name = "<i>" + name.toLowerCase() + "</i>"
-          break;
+          break
         default:
-          break;
+          break
       }
-      names.push(name);
+      names.push(name)
     }
     if (name) {
-      lastNameFound = name;
+      lastNameFound = name
     }
   }
   if (names.length == 0) {
@@ -70,15 +70,15 @@ export function getTaxonName(record, otu = null, showExtinctMarker = true, showA
     if (record.scientific_name_author || record.scientific_name_year) {
       let author = record.scientific_name_author
       if (record.scientific_name_year) { 
-        author += ", " + record.scientific_name_year;
+        author += ", " + record.scientific_name_year
       }
       if (record.use_parens_for_author) {
-        names.push('(' + author + ')');
+        names.push('(' + author + ')')
       } else {
-        names.push(author);
+        names.push(author)
       }
     }
   }
 
-  return names.join(' ');
+  return names.join(' ')
 }
