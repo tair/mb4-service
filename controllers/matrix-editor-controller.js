@@ -96,6 +96,14 @@ export async function addTaxonMedia(req, res) {
   res.status(200).json(data)
 }
 
+export async function removeTaxonMedia(req, res) {
+  const linkId = parseInt(req.body.link_id)
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.removeTaxonMedia(linkId)
+  data.ok = true
+  res.status(200).json(data)
+}
+
 export async function loadTaxaMedia(req, res) {
   const taxonId = parseInt(req.body.taxon_id)
   const search = req.body.search

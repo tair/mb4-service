@@ -9,9 +9,11 @@ matrixEditorRouter.post('/addTaxaToMatrix', matrixEditorController.addTaxaToMatr
 matrixEditorRouter.post('/getAvailableTaxa', matrixEditorController.getAvailableTaxa)
 matrixEditorRouter.post('/loadTaxaMedia', matrixEditorController.loadTaxaMedia)
 matrixEditorRouter.post('/removeTaxaFromMatrix', matrixEditorController.removeTaxaFromMatrix)
+matrixEditorRouter.post('/removeTaxonMedia', matrixEditorController.removeTaxonMedia)
 matrixEditorRouter.post('/reorderTaxa', matrixEditorController.reorderTaxa)
 matrixEditorRouter.post('/setTaxaNotes', matrixEditorController.setTaxaNotes)
 matrixEditorRouter.post('/setTaxaAccess', matrixEditorController.setTaxaAccess)
+
 
 // Cell related endpoints
 matrixEditorRouter.post('/getAllCellNotes', matrixEditorController.getAllCellNotes)

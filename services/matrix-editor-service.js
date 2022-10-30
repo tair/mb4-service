@@ -683,6 +683,33 @@ class MatrixEditorService {
     }
   }
 
+  async removeTaxonMedia(linkId) {
+    if (!await this.canDo('deleteTaxonMedia')) {
+      throw 'You are not allowed to remove media from this taxon'
+    }
+
+    const taxaMedia = await models.TaxaXMedium.findByPk(linkId)
+
+    // In the case that the media is no longer affiliated with the taxon, we allow the client to
+    // remove it. This may be because another user removed it.
+    if (taxaMedia == null) {
+      return { 'link_id': linkId }
+    }
+
+    const taxon = await models.Taxon.findByPk(taxaMedia.taxon_id)
+    if (taxon == null || taxon.project_id != this.project.project_id) {
+      throw 'Taxon is not a part of this project'
+    }
+
+    const media = await models.MediaFile.findByPk(taxaMedia.media_id)
+    if (media == null || media.project_id != this.project.project_id) {
+      throw 'Media is not a part of this project'
+    }
+
+    await taxaMedia.destroy()
+    return { 'link_id': linkId }
+  }
+
   async loadTaxaMedia(taxonId, search) {
     const media = []
     const mediaIds = []
