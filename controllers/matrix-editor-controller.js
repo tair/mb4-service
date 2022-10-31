@@ -113,6 +113,17 @@ export async function loadTaxaMedia(req, res) {
   res.status(200).json(data)
 }
 
+export async function setCellStates(req, res) {
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  const characterIds = parseIntArray(req.body.character_ids)
+  const stateIds = req.body.state_ids
+  const options = req.body.options
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.setCellStates(taxaIds, characterIds, stateIds, options)
+  data.ok = true
+  res.status(200).json(data)
+}
+
 export async function logError(req) {
   console.log('Error: ', req.body)
 }
