@@ -121,11 +121,10 @@ export default class Matrix extends Model {
           ]
         },
       ],
-      getterMethods: {
-        getOption(key) {
-          return this.other_options[key]
-        }
-      },
     })
+  }
+
+  getOption(key) {
+    return this.other_options[key]
   }
 }

@@ -4,7 +4,7 @@ import { Op } from "sequelize"
 import { CELL_BATCH_TYPES } from '../util/cells.js'
 import { MATRIX_OPTIONS } from '../util/matrix.js'
 import { Table } from '../util/table.js'
-import { array_difference, array_intersect, time } from '..util/util.js'
+import { array_difference, array_intersect, time } from '../util/util.js'
 import { getMedia } from '../util/media.js'
 import { getRoles } from '../services/user-roles-service.js'
 import { getStatesIdsForCharacter } from '../services/character-service.js'
@@ -832,7 +832,7 @@ class MatrixEditorService {
       throw 'You are not allowed to set states in this matrix'
     }
 
-    if (!await this.userCanEditRow(taxaIds)) {
+    if (!await this.canEditTaxa(taxaIds)) {
       throw 'You are not allowed to modify the selected taxa'
     }
 
@@ -850,11 +850,13 @@ class MatrixEditorService {
       console.log("MatrixEditorService.setCellStates - Invalid state combination for taxa:", taxaIds, "characters: ", characterIds, "cells:", stateIds)
       throw 'Invalid state combination for cells'
     }
-    // Single cells must be polymorphic and cannot be uncertain.
+
+    // Ensure that single cells must be polymorphic and cannot be uncertain.
     if (uncertain && stateIds.length <= 1) {
       throw 'Single cells cannot be uncertain'
     }
-    // Cells cannot be uncertain and include the "NPA" score.
+  
+    // Ensure that sells cannot be uncertain and include the "NPA" score.
     if (uncertain && stateIds.includes(-1 /* NPA */)) {
       throw 'Uncertain cells not include "NPA" and additional states'
     }
@@ -864,6 +866,9 @@ class MatrixEditorService {
       stateIds = []
     }
 
+    // Ensure that the array is unique.
+    stateIds = Array.from(new Set(stateIds))
+
     // Ensure that when multiple charactes are requested, the state ids are not character-specific
     // but instead applicable to all charcaters.
     if (characterIds.length > 1) {
@@ -872,9 +877,9 @@ class MatrixEditorService {
       }
     } else {
       const characterId = parseInt(characterIds[0])
-      const characterStateIds = getStatesIdsForCharacter(characterId)
+      const characterStateIds = await getStatesIdsForCharacter(characterId)
       const possibleStates = [-1, 0, ...characterStateIds]
-      const invalidStateIds = stateIds.filter(stateId => possibleStates.includes(stateId))
+      const invalidStateIds = stateIds.filter(stateId => !possibleStates.includes(stateId))
       if (invalidStateIds.length) {
         console.log("The character", characterId, "The states:", characterStateIds, "new states", stateIds, "invalid states:", invalidStateIds)
         throw 'Invalid state for character'
@@ -898,7 +903,7 @@ class MatrixEditorService {
 
     const insertedScores = []
     const cellChangesResults = []
-    const allCellScores = this.getCellsStates(taxaIds, characterIds)
+    const allCellScores = await this.getCellsStates(taxaIds, characterIds)
     for (const characterId of characterIds) {
       for (const taxonId of taxaIds) {
         let cellScores = allCellScores.get(taxonId, characterId)
@@ -906,7 +911,7 @@ class MatrixEditorService {
           cellScores = new Map()
         }
 
-        const cellScoresIds = cellScores.keys()
+        const cellScoresIds = Array.from(cellScores.keys())
         const scoresIdsToDelete = array_difference(cellScoresIds, stateIds)
         const scoresIdsToInsert = array_difference(stateIds, cellScoresIds)
         const unchangedScoreIds = array_intersect(cellScoresIds, stateIds)
@@ -957,13 +962,13 @@ class MatrixEditorService {
     }
 
     if (this.matrix.getOption('APPLY_CHARACTERS_WHILE_SCORING') == 1) {
-      const scores = this.applyRules(insertedScores)
+      const scores = await this.applyRules(insertedScores)
       insertedScores.push(...scores)
     }
 
     const deletedCellMedia =
       this.matrix.getOption('ENABLE_CELL_MEDIA_AUTOMATION') == 1
-        ? this.cellMediaToDeleteFromCharacterView(taxaIds, characterIds) : []
+        ? await this.cellMediaToDeleteFromCharacterView(taxaIds, characterIds) : []
     if (deletedCellMedia.length > 0) {
       const linkIds = deletedCellMedia.map(media => parseInt(media.link_id))
       await models.CellsXMedium.destroy({
@@ -1379,7 +1384,7 @@ class MatrixEditorService {
 
     const ruleBasedChanges = []
     const allowOverwritingByRules = this.matrix.getOption('ALLOW_OVERWRITING_BY_RULES')
-    const existingScores = this.getCellStates(taxonIds, actionCharacterIds)
+    const existingScores = await this.getCellStates(taxonIds, actionCharacterIds)
     for (const score of scores) {
       const characterId = parseInt(score.character_id)
       const taxonId = parseInt(score.taxon_id)
