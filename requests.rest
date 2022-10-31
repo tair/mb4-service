@@ -43,3 +43,5 @@ curl http://localhost:8080/projects/data_dump
 GET http://localhost:8080/home/project/:projectId/matrix
 sample request
 curl http://localhost:8080/home/project/777/matrix
+
+GET http://localhost:8080/public/projects/authors_projects

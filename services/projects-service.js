@@ -27,7 +27,6 @@ async function getProjects() {
 }
 
 async function getProjectTitles(order) {
-  console.log('tet')
   let sort_by = 'ASC'
   if (order.toUpperCase() === 'DESC') sort_by = 'DESC'
 
@@ -40,19 +39,31 @@ async function getProjectTitles(order) {
 }
 
 async function getAuthorsWithProjects() {
-  let [rows] =
-    await sequelizeConn.query(`select CONCAT(u.fname, ' ', u.lname) as author, 
+  let [rows] = await sequelizeConn.query(`select fname, 
+    lname,
     p.project_id, 
     p.name
  from projects_x_users pu, ca_users u, projects p
  where pu.user_id = u.user_id and p.project_id=pu.project_id
  and p.published=1 and p.deleted=0
- order by CONCAT(u.fname, ' ', u.lname)`)
+ order by UPPER(TRIM(u.lname))`)
 
   let authors = {}
+  let chars = []
 
   for (let i = 0; i < rows.length; i++) {
-    let author = rows[i].author
+    let lname = rows[i].lname
+
+    // normalize the string (convert diacritics to ascii chars)
+    const normalized = lname.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+    lname = lname.charAt(0).toUpperCase() + lname.slice(1)
+    let char = normalized.charAt(0).toUpperCase()
+    if (!chars.includes(char)) {
+      chars.push(char)
+    }
+
+    let author = rows[i].fname + '|' + lname
     let project = {
       id: rows[i].project_id,
       name: rows[i].name,
@@ -65,7 +76,12 @@ async function getAuthorsWithProjects() {
     }
   }
 
-  return authors
+  let obj = {
+    chars: chars,
+    authors: authors,
+  }
+
+  return obj
 }
 
 export { getProjects, getProjectTitles, getAuthorsWithProjects }
