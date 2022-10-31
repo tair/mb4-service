@@ -15,6 +15,7 @@ router.post('/getAllCellNotes', controller.getAllCellNotes)
 router.post('/getCellCounts', controller.getCellCounts)
 router.post('/getCellData', controller.getCellData)
 router.post('/getCellMedia', controller.getCellMedia)
+router.post('/setCellStates', controller.setCellStates)
 
 // General endpoints
 router.post('/getMatrixData', controller.getMatrixData)
