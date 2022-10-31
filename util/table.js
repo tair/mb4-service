@@ -16,7 +16,7 @@ export class Table {
     if (!submap.has(key2)) {
       submap.set(key2, new Map())
     }
-    submap.get(key2).set(key3, value)    
+    submap.get(key2).set(mx1, mx2)    
   }
 
   get(key1, key2 = undefined, key3 = undefined) {

@@ -1,12 +1,15 @@
 import _sequelize from 'sequelize'
 import sequelizeConn from '../util/db.js'
 import { Op } from "sequelize"
-import { models } from '../models/init-models.js'
+import { CELL_BATCH_TYPES } from '../util/cells.js'
 import { MATRIX_OPTIONS } from '../util/matrix.js'
+import { Table } from '../util/table.js'
+import { array_difference, array_intersect, time } from '..util/util.js'
 import { getMedia } from '../util/media.js'
 import { getRoles } from '../services/user-roles-service.js'
 import { getStatesIdsForCharacter } from '../services/character-service.js'
 import { getTaxonName, TAXA_FIELD_NAMES } from '../util/taxa.js'
+import { models } from '../models/init-models.js'
 
 class MatrixEditorService {
   constructor(project, matrix, user, readonly) {
@@ -844,7 +847,7 @@ class MatrixEditorService {
     // along with additional states. "NPA" and "?" are should be the only selected state in a cell
     // score.
     if ((stateIds.includes(-1 /* NPA */) || stateIds.includes(null /* ? */)) && stateIds.length != 1) {
-      console.log("MatrixEditorService.setCellStates - Invalid state combination for taxa:", taxaIds, "characters: ", characterIds, "cells:", stateIds);
+      console.log("MatrixEditorService.setCellStates - Invalid state combination for taxa:", taxaIds, "characters: ", characterIds, "cells:", stateIds)
       throw 'Invalid state combination for cells'
     }
     // Single cells must be polymorphic and cannot be uncertain.
@@ -858,7 +861,7 @@ class MatrixEditorService {
 
     // Convert the state ids from the values provided to ones that are interpeted by the database correctly.
     if (stateIds.length == 1 && stateIds[0] === null) {
-      $va_state_ids = [];
+      stateIds = []
     }
 
     // Ensure that when multiple charactes are requested, the state ids are not character-specific
@@ -873,7 +876,7 @@ class MatrixEditorService {
       const possibleStates = [-1, 0, ...characterStateIds]
       const invalidStateIds = stateIds.filter(stateId => possibleStates.includes(stateId))
       if (invalidStateIds.length) {
-        console.log("The character", characterId, "The states:", characterStateIds, "new states", stateIds, "invalid states:", invalidStateIds);
+        console.log("The character", characterId, "The states:", characterStateIds, "new states", stateIds, "invalid states:", invalidStateIds)
         throw 'Invalid state for character'
       }
     }
@@ -883,7 +886,7 @@ class MatrixEditorService {
     }
     const transaction = await sequelizeConn.transaction()
 
-    let cellBatch;
+    let cellBatch
     if (batchMode) {
       cellBatch = models.CellBatchLog.build({
         user_id: this.user.user_id,
@@ -904,9 +907,9 @@ class MatrixEditorService {
         }
 
         const cellScoresIds = cellScores.keys()
-        const scoresIdsToDelete = array_difference(cellScoresIds, stateIds);
-        const scoresIdsToInsert = array_difference(stateIds, cellScoresIds);
-        const unchangedScoreIds = array_intersect(cellScoresIds, stateIds);
+        const scoresIdsToDelete = array_difference(cellScoresIds, stateIds)
+        const scoresIdsToInsert = array_difference(stateIds, cellScoresIds)
+        const unchangedScoreIds = array_intersect(cellScoresIds, stateIds)
 
         // Update unchanged scores to determine whether we need to update the uncertainity.
         for (const scoresId of unchangedScoreIds) {
@@ -946,7 +949,7 @@ class MatrixEditorService {
             is_uncertain: uncertain,
             start_value: null,
             end_value: null,
-          }, { transaction: transaction });
+          }, { transaction: transaction })
           cellChangesResults.push(cell)
           insertedScores.push(cell)
         }
@@ -972,12 +975,13 @@ class MatrixEditorService {
     }
 
     if (batchMode) {
+      let description
       if (batchMode == 2) {
-        const character = await models.Character.findByPk(characterIds[0]);
-        $vs_description = `Batch scoring added to ${taxaIds.length} taxa in ${character.name} column`
+        const character = await models.Character.findByPk(characterIds[0])
+        description = `Batch scoring added to ${taxaIds.length} taxa in ${character.name} column`
       } else if (batchMode == 1) {
         const taxon = await models.Taxon.findByPk(taxaIds[0])
-        $vs_description = `Batch scoring added to ${characterIds.length} characters in ${getTaxonName(taxon)} row`
+        description = `Batch scoring added to ${characterIds.length} characters in ${getTaxonName(taxon)} row`
       } else {
         throw 'Unable batch mode'
       }
@@ -1379,7 +1383,7 @@ class MatrixEditorService {
     for (const score of scores) {
       const characterId = parseInt(score.character_id)
       const taxonId = parseInt(score.taxon_id)
-      const stateId = row.state_id == null ? (isNPA ? -1 : 0) : parseInt(row.state_id)
+      const stateId = score.state_id == null ? (score.is_npa ? -1 : 0) : parseInt(score.state_id)
       const rule = rules.get(characterId, stateId)
 
       const actionCharacterId = parseInt(rule.action_character_id)
@@ -1387,7 +1391,7 @@ class MatrixEditorService {
 
       if (existingScore.length > 0) {
         if (!allowOverwritingByRules) {
-          continue;
+          continue
         }
         const cellIds = existingScore.map(score => parseInt(score.cell_id))
         await models.Cell.destroy({
@@ -1398,7 +1402,7 @@ class MatrixEditorService {
         })
       }
 
-      const actionStateId = row.action_state_id == null ? null : parseInt(row.action_state_id)
+      const actionStateId = rule.action_state_id == null ? null : parseInt(rule.action_state_id)
       const cell = await models.Cell.create({
         matrix_id: this.matrix.matrix_id,
         taxon_id: taxonId,
