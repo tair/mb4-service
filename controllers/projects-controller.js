@@ -44,9 +44,20 @@ async function getAuthorsWithProjects(req, res) {
   }
 }
 
+async function getJournalsWithProjects(req, res) {
+  try {
+    const result = await projectService.getJournalsWithProjects()
+    res.status(200).json(result)
+  } catch (e) {
+    console.error('Error while getting journals (controller).', e)
+    res.status(500).json({ message: 'Error while fetching journals.' })
+  }
+}
+
 export {
   getProjects,
   getProjectsById,
   getProjectTitles,
   getAuthorsWithProjects,
+  getJournalsWithProjects,
 }
