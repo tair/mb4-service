@@ -1,7 +1,8 @@
-import sequelizeConn from '../util/db.js';
+import sequelizeConn from '../util/db.js'
 
 async function getPartitions(projectId) {
-  const [rows] = await sequelizeConn.query(`
+  const [rows] = await sequelizeConn.query(
+    `
       SELECT partition_id, name 
       FROM partitions
       WHERE project_id = ?
@@ -11,4 +12,4 @@ async function getPartitions(projectId) {
   return rows
 }
 
-export {getPartitions}
+export { getPartitions }

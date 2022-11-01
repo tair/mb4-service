@@ -1,4 +1,4 @@
-import sequelizeConn from '../util/db.js';
+import sequelizeConn from '../util/db.js'
 
 async function getProjectStats(projectId) {
   const [rows] = await sequelizeConn.query(
@@ -8,4 +8,4 @@ async function getProjectStats(projectId) {
   return rows[0]
 }
 
-export {getProjectStats}
+export { getProjectStats }

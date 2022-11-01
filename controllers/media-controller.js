@@ -1,4 +1,4 @@
-import * as mediaService from '../services/media-service.js';
+import * as mediaService from '../services/media-service.js'
 
 async function getMediaFiles(req, res) {
   const projectId = req.params.id
@@ -12,4 +12,4 @@ async function getMediaFiles(req, res) {
   }
 }
 
-export {getMediaFiles}
+export { getMediaFiles }

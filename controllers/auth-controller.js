@@ -1,8 +1,8 @@
-import bcrypt from 'bcrypt';
-import crypto from 'crypto';
-import jwt from 'jsonwebtoken';
-import { models } from "../models/init-models.js";
-import {validationResult} from 'express-validator';
+import bcrypt from 'bcrypt'
+import crypto from 'crypto'
+import jwt from 'jsonwebtoken'
+import { models } from '../models/init-models.js'
+import { validationResult } from 'express-validator'
 
 function isTokenExpired(token) {
   const payload = Buffer.from(token.split('.')[1], 'base64')
@@ -51,11 +51,11 @@ async function login(req, res, next) {
     const error = new Error('A user with this email could not be found.')
     error.statusCode = 401
     next(error)
-    return;
+    return
   }
 
   const password = req.body.password
-  const passwordHash = crypto.createHash('md5').update(password).digest("hex")
+  const passwordHash = crypto.createHash('md5').update(password).digest('hex')
 
   // The password stored in the MorphoBank database uses the password_hash and password_verify
   // methods which use the Crypt algorithm instead. To make this compatible with the Bcrypt
@@ -68,7 +68,7 @@ async function login(req, res, next) {
     const error = new Error('Wrong password!')
     error.statusCode = 401
     next(error)
-    return;
+    return
   }
 
   const userResponse = {
@@ -86,4 +86,4 @@ function generateAccessToken(user) {
   })
 }
 
-export {authenticateToken, login}
+export { authenticateToken, login }

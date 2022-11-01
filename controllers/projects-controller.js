@@ -18,7 +18,9 @@ async function getProjectsById(req, res) {
     res.status(200).json(result)
   } catch (e) {
     console.error('Error while getting project details (controller).', e)
-    res.status(500).json({ message: 'Error while fetching project details.' })
+    res.status(500).json({
+      message: 'Error while fetching project details.',
+    })
   }
 }
 
@@ -30,7 +32,9 @@ async function getProjectTitles(req, res) {
     res.status(200).json(result)
   } catch (e) {
     console.error('Error while getting project titles (controller).', e)
-    res.status(500).json({ message: 'Error while fetching project titles.' })
+    res.status(500).json({
+      message: 'Error while fetching project titles.',
+    })
   }
 }
 

@@ -4,7 +4,7 @@ import * as statsService from './stats-service.js'
 
 async function getProjects() {
   let [rows] = await sequelizeConn.query(`
-      SELECT p.project_id, journal_year, article_authors, article_title
+      SELECT p.project_id, journal_year, article_authors, article_title, published_on
       FROM projects p
       WHERE p.published = 1 AND p.deleted = 0
       ORDER BY p.published_on desc`)
@@ -76,12 +76,51 @@ async function getAuthorsWithProjects() {
     }
   }
 
-  let obj = {
+  return {
     chars: chars,
     authors: authors,
   }
+}
 
-  return obj
+async function getJournalsWithProjects() {
+  let [rows] = await sequelizeConn.query(`select distinct p.project_id, p.name, 
+    TRIM(b.journal_title) as journal,  UPPER(TRIM(b.journal_title))
+    from bibliographic_references b, projects p
+    where b.project_id=p.project_id and p.published=1 and p.deleted=0
+    and b.journal_title != '' 
+    order by UPPER(TRIM(b.journal_title)), p.project_id`)
+
+  let journals = {}
+  let chars = []
+
+  for (let i = 0; i < rows.length; i++) {
+    let journal = rows[i].journal
+    let char = journal
+      .charAt(0)
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+
+    if (/[a-zA-Z]/.test(char) && !chars.includes(char)) {
+      chars.push(char)
+    }
+
+    let project = {
+      id: rows[i].project_id,
+      name: rows[i].name,
+    }
+
+    if (!journals[journal]) {
+      journals[journal] = [project]
+    } else {
+      journals[journal].push(project)
+    }
+  }
+
+  return {
+    chars: chars,
+    journals: journals,
+  }
 }
 
 async function getJournalsWithProjects() {
