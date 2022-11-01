@@ -4,7 +4,7 @@ import * as statsService from './stats-service.js'
 
 async function getProjects() {
   let [rows] = await sequelizeConn.query(`
-      SELECT p.project_id, journal_year, article_authors, article_title
+      SELECT p.project_id, journal_year, article_authors, article_title, published_on
       FROM projects p
       WHERE p.published = 1 AND p.deleted = 0
       ORDER BY p.published_on desc`)
@@ -76,12 +76,10 @@ async function getAuthorsWithProjects() {
     }
   }
 
-  let obj = {
+  return {
     chars: chars,
     authors: authors,
   }
-
-  return obj
 }
 
 async function getJournalsWithProjects() {
@@ -119,12 +117,10 @@ async function getJournalsWithProjects() {
     }
   }
 
-  let obj = {
+  return {
     chars: chars,
     journals: journals,
   }
-
-  return obj
 }
 
 export {

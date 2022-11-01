@@ -1,4 +1,4 @@
-import sequelizeConn from '../util/db.js';
+import sequelizeConn from '../util/db.js'
 
 async function getTaxaDetails(projectId) {
   const taxa_browser = await getTaxaByBrowseType(projectId)
@@ -9,7 +9,8 @@ async function getTaxaDetails(projectId) {
 }
 
 async function getTaxaByBrowseType(projectId) {
-  const [rows] = await sequelizeConn.query(`
+  const [rows] = await sequelizeConn.query(
+    `
       SELECT taxon_id, genus, specific_epithet, subspecific_epithet,
           supraspecific_clade, higher_taxon_kingdom, higher_taxon_phylum,
           higher_taxon_class, higher_taxon_order, higher_taxon_family,
@@ -49,4 +50,4 @@ async function buildTaxa(projectId, matrices) {
   return taxaStats
 }
 
-export {getTaxaDetails, buildTaxa}
+export { getTaxaDetails, buildTaxa }

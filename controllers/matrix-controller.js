@@ -1,12 +1,12 @@
-import * as matrixService from '../services/matrix-service.js';
-import * as partitionService from '../services/partition-service.js';
+import * as matrixService from '../services/matrix-service.js'
+import * as partitionService from '../services/partition-service.js'
 
 async function getMatrices(req, res) {
   const projectId = req.params.projectId
   try {
     const matrices = await matrixService.getMatrices(projectId)
     const partitions = await partitionService.getPartitions(projectId)
-    const matrixIds = matrices.map(matrix => matrix.matrix_id)
+    const matrixIds = matrices.map((matrix) => matrix.matrix_id)
     const counts = await matrixService.getCounts(matrixIds)
     const data = {
       matrix: matrices,
@@ -20,4 +20,4 @@ async function getMatrices(req, res) {
   }
 }
 
-export {getMatrices}
+export { getMatrices }
