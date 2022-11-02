@@ -58,10 +58,21 @@ async function getJournalsWithProjects(req, res) {
   }
 }
 
+async function getInstitutionsWithProjects(req, res) {
+  try {
+    const result = await projectService.getInstitutionsWithProjects()
+    res.status(200).json(result)
+  } catch (e) {
+    console.error('Error while getting institutions (controller).', e)
+    res.status(500).json({ message: 'Error while fetching institutions.' })
+  }
+}
+
 export {
   getProjects,
   getProjectsById,
   getProjectTitles,
   getAuthorsWithProjects,
   getJournalsWithProjects,
+  getInstitutionsWithProjects,
 }
