@@ -78,23 +78,6 @@ async function getInstitutionsWithProjects() {
   }
 }
 
-// async function getProjectInstitutions(sort_field, order) {
-//   if (sort_field != 'name') sort_field = 'count'
-
-//   let sort_by = 'ASC'
-//   if (order.toUpperCase() === 'DESC') sort_by = 'DESC'
-
-//   let [rows] = await sequelizeConn.query(`
-//   select i.name as name, count(*) as count from
-// institutions_x_projects ip, projects p, institutions i
-// where ip.project_id=p.project_id and p.published=1 and p.deleted=0
-// and ip.institution_id=i.institution_id
-// group by i.name
-// order by ${sort_field} ${sort_by}`)
-
-//   return rows
-// }
-
 async function getAuthorsWithProjects() {
   let [rows] = await sequelizeConn.query(`select fname, 
     lname,
