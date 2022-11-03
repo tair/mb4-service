@@ -38,6 +38,46 @@ async function getProjectTitles(order) {
   return rows
 }
 
+async function getInstitutionsWithProjects() {
+  let [rows] =
+    await sequelizeConn.query(`select i.name as institution, p.name, p.project_id from institutions_x_projects ip, projects p, institutions i 
+  where ip.project_id=p.project_id and p.published=1 and p.deleted=0
+  and ip.institution_id=i.institution_id
+  order by i.name asc`)
+
+  let institutions = {}
+  let chars = []
+
+  for (let i = 0; i < rows.length; i++) {
+    let institution = rows[i].institution
+    let char = institution
+      .charAt(0)
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+
+    if (/[a-zA-Z]/.test(char) && !chars.includes(char)) {
+      chars.push(char)
+    }
+
+    let project = {
+      id: rows[i].project_id,
+      name: rows[i].name,
+    }
+
+    if (!institutions[institution]) {
+      institutions[institution] = [project]
+    } else {
+      institutions[institution].push(project)
+    }
+  }
+
+  return {
+    chars: chars,
+    institutions: institutions,
+  }
+}
+
 async function getAuthorsWithProjects() {
   let [rows] = await sequelizeConn.query(`select fname, 
     lname,
@@ -117,12 +157,10 @@ async function getJournalsWithProjects() {
     }
   }
 
-  let obj = {
+  return {
     chars: chars,
     journals: journals,
   }
-
-  return obj
 }
 
 export {
@@ -130,4 +168,5 @@ export {
   getProjectTitles,
   getAuthorsWithProjects,
   getJournalsWithProjects,
+  getInstitutionsWithProjects,
 }
