@@ -842,11 +842,11 @@ class MatrixEditorService {
 
     const batchMode = options != null && parseInt(options['batchmode'])
     const uncertain = options != null && !!options['uncertain']
-
+  
     // Check for valid state combinations for uncertain scores. This disallow setting "NPA" and "?"
     // along with additional states. "NPA" and "?" are should be the only selected state in a cell
     // score.
-    if ((stateIds.includes(-1 /* NPA */) || stateIds.includes(null /* ? */)) && stateIds.length != 1) {
+    if (stateIds.length > 1 && stateIds.includes(-1 /* NPA */)) {
       console.log("MatrixEditorService.setCellStates - Invalid state combination for taxa:", taxaIds, "characters: ", characterIds, "cells:", stateIds)
       throw 'Invalid state combination for cells'
     }
@@ -860,14 +860,6 @@ class MatrixEditorService {
     if (uncertain && stateIds.includes(-1 /* NPA */)) {
       throw 'Uncertain cells not include "NPA" and additional states'
     }
-
-    // Convert the state ids from the values provided to ones that are interpeted by the database correctly.
-    if (stateIds.length == 1 && stateIds[0] === null) {
-      stateIds = []
-    }
-
-    // Ensure that the array is unique.
-    stateIds = Array.from(new Set(stateIds))
 
     // Ensure that when multiple charactes are requested, the state ids are not character-specific
     // but instead applicable to all charcaters.
@@ -934,10 +926,8 @@ class MatrixEditorService {
         for (const scoresId of scoresIdsToDelete) {
           const cellScore = cellScores.get(scoresId)
           await models.Cell.destroy({
-            where: {
-              where: { cell_id: cellScore.cell_id },
-              transaction: transaction
-            }
+            where: { cell_id: cellScore.cell_id },
+            transaction: transaction
           })
           cellScore.cell_id = 0 // Signal that the cell should be deleted.
           cellChangesResults.push(cellScore)
@@ -1539,11 +1529,12 @@ class MatrixEditorService {
 
       // This represents a deleted scores so that the client can remove it from its model.
       if (cellId == 0) {
-        return {
+        cells.push({
           'id': cellId,
           'tid': taxonId,
           'cid': characterId,          
-        }
+        })
+        continue
       }
 
       const cell = {

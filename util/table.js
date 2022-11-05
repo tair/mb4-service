@@ -32,7 +32,7 @@ export class Table {
       return undefined
     }
     submap = submap.get(key2)
-    if (key2 === undefined) {
+    if (key3 === undefined) {
       return submap
     }
 
