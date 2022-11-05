@@ -747,9 +747,10 @@ class MatrixEditorService {
       let clause = ''
       const taxon = await models.Taxon.findByPk(taxonId)
       if (taxon != null) {
-        // Instead of searching by a single taxon, we are searching for media belonging to similar taxa which match
-        // the genus, species, and subspecies if available. If none are available, let's instead return all media
-        // associated with the project.
+        // Instead of searching by a single taxon, we are searching for media
+        // belonging to similar taxa which match the genus, species, and
+        // subspecies if available. If none are available, let's instead return
+        // all media associated with the project.
         const fields = ['subspecific_epithet', 'specific_epithet', 'genus']
         for (const field of fields) {
           const unit = taxon[field]
@@ -784,15 +785,15 @@ class MatrixEditorService {
       }
     }
 
-    // Sort by the last the time user recently used the media. This ensures that recently used media
-    // is at the top of the media grid.
+    // Sort by the last the time user recently used the media. This ensures
+    // that recently used media is at the top of the media grid.
     if (mediaIds.length) {
       const [rows] = await sequelizeConn.query(
         `
-      SELECT media_id, MAX(created_on) AS created_on
-      FROM cells_x_media
-      WHERE matrix_id = ? AND user_id = ? AND media_id IN(?)
-      GROUP BY media_id`,
+        SELECT media_id, MAX(created_on) AS created_on
+        FROM cells_x_media
+        WHERE matrix_id = ? AND user_id = ? AND media_id IN(?)
+        GROUP BY media_id`,
         { replacements: [this.matrix.matrix_id, this.user.user_id, mediaIds] }
       )
 
@@ -1740,12 +1741,12 @@ class MatrixEditorService {
 			LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
 			WHERE
 				m.matrix_id = ? AND pxu.user_id = ? AND mto.taxon_id IN (?) AND
-        (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.user_id = 0 OR mto.user_id = ?)`,
+        (mto.group_id = pmxg.group_id OR mto.group_id IS NULL OR mto.user_id IS NULL OR mto.user_id = ?)`,
       {
         replacements: [
-          taxaIds,
           this.matrix.matrix_id,
           this.user.user_id,
+          taxaIds,
           this.user.user_id,
         ],
       }
