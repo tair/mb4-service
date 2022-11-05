@@ -42,17 +42,17 @@ class MatrixEditorService {
   async getCellData() {
     const [rows] = await sequelizeConn.query(
       `
-			SELECT
+      SELECT
         c.cell_id, c.taxon_id, c.character_id, c.state_id, c.user_id, c.is_npa, c.is_uncertain,
         c.created_on, c.start_value, c.end_value, ch.type
-			FROM cells c
-			INNER JOIN matrix_character_order AS mco 
+      FROM cells c
+      INNER JOIN matrix_character_order AS mco 
         ON mco.character_id = c.character_id AND mco.matrix_id = c.matrix_id
-			INNER JOIN characters AS ch
+      INNER JOIN characters AS ch
         ON ch.character_id = mco.character_id
-			INNER JOIN matrix_taxa_order AS mto
+      INNER JOIN matrix_taxa_order AS mto
         ON mto.taxon_id = c.taxon_id AND mto.matrix_id = c.matrix_id
-			WHERE c.matrix_id = ?
+      WHERE c.matrix_id = ?
       ORDER BY c.taxon_id, c.character_id`,
       { replacements: [this.matrix.matrix_id] }
     )
@@ -179,12 +179,12 @@ class MatrixEditorService {
   async getPartitions() {
     const [characterRows] = await sequelizeConn.query(
       `
-			SELECT cxp.partition_id, cxp.character_id
-			FROM characters_x_partitions cxp
-			INNER JOIN matrix_character_order AS mco ON mco.character_id = cxp.character_id
-			INNER JOIN matrices AS m ON mco.matrix_id = m.matrix_id
-			INNER JOIN partitions AS p ON m.project_id = p.project_id AND cxp.partition_id = p.partition_id
-			WHERE m.matrix_id = ?`,
+      SELECT cxp.partition_id, cxp.character_id
+      FROM characters_x_partitions cxp
+      INNER JOIN matrix_character_order AS mco ON mco.character_id = cxp.character_id
+      INNER JOIN matrices AS m ON mco.matrix_id = m.matrix_id
+      INNER JOIN partitions AS p ON m.project_id = p.project_id AND cxp.partition_id = p.partition_id
+      WHERE m.matrix_id = ?`,
       { replacements: [this.matrix.matrix_id] }
     )
     const characters = new Map()
@@ -199,12 +199,12 @@ class MatrixEditorService {
 
     const [taxaRows] = await sequelizeConn.query(
       `
-			SELECT txp.partition_id, txp.taxon_id
-			FROM taxa_x_partitions txp
-			INNER JOIN matrix_taxa_order AS mto ON mto.taxon_id = txp.taxon_id
-			INNER JOIN matrices AS m ON mto.matrix_id = m.matrix_id
-			INNER JOIN partitions AS p ON m.project_id = p.project_id AND txp.partition_id = p.partition_id
-			WHERE m.matrix_id = ? `,
+      SELECT txp.partition_id, txp.taxon_id
+      FROM taxa_x_partitions txp
+      INNER JOIN matrix_taxa_order AS mto ON mto.taxon_id = txp.taxon_id
+      INNER JOIN matrices AS m ON mto.matrix_id = m.matrix_id
+      INNER JOIN partitions AS p ON m.project_id = p.project_id AND txp.partition_id = p.partition_id
+      WHERE m.matrix_id = ? `,
       { replacements: [this.matrix.matrix_id] }
     )
     const taxa = new Map()
@@ -219,10 +219,10 @@ class MatrixEditorService {
 
     const [partitionRows] = await sequelizeConn.query(
       `
-			SELECT p.*
+      SELECT p.*
       FROM partitions p
-			INNER JOIN matrices AS m ON p.project_id = m.project_id
-			WHERE m.matrix_id = ?
+      INNER JOIN matrices AS m ON p.project_id = m.project_id
+      WHERE m.matrix_id = ?
       ORDER BY p.name`,
       { replacements: [this.matrix.matrix_id] }
     )
@@ -317,18 +317,18 @@ class MatrixEditorService {
     const columnNames = TAXA_FIELD_NAMES.join()
     const [rows] = await sequelizeConn.query(
       `
-			SELECT DISTINCT
-				t.taxon_id, ${columnNames},
+      SELECT DISTINCT
+        t.taxon_id, ${columnNames},
         t.scientific_name_author, t.scientific_name_year,
         t.color, t.user_id taxon_user_id, t.notes, t.is_extinct,
         mto.notes matrix_notes, mto.position, mto.user_id, mto.group_id,
         wu.fname, wu.lname, wu.email
-			FROM taxa t
-			INNER JOIN matrix_taxa_order AS mto ON mto.taxon_id = t.taxon_id
-			INNER JOIN matrices AS m ON m.matrix_id = mto.matrix_id
-			INNER JOIN ca_users AS wu ON wu.user_id = t.user_id
-			WHERE m.matrix_id = ? AND mto.matrix_id = m.matrix_id ${clause}
-			ORDER BY mto.position`,
+      FROM taxa t
+      INNER JOIN matrix_taxa_order AS mto ON mto.taxon_id = t.taxon_id
+      INNER JOIN matrices AS m ON m.matrix_id = mto.matrix_id
+      INNER JOIN ca_users AS wu ON wu.user_id = t.user_id
+      WHERE m.matrix_id = ? AND mto.matrix_id = m.matrix_id ${clause}
+      ORDER BY mto.position`,
       { replacements: replacements }
     )
 
@@ -364,19 +364,19 @@ class MatrixEditorService {
   async getCharacterRules() {
     const [rows] = await sequelizeConn.query(
       `
-			SELECT
-				cr.rule_id, cr.character_id, cr.state_id, cra.action_id,
+      SELECT
+        cr.rule_id, cr.character_id, cr.state_id, cra.action_id,
         cra.character_id action_character_id, cra.state_id action_state_id, cra.action
-			FROM character_rules cr
-			INNER JOIN character_rule_actions AS cra ON cr.rule_id = cra.rule_id
-			INNER JOIN matrix_character_order AS mco ON mco.character_id = cr.character_id
-			INNER JOIN characters AS c ON cr.character_id = c.character_id
-			LEFT JOIN character_states AS cs ON cr.state_id = cs.state_id
-			INNER JOIN characters AS ca ON cra.character_id = ca.character_id
-			LEFT JOIN character_states AS csa ON cra.state_id = csa.state_id
-			INNER JOIN matrix_character_order AS mcoa 
+      FROM character_rules cr
+      INNER JOIN character_rule_actions AS cra ON cr.rule_id = cra.rule_id
+      INNER JOIN matrix_character_order AS mco ON mco.character_id = cr.character_id
+      INNER JOIN characters AS c ON cr.character_id = c.character_id
+      LEFT JOIN character_states AS cs ON cr.state_id = cs.state_id
+      INNER JOIN characters AS ca ON cra.character_id = ca.character_id
+      LEFT JOIN character_states AS csa ON cra.state_id = csa.state_id
+      INNER JOIN matrix_character_order AS mcoa
         ON mcoa.character_id = cra.character_id AND mcoa.matrix_id = mco.matrix_id
-			WHERE mco.matrix_id = ?
+      WHERE mco.matrix_id = ?
       ORDER BY mco.position, mcoa.position`,
       { replacements: [this.matrix.matrix_id] }
     )
@@ -400,17 +400,17 @@ class MatrixEditorService {
     const columnNames = TAXA_FIELD_NAMES.map((f) => 't.' + f).join()
     const [rows] = await sequelizeConn.query(
       `
-			SELECT DISTINCT
-				t.taxon_id, ${columnNames},
+      SELECT DISTINCT
+        t.taxon_id, ${columnNames},
         t.scientific_name_author, t.scientific_name_year,
         t.color, t.user_id, t.notes, t.is_extinct,
         wu.fname, wu.lname, wu.email
-			FROM taxa t
-			INNER JOIN ca_users AS wu ON wu.user_id = t.user_id
-			WHERE
-				t.project_id = ? AND
-				t.taxon_id NOT IN (SELECT taxon_id FROM matrix_taxa_order WHERE matrix_id = ?)
-			ORDER BY t.genus, t.specific_epithet`,
+      FROM taxa t
+      INNER JOIN ca_users AS wu ON wu.user_id = t.user_id
+      WHERE
+        t.project_id = ? AND
+        t.taxon_id NOT IN (SELECT taxon_id FROM matrix_taxa_order WHERE matrix_id = ?)
+      ORDER BY t.genus, t.specific_epithet`,
       { replacements: [this.project.project_id, this.matrix.matrix_id] }
     )
 
@@ -524,9 +524,9 @@ class MatrixEditorService {
     // Delete all references to the cells related to the taxa.
     await sequelizeConn.query(
       `
-				DELETE ml FROM media_labels ml
-				INNER JOIN cells_x_media AS cm ON ml.link_id = cm.link_id
-				WHERE ml.table_num = 7 AND cm.taxon_id IN (?) AND cm.matrix_id = ?`,
+        DELETE ml FROM media_labels ml
+        INNER JOIN cells_x_media AS cm ON ml.link_id = cm.link_id
+        WHERE ml.table_num = 7 AND cm.taxon_id IN (?) AND cm.matrix_id = ?`,
       {
         replacements: [taxaIds, this.matrix.matrix_id],
         transaction: transaction,
@@ -1170,11 +1170,11 @@ class MatrixEditorService {
     const counts = new Map()
     const [characterCitationCountRows] = await sequelizeConn.query(
       `
-			SELECT mco.character_id, count(*) AS citation_count
-			FROM characters_x_bibliographic_references AS cxbr
-			INNER JOIN matrix_character_order AS mco ON mco.character_id = cxbr.character_id
-			WHERE mco.matrix_id = ?
-			GROUP BY mco.character_id`,
+      SELECT mco.character_id, count(*) AS citation_count
+      FROM characters_x_bibliographic_references AS cxbr
+      INNER JOIN matrix_character_order AS mco ON mco.character_id = cxbr.character_id
+      WHERE mco.matrix_id = ?
+      GROUP BY mco.character_id`,
       { replacements: [this.matrix.matrix_id] }
     )
 
@@ -1189,11 +1189,11 @@ class MatrixEditorService {
   async getCharactersLastChangeTimes() {
     const [lastChangeTimesRows] = await sequelizeConn.query(
       `
-			SELECT mco.character_id, MAX(ccl.changed_on) last_changed_on
-			FROM character_change_log ccl
-			INNER JOIN matrix_character_order AS mco ON mco.character_id = ccl.character_id
-			WHERE mco.matrix_id = ? AND ccl.is_minor_edit = 0
-			GROUP BY mco.character_id`,
+      SELECT mco.character_id, MAX(ccl.changed_on) last_changed_on
+      FROM character_change_log ccl
+      INNER JOIN matrix_character_order AS mco ON mco.character_id = ccl.character_id
+      WHERE mco.matrix_id = ? AND ccl.is_minor_edit = 0
+      GROUP BY mco.character_id`,
       { replacements: [this.matrix.matrix_id] }
     )
 
@@ -1224,17 +1224,17 @@ class MatrixEditorService {
 
     const [lastScoredTimesRows] = await sequelizeConn.query(
       `
-			SELECT ccl.character_id, MAX(ccl.changed_on) AS last_scored_on
-			FROM cell_change_log ccl
-			INNER JOIN matrix_character_order AS mco ON mco.matrix_id = ccl.matrix_id AND mco.character_id = ccl.character_id
-			INNER JOIN matrix_taxa_order AS mto ON mto.matrix_id = ccl.matrix_id AND ccl.taxon_id = mto.taxon_id
-			INNER JOIN matrices AS m ON mto.matrix_id = m.matrix_id
-			INNER JOIN projects_x_users AS pxu ON pxu.project_id = m.project_id
-			LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
-			WHERE
-				ccl.matrix_id = ? AND pxu.user_id = ? AND 
+      SELECT ccl.character_id, MAX(ccl.changed_on) AS last_scored_on
+      FROM cell_change_log ccl
+      INNER JOIN matrix_character_order AS mco ON mco.matrix_id = ccl.matrix_id AND mco.character_id = ccl.character_id
+      INNER JOIN matrix_taxa_order AS mto ON mto.matrix_id = ccl.matrix_id AND ccl.taxon_id = mto.taxon_id
+      INNER JOIN matrices AS m ON mto.matrix_id = m.matrix_id
+      INNER JOIN projects_x_users AS pxu ON pxu.project_id = m.project_id
+      LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
+      WHERE
+        ccl.matrix_id = ? AND pxu.user_id = ? AND 
         (mto.group_id = pmxg.group_id OR mto.user_id = ? OR mto.user_id IS NULL OR mto.group_id IS NULL)
-			GROUP BY ccl.character_id`,
+      GROUP BY ccl.character_id`,
       {
         replacements: [
           this.matrix.matrix_id,
@@ -1266,12 +1266,12 @@ class MatrixEditorService {
 
     const [rows] = await sequelizeConn.query(
       `
-			SELECT mto.taxon_id, txm.link_id, mf.media_id, mf.media
-			FROM taxa_x_media txm
-			INNER JOIN media_files AS mf ON mf.media_id = txm.media_id
-			INNER JOIN matrix_taxa_order AS mto ON mto.taxon_id = txm.taxon_id
-			WHERE mto.matrix_id = ? ${clause}
-			ORDER BY mto.taxon_id`,
+      SELECT mto.taxon_id, txm.link_id, mf.media_id, mf.media
+      FROM taxa_x_media txm
+      INNER JOIN media_files AS mf ON mf.media_id = txm.media_id
+      INNER JOIN matrix_taxa_order AS mto ON mto.taxon_id = txm.taxon_id
+      WHERE mto.matrix_id = ? ${clause}
+      ORDER BY mto.taxon_id`,
       { replacements: replacements }
     )
 
@@ -1331,8 +1331,8 @@ class MatrixEditorService {
       `
       SELECT pmg.group_id
       FROM projects_x_users AS pu
-			INNER JOIN project_members_x_groups AS pmg ON pmg.membership_id = pu.link_id
-			WHERE pu.project_id = ? AND pu.user_id = ?`,
+      INNER JOIN project_members_x_groups AS pmg ON pmg.membership_id = pu.link_id
+      WHERE pu.project_id = ? AND pu.user_id = ?`,
       { replacements: [this.project.project_id, this.user.user_id] }
     )
     return rows.map((row) => parseInt(row.group_id))
@@ -1689,7 +1689,7 @@ class MatrixEditorService {
     await sequelizeConn.query(
       `
       INSERT INTO ca_change_log(log_datetime, user_id, unit_id, changetype, rolledback, logged_table_num, logged_row_id)
-			VALUES(?, ?, ?, ?, 0, 5, ?)`,
+      VALUES(?, ?, ?, ?, 0, 5, ?)`,
       {
         replacements: [
           time,
@@ -1734,13 +1734,13 @@ class MatrixEditorService {
   async canEditTaxa(taxaIds) {
     const [[{ count }]] = await sequelizeConn.query(
       `
-			SELECT COUNT(mto.taxon_id) AS count
-			FROM matrix_taxa_order mto
-			INNER JOIN matrices AS m ON mto.matrix_id = m.matrix_id
-			INNER JOIN projects_x_users AS pxu ON m.project_id = pxu.project_id
-			LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
-			WHERE
-				m.matrix_id = ? AND pxu.user_id = ? AND mto.taxon_id IN (?) AND
+      SELECT COUNT(mto.taxon_id) AS count
+      FROM matrix_taxa_order mto
+      INNER JOIN matrices AS m ON mto.matrix_id = m.matrix_id
+      INNER JOIN projects_x_users AS pxu ON m.project_id = pxu.project_id
+      LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
+      WHERE
+        m.matrix_id = ? AND pxu.user_id = ? AND mto.taxon_id IN (?) AND
         (mto.group_id = pmxg.group_id OR mto.group_id IS NULL OR mto.user_id IS NULL OR mto.user_id = ?)`,
       {
         replacements: [
@@ -1782,9 +1782,9 @@ class MatrixEditorService {
   async getMediaByIds(mediaIds) {
     const [rows] = await sequelizeConn.query(
       `
-			SELECT media_id, media
-			FROM media_files
-			WHERE project_id = ? AND media_id IN (?)`,
+      SELECT media_id, media
+      FROM media_files
+      WHERE project_id = ? AND media_id IN (?)`,
       { replacements: [this.project.project_id, mediaIds] }
     )
     const media = new Map()
