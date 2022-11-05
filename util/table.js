@@ -19,6 +19,21 @@ export class Table {
     submap.get(key2).set(mx1, mx2)
   }
 
+  has(key1, key2 = undefined, key3 = undefined) {
+    const hasKey1 = this.map.has(key1)
+    if (hasKey1 == false || key2 === undefined) {
+      return hasKey1
+    }
+
+    let submap = this.map.get(key1)
+    const hasKey2 = submap.has(key2)
+    if (hasKey2 == false || key3 === undefined) {
+      return hasKey2
+    }
+
+    return submap.get(key2).has(key3)
+  }
+
   get(key1, key2 = undefined, key3 = undefined) {
     if (!this.map.has(key1)) {
       return undefined

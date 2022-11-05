@@ -144,7 +144,8 @@ export async function getMatrix(req) {
 
 function parseIntArray(array) {
   if (Array.isArray(array)) {
-    return Array.from(new Set(array.map((i) => parseInt(i))))
+    const ints = array.filter((i) => i != null).map((i) => parseInt(i))
+    return Array.from(new Set(ints))
   }
   return []
 }
