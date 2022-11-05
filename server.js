@@ -1,5 +1,6 @@
 import app from './app.js'
 import http from 'http'
+import process from 'node:process'
 
 import sequelizeConn from './util/db.js'
 

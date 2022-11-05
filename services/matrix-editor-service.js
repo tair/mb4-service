@@ -361,7 +361,7 @@ class MatrixEditorService {
       `
 			SELECT
 				cr.rule_id, cr.character_id, cr.state_id, cra.action_id,
-      cra.character_id action_character_id, cra.state_id action_state_id, cra.action
+        cra.character_id action_character_id, cra.state_id action_state_id, cra.action
 			FROM character_rules cr
 			INNER JOIN character_rule_actions AS cra ON cr.rule_id = cra.rule_id
 			INNER JOIN matrix_character_order AS mco ON mco.character_id = cr.character_id
@@ -369,7 +369,8 @@ class MatrixEditorService {
 			LEFT JOIN character_states AS cs ON cr.state_id = cs.state_id
 			INNER JOIN characters AS ca ON cra.character_id = ca.character_id
 			LEFT JOIN character_states AS csa ON cra.state_id = csa.state_id
-			INNER JOIN matrix_character_order AS mcoa ON mcoa.character_id = cra.character_id AND mcoa.matrix_id = mco.matrix_id
+			INNER JOIN matrix_character_order AS mcoa 
+        ON mcoa.character_id = cra.character_id AND mcoa.matrix_id = mco.matrix_id
 			WHERE mco.matrix_id = ?
       ORDER BY mco.position, mcoa.position`,
       { replacements: [this.matrix.matrix_id] }
@@ -685,7 +686,7 @@ class MatrixEditorService {
     const Op = _sequelize.Op
     await models.MatrixTaxaOrder.update(
       {
-        user_id: notes,
+        user_id: userId,
         group_id: groupId,
       },
       {
@@ -702,6 +703,112 @@ class MatrixEditorService {
       taxa_ids: taxaIds,
       user_id: userId,
       group_id: groupId,
+    }
+  }
+
+  async removeTaxonMedia(linkId) {
+    if (!(await this.canDo('deleteTaxonMedia'))) {
+      throw 'You are not allowed to remove media from this taxon'
+    }
+
+    const taxaMedia = await models.TaxaXMedium.findByPk(linkId)
+
+    // In the case that the media is no longer affiliated with the taxon, we allow the client to
+    // remove it. This may be because another user removed it.
+    if (taxaMedia == null) {
+      return { link_id: linkId }
+    }
+
+    const taxon = await models.Taxon.findByPk(taxaMedia.taxon_id)
+    if (taxon == null || taxon.project_id != this.project.project_id) {
+      throw 'Taxon is not a part of this project'
+    }
+
+    const media = await models.MediaFile.findByPk(taxaMedia.media_id)
+    if (media == null || media.project_id != this.project.project_id) {
+      throw 'Media is not a part of this project'
+    }
+
+    await taxaMedia.destroy()
+    return { link_id: linkId }
+  }
+
+  async loadTaxaMedia(taxonId, search) {
+    const media = []
+    const mediaIds = []
+
+    if (search) {
+      //TODO(kenzley): Implement search functionality using Elastic Search.
+    } else {
+      const replacements = [this.project.project_id]
+      let clause = ''
+      const taxon = await models.Taxon.findByPk(taxonId)
+      if (taxon != null) {
+        // Instead of searching by a single taxon, we are searching for media belonging to similar taxa which match
+        // the genus, species, and subspecies if available. If none are available, let's instead return all media
+        // associated with the project.
+        const fields = ['subspecific_epithet', 'specific_epithet', 'genus']
+        for (const field of fields) {
+          const unit = taxon[field]
+          if (unit) {
+            clause += ` AND t.${field} = ?`
+            replacements.push(unit)
+          }
+        }
+      }
+
+      const [rows] = await sequelizeConn.query(
+        `
+          SELECT
+            DISTINCT mf.media_id, mf.media
+          FROM media_files mf
+          INNER JOIN specimens AS s ON s.specimen_id = mf.specimen_id
+          INNER JOIN taxa_x_specimens AS txs ON s.specimen_id = txs.specimen_id
+          INNER JOIN taxa AS t ON txs.taxon_id = t.taxon_id
+          WHERE
+            mf.project_id = ? AND mf.cataloguing_status = 0 ${clause}
+          ORDER BY mf.media_id`,
+        { replacements: replacements }
+      )
+      for (const row of rows) {
+        const mediaId = parseInt(row.media_id)
+        mediaIds.push(mediaId)
+        media.push({
+          media_id: mediaId,
+          icon: getMedia(row.media, 'icon'),
+          tiny: getMedia(row.media, 'tiny'),
+        })
+      }
+    }
+
+    // Sort by the last the time user recently used the media. This ensures that recently used media
+    // is at the top of the media grid.
+    if (mediaIds.length) {
+      const [rows] = await sequelizeConn.query(
+        `
+      SELECT media_id, MAX(created_on) AS created_on
+      FROM cells_x_media
+      WHERE matrix_id = ? AND user_id = ? AND media_id IN(?)
+      GROUP BY media_id`,
+        { replacements: [this.matrix.matrix_id, this.user.user_id, mediaIds] }
+      )
+
+      const mediaTimes = new Map()
+      for (const row of rows) {
+        const mediaId = parseInt(row.media_id)
+        const createdOn = parseInt(row.created_on)
+        mediaTimes.set(mediaId, createdOn)
+      }
+
+      media.sort((a, b) => {
+        const aTime = mediaTimes.get(a['media_id']) ?? 0
+        const bTime = mediaTimes.get(b['media_id']) ?? 0
+        return Math.sign(bTime - aTime)
+      })
+    }
+
+    return {
+      media: media,
     }
   }
 
@@ -733,10 +840,8 @@ class MatrixEditorService {
       last_login: 0, // TODO(alvaro): Implement this.
       allowable_actions: await this.getUserAllowableActions(),
       allowable_publish: this.getPublishAllowableActions(),
-      preferences: {
-        ...this.getPreferences(),
-        ...(await this.getPublicAccessInfo()),
-      },
+      preferences: this.getPreferences(),
+      ...(await this.getPublicAccessInfo()),
     }
   }
 
@@ -915,7 +1020,7 @@ class MatrixEditorService {
 			LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
 			WHERE
 				ccl.matrix_id = ? AND pxu.user_id = ? AND 
-        (mto.group_id = pmxg.group_id OR mto.user_id = ? OR mto.user_id IS NULL OR mto.group_id = NULL)
+        (mto.group_id = pmxg.group_id OR mto.user_id = ? OR mto.user_id IS NULL OR mto.group_id IS NULL)
 			GROUP BY ccl.character_id`,
       {
         replacements: [
@@ -1008,9 +1113,16 @@ class MatrixEditorService {
     return rows
   }
 
-  // TODO(alvaro): Implement this.
-  getUserMemberGroups() {
-    return []
+  async getUserMemberGroups() {
+    const [rows] = await sequelizeConn.query(
+      `
+      SELECT pmg.group_id
+      FROM projects_x_users AS pu
+			INNER JOIN project_members_x_groups AS pmg ON pmg.membership_id = pu.link_id
+			WHERE pu.project_id = ? AND pu.user_id = ?`,
+      { replacements: [this.project.project_id, this.user.user_id] }
+    )
+    return rows.map((row) => parseInt(row.group_id))
   }
 
   async isAdminLike() {
@@ -1164,6 +1276,22 @@ class MatrixEditorService {
       }
     )
     return count == taxaIds.length
+  }
+
+  async getMediaByIds(mediaIds) {
+    const [rows] = await sequelizeConn.query(
+      `
+			SELECT media_id, media
+			FROM media_files
+			WHERE project_id = ? AND media_id IN (?)`,
+      { replacements: [this.project.project_id, mediaIds] }
+    )
+    const media = new Map()
+    for (const row of rows) {
+      const mediaId = parseInt(row.media_id)
+      media.set(mediaId, row.media)
+    }
+    return media
   }
 }
 

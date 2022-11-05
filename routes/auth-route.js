@@ -12,7 +12,7 @@ authRouter.post(
     body('email')
       .isEmail()
       .withMessage('Please enter a valid email.')
-      .custom((value, { req }) => {
+      .custom((value) => {
         return models.User.findOne({ where: { email: value } }).then(
           (userDoc) => {
             if (userDoc) {
