@@ -12,11 +12,11 @@ export class Table {
       submap.set(key2, mx1)
       return
     }
-  
+
     if (!submap.has(key2)) {
       submap.set(key2, new Map())
     }
-    submap.get(key2).set(mx1, mx2)    
+    submap.get(key2).set(mx1, mx2)
   }
 
   get(key1, key2 = undefined, key3 = undefined) {
@@ -36,7 +36,7 @@ export class Table {
       return submap
     }
 
-    return submap.get(key3) 
+    return submap.get(key3)
   }
 
   delete(key1, key2 = undefined, key3 = undefined) {
@@ -58,6 +58,6 @@ export class Table {
   }
 
   [Symbol.iterator]() {
-    return this.map[Symbol.iterator]();
+    return this.map[Symbol.iterator]()
   }
 }

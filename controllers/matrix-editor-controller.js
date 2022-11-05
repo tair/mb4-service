@@ -119,7 +119,12 @@ export async function setCellStates(req, res) {
   const stateIds = parseIntArray(req.body.state_ids)
   const options = req.body.options
   const matrixEditorService = await getMatrix(req)
-  const data = await matrixEditorService.setCellStates(taxaIds, characterIds, stateIds, options)
+  const data = await matrixEditorService.setCellStates(
+    taxaIds,
+    characterIds,
+    stateIds,
+    options
+  )
   data.ok = true
   res.status(200).json(data)
 }
