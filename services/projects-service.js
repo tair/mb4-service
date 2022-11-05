@@ -4,7 +4,7 @@ import * as statsService from './stats-service.js'
 
 async function getProjects() {
   let [rows] = await sequelizeConn.query(`
-      SELECT p.project_id, journal_year, article_authors, article_title
+      SELECT p.project_id, journal_year, article_authors, article_title, published_on
       FROM projects p
       WHERE p.published = 1 AND p.deleted = 0
       ORDER BY p.published_on desc`)
@@ -27,7 +27,6 @@ async function getProjects() {
 }
 
 async function getProjectTitles(order) {
-  console.log('tet')
   let sort_by = 'ASC'
   if (order.toUpperCase() === 'DESC') sort_by = 'DESC'
 
@@ -39,20 +38,72 @@ async function getProjectTitles(order) {
   return rows
 }
 
-async function getAuthorsWithProjects() {
+async function getInstitutionsWithProjects() {
   let [rows] =
-    await sequelizeConn.query(`select CONCAT(u.fname, ' ', u.lname) as author, 
+    await sequelizeConn.query(`select i.name as institution, p.name, p.project_id from institutions_x_projects ip, projects p, institutions i 
+  where ip.project_id=p.project_id and p.published=1 and p.deleted=0
+  and ip.institution_id=i.institution_id
+  order by i.name asc`)
+
+  let institutions = {}
+  let chars = []
+
+  for (let i = 0; i < rows.length; i++) {
+    let institution = rows[i].institution
+    let char = institution
+      .charAt(0)
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+
+    if (/[a-zA-Z]/.test(char) && !chars.includes(char)) {
+      chars.push(char)
+    }
+
+    let project = {
+      id: rows[i].project_id,
+      name: rows[i].name,
+    }
+
+    if (!institutions[institution]) {
+      institutions[institution] = [project]
+    } else {
+      institutions[institution].push(project)
+    }
+  }
+
+  return {
+    chars: chars,
+    institutions: institutions,
+  }
+}
+
+async function getAuthorsWithProjects() {
+  let [rows] = await sequelizeConn.query(`select fname, 
+    lname,
     p.project_id, 
     p.name
  from projects_x_users pu, ca_users u, projects p
  where pu.user_id = u.user_id and p.project_id=pu.project_id
  and p.published=1 and p.deleted=0
- order by CONCAT(u.fname, ' ', u.lname)`)
+ order by UPPER(TRIM(u.lname))`)
 
   let authors = {}
+  let chars = []
 
   for (let i = 0; i < rows.length; i++) {
-    let author = rows[i].author
+    let lname = rows[i].lname
+
+    // normalize the string (convert diacritics to ascii chars)
+    const normalized = lname.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+    lname = lname.charAt(0).toUpperCase() + lname.slice(1)
+    let char = normalized.charAt(0).toUpperCase()
+    if (!chars.includes(char)) {
+      chars.push(char)
+    }
+
+    let author = rows[i].fname + '|' + lname
     let project = {
       id: rows[i].project_id,
       name: rows[i].name,
@@ -65,7 +116,57 @@ async function getAuthorsWithProjects() {
     }
   }
 
-  return authors
+  return {
+    chars: chars,
+    authors: authors,
+  }
 }
 
-export { getProjects, getProjectTitles, getAuthorsWithProjects }
+async function getJournalsWithProjects() {
+  let [rows] = await sequelizeConn.query(`select distinct p.project_id, p.name, 
+    TRIM(b.journal_title) as journal,  UPPER(TRIM(b.journal_title))
+    from bibliographic_references b, projects p
+    where b.project_id=p.project_id and p.published=1 and p.deleted=0
+    and b.journal_title != '' 
+    order by UPPER(TRIM(b.journal_title)), p.project_id`)
+
+  let journals = {}
+  let chars = []
+
+  for (let i = 0; i < rows.length; i++) {
+    let journal = rows[i].journal
+    let char = journal
+      .charAt(0)
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+
+    if (/[a-zA-Z]/.test(char) && !chars.includes(char)) {
+      chars.push(char)
+    }
+
+    let project = {
+      id: rows[i].project_id,
+      name: rows[i].name,
+    }
+
+    if (!journals[journal]) {
+      journals[journal] = [project]
+    } else {
+      journals[journal].push(project)
+    }
+  }
+
+  return {
+    chars: chars,
+    journals: journals,
+  }
+}
+
+export {
+  getProjects,
+  getProjectTitles,
+  getAuthorsWithProjects,
+  getJournalsWithProjects,
+  getInstitutionsWithProjects,
+}

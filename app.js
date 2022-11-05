@@ -1,8 +1,8 @@
-import express from 'express';
-import projectsRouter from './routes/projects-route.js';
-import publicProjectsRouter from './routes/public/projects-route.js';
-import authRouter from './routes/auth-route.js';
-import userRouter from './routes/user-route.js';
+import express from 'express'
+import projectsRouter from './routes/projects-route.js'
+import publicProjectsRouter from './routes/public/projects-route.js'
+import authRouter from './routes/auth-route.js'
+import userRouter from './routes/user-route.js'
 
 const app = express()
 
@@ -42,4 +42,4 @@ app.use((err, req, res, next) => {
   }
 })
 
-export default app;
+export default app

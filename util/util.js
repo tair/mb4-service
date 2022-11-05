@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs'
 
 // function buildImageProps(mediaObj, type) {
 //   try {
@@ -40,8 +40,8 @@ export async function writeToFile(fileName, content) {
 
 export async function createDir(dir) {
   try {
-    if (!fs.existsSync(dir)){
-      fs.mkdirSync(dir, {recursive:true});
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
     }
   } catch (err) {
     console.error(`Error creating directory ${dir}. `, err.message)
@@ -49,5 +49,5 @@ export async function createDir(dir) {
 }
 
 export function capitalizeFirstLetter(string) {
-  return string.charAt(0).toUpperCase() + string.slice(1);
+  return string.charAt(0).toUpperCase() + string.slice(1)
 }

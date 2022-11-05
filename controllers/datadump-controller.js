@@ -1,16 +1,16 @@
-import * as projectsService from '../services/projects-service.js';
-import * as mediaService from '../services/media-service.js';
-import * as utilService from '../util/util.js';
-import * as projectDetailService from '../services/project-detail-service.js';
+import * as projectsService from '../services/projects-service.js'
+import * as mediaService from '../services/media-service.js'
+import * as utilService from '../util/util.js'
+import * as projectDetailService from '../services/project-detail-service.js'
 
-const dir ='data';
-const mediaDir = 'media_files';
-const detailDir = 'prj_details';
+const dir = 'data'
+const mediaDir = 'media_files'
+const detailDir = 'prj_details'
 
 async function dataDump(req, res) {
   try {
-    const start = Date.now();
-    console.log("Start dumping project data...")
+    const start = Date.now()
+    console.log('Start dumping project data...')
 
     const projects = await projectsService.getProjects()
     utilService.writeToFile(
@@ -19,17 +19,23 @@ async function dataDump(req, res) {
     )
     console.log('Dumped project list data - DONE!')
 
+    ///////////////////////////////////////////////
+    res.status(200).json('done!')
+    return
+    ///////////////////////////////////////////////
+
     utilService.createDir(`${dir}/${mediaDir}`)
     utilService.createDir(`${dir}/${detailDir}`)
 
-    console.log("Start dumping project details...")
-
+    console.log('Start dumping project details...')
 
     for (let i = 0; i < projects.length; i++) {
       const project = projects[i]
       const projectId = project.project_id
       const media_files = await mediaService.getMediaFiles(projectId)
-      const project_details = await projectDetailService.getProjectDetails(projectId)
+      const project_details = await projectDetailService.getProjectDetails(
+        projectId
+      )
 
       await utilService.writeToFile(
         `../${dir}/${detailDir}/prj_${projectId}.json`,
@@ -41,8 +47,8 @@ async function dataDump(req, res) {
       )
     }
     console.log('Dumped project details data - DONE!')
-    const end = Date.now();
-    let timeElapsed = (end - start) / 1000;
+    const end = Date.now()
+    let timeElapsed = (end - start) / 1000
     console.log(`Dump DONE in ${timeElapsed} seconds!`)
 
     res.status(200).json('done!')
@@ -52,5 +58,4 @@ async function dataDump(req, res) {
   }
 }
 
-
-export {dataDump}
+export { dataDump }

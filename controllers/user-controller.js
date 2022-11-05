@@ -1,11 +1,10 @@
-import bcrypt from 'bcrypt';
-import crypto from 'crypto';
-import {validationResult} from 'express-validator';
-import {models} from "../models/init-models.js";
+import bcrypt from 'bcrypt'
+import crypto from 'crypto'
+import { validationResult } from 'express-validator'
+import { models } from '../models/init-models.js'
 
 function getUsers(req, res, next) {
-  models.User
-    .findAll({ attributes: ['user_id', 'email'] })
+  models.User.findAll({ attributes: ['user_id', 'email'] })
     .then((users) => {
       return res.status(200).json(users)
     })
@@ -30,10 +29,10 @@ function signup(req, res, next) {
   const firstName = req.body.fname
   const lastName = req.body.lname
   const password = req.body.password
-  const md5Password = crypto.createHash('md5').update(password).digest("hex")
+  const md5Password = crypto.createHash('md5').update(password).digest('hex')
   bcrypt
     .hash(md5Password, 10)
-    .then(passwordHash => {
+    .then((passwordHash) => {
       const userModel = new models.User({
         email: email,
         password_hash: passwordHash,
@@ -43,7 +42,10 @@ function signup(req, res, next) {
       return userModel.save()
     })
     .then((result) => {
-      res.status(201).json({ message: 'User created!', userId: result._id })
+      res.status(201).json({
+        message: 'User created!',
+        userId: result._id,
+      })
     })
     .catch((err) => {
       if (!err.statusCode) {
@@ -53,4 +55,4 @@ function signup(req, res, next) {
     })
 }
 
-export {getUsers, signup}
+export { getUsers, signup }

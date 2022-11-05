@@ -12,6 +12,15 @@ projectsRouter.get(
   '/authors_projects',
   projectsController.getAuthorsWithProjects
 )
+projectsRouter.get(
+  '/journals_projects',
+  projectsController.getJournalsWithProjects
+)
+projectsRouter.get(
+  '/institutions',
+  projectsController.getInstitutionsWithProjects
+)
+
 projectsRouter.get('/:id', projectsController.getProjectsById)
 projectsRouter.get('/titles/:sort_by', projectsController.getProjectTitles)
 

@@ -1,28 +1,23 @@
-import express from 'express';
-import * as matrixEditorController from '../controllers/matrix-editor-controller.js';
+import express from 'express'
+import * as controller from '../controllers/matrix-editor-controller.js'
 
-const matrixEditorRouter = express.Router({ mergeParams: true })
+const router = express.Router({ mergeParams: true })
 
-// Taxa related endpoints.
-matrixEditorRouter.post('/addTaxonMedia', matrixEditorController.addTaxonMedia)
-matrixEditorRouter.post('/addTaxaToMatrix', matrixEditorController.addTaxaToMatrix)
-matrixEditorRouter.post('/getAvailableTaxa', matrixEditorController.getAvailableTaxa)
-matrixEditorRouter.post('/loadTaxaMedia', matrixEditorController.loadTaxaMedia)
-matrixEditorRouter.post('/removeTaxaFromMatrix', matrixEditorController.removeTaxaFromMatrix)
-matrixEditorRouter.post('/removeTaxonMedia', matrixEditorController.removeTaxonMedia)
-matrixEditorRouter.post('/reorderTaxa', matrixEditorController.reorderTaxa)
-matrixEditorRouter.post('/setTaxaNotes', matrixEditorController.setTaxaNotes)
-matrixEditorRouter.post('/setTaxaAccess', matrixEditorController.setTaxaAccess)
+router.post('/getAvailableTaxa', controller.getAvailableTaxa)
+router.post('/addTaxaToMatrix', controller.addTaxaToMatrix)
+router.post('/loadTaxaMedia', controller.loadTaxaMedia)
+router.post('/removeTaxaFromMatrix', controller.removeTaxaFromMatrix)
+router.post('/reorderTaxa', controller.reorderTaxa)
+router.post('/setTaxaNotes', controller.setTaxaNotes)
+router.post('/setTaxaAccess', controller.setTaxaAccess)
 
-
-// Cell related endpoints
-matrixEditorRouter.post('/getAllCellNotes', matrixEditorController.getAllCellNotes)
-matrixEditorRouter.post('/getCellCounts', matrixEditorController.getCellCounts)
-matrixEditorRouter.post('/getCellData', matrixEditorController.getCellData)
-matrixEditorRouter.post('/getCellMedia', matrixEditorController.getCellMedia)
+router.post('/getAllCellNotes', controller.getAllCellNotes)
+router.post('/getCellCounts', controller.getCellCounts)
+router.post('/getCellData', controller.getCellData)
+router.post('/getCellMedia', controller.getCellMedia)
 
 // General endpoints
-matrixEditorRouter.post('/getMatrixData', matrixEditorController.getMatrixData)
-matrixEditorRouter.post('/logError', matrixEditorController.logError)
+router.post('/getMatrixData', controller.getMatrixData)
+router.post('/logError', controller.logError)
 
-export default matrixEditorRouter;
+export default router
