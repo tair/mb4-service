@@ -129,6 +129,24 @@ export async function setCellStates(req, res) {
   res.status(200).json(data)
 }
 
+export async function setCellNotes(req, res) {
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  const characterIds = parseIntArray(req.body.character_ids)
+  const notes = req.body.notes;
+  const status = parseNullableInt(req.body.status)
+  const options = req.body.options
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.setCellNotes(
+    taxaIds,
+    characterIds,
+    notes,
+    status,
+    options
+  )
+  data.ok = true
+  res.status(200).json(data)
+}
+
 export async function logError(req) {
   console.log('Error: ', req.body)
 }
@@ -148,4 +166,8 @@ function parseIntArray(array) {
     return Array.from(new Set(ints))
   }
   return []
+}
+
+function parseNullableInt(value) {
+  return value == null ? null : parseInt(value)
 }

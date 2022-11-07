@@ -1007,6 +1007,98 @@ class MatrixEditorService {
     }
   }
 
+  async setCellNotes(taxaIds, characterIds, notes, status, options) {
+    if (taxaIds.length == 0) {
+      throw 'Please specify at least one taxon'
+    }
+
+    if (characterIds.length == 0) {
+      throw 'Please specify at least one character'
+    }
+
+    if (!(await this.canDo('editCellData'))) {
+      throw 'You are not allowed to set states in this matrix'
+    }
+
+    if (!(await this.canEditTaxa(taxaIds))) {
+      throw 'You are not allowed to modify the selected taxa'
+    }
+
+    if (!(await this.canEditCharacters(characterIds))) {
+      throw 'User does not have access to edit all characters'
+    }
+
+    const batchMode = options != null && parseInt(options['batchmode'])
+
+    const transaction = await sequelizeConn.transaction()
+
+    let cellBatch
+    if (batchMode) {
+      cellBatch = models.CellBatchLog.build({
+        user_id: this.user.user_id,
+        matrix_id: this.matrix.matrix_id,
+        batch_type: CELL_BATCH_TYPES.CELL_BATCH_NOTES,
+        started_on: time(),
+      })
+    }
+
+    for (const taxonId of taxaIds) {
+      for (const characterId of characterIds) {
+        const [cellNote] = await models.CellNote.findOrBuild({
+          where: {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: taxonId,
+            character_id: characterId
+          },
+          defaults: {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: taxonId,
+            character_id: characterId,
+            created_on: time(),
+            last_modified_on: time(),
+            status: 0,
+            note: '',
+            source: 'HTML5',
+          },
+          transaction: transaction,
+        })
+        if (notes) {
+          cellNote.notes = notes.trim()
+        }
+        if (status) {
+          cellNote.status = status
+        }
+        await cellNote.save({ transaction: transaction })
+      }
+    }
+
+    if (batchMode) {
+      let description
+      if (batchMode == 2) {
+        const character = await models.Character.findByPk(characterIds[0])
+        description = `Updated notes on ${character.name} column`
+      } else if (batchMode == 1) {
+        const taxon = await models.Taxon.findByPk(taxaIds[0])
+        description = `Updated notes on ${getTaxonName(taxon)} row`
+      } else {
+        throw 'Unable batch mode'
+      }
+
+      cellBatch.finished_on = time()
+      cellBatch.description = description
+      await cellBatch.save({ transaction: transaction })
+    }
+
+    await transaction.commit()
+    return {
+      ts: time(),
+      character_ids: characterIds,
+      taxa_ids: taxaIds,
+      notes: notes,
+      status: status,
+    }
+  }
+
   getMatrixInfo() {
     return {
       id: this.matrix.matrix_id,
