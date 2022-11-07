@@ -438,12 +438,13 @@ class MatrixEditorService {
       throw 'You are not allowed to add taxa'
     }
 
-    // Ensure that all of the taxa belongs to this project. This ensures that the user is not
-    // passing in invalid taxa.
+    // Ensure that all of the taxa belongs to this project. This ensures that
+    // the user is not passing in invalid taxa.
     const [[{ count }]] = await sequelizeConn.query(
       `
       SELECT COUNT(*) AS count
-      FROM taxa WHERE project_id = ? AND taxon_id IN (?)`,
+      FROM taxa 
+      WHERE project_id = ? AND taxon_id IN (?)`,
       { replacements: [this.project.project_id, taxaIds] }
     )
     if (count != taxaIds.length) {
