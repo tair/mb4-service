@@ -1,7 +1,8 @@
-import sequelizeConn from '../util/db.js';
+import sequelizeConn from '../util/db.js'
 
 async function getImageProps(projectId, type) {
-  const [rows] = await sequelizeConn.query(`
+  const [rows] = await sequelizeConn.query(
+    `
     SELECT media
     FROM media_files m
     WHERE m.project_id = ? AND m.media <> ''
@@ -10,7 +11,7 @@ async function getImageProps(projectId, type) {
     { replacements: [projectId] }
   )
   try {
-      return rows.length ? rows[0].media[type]: null;
+    return rows.length ? rows[0].media[type] : null
   } catch (e) {
     console.log('getImageProp: ' + rows[0].media)
   }
@@ -36,7 +37,7 @@ async function getMediaFiles(projectId) {
 
 async function getMediaViews(projectId) {
   let [rows] = await sequelizeConn.query(
-    "SELECT name FROM media_views WHERE project_id = ? ",
+    'SELECT name FROM media_views WHERE project_id = ? ',
     { replacements: [projectId] }
   )
 
@@ -47,4 +48,4 @@ async function getMediaViews(projectId) {
   return res
 }
 
-export {getImageProps, getMediaFiles, getMediaViews}
+export { getImageProps, getMediaFiles, getMediaViews }

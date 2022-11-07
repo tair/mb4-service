@@ -1,7 +1,8 @@
-import sequelizeConn from '../util/db.js';
+import sequelizeConn from '../util/db.js'
 
 async function getDocuments(projectId) {
-  const [rows] = await sequelizeConn.query(`
+  const [rows] = await sequelizeConn.query(
+    `
       SELECT document_id, folder_id, title
       FROM project_documents 
       WHERE project_id = ?
@@ -11,4 +12,4 @@ async function getDocuments(projectId) {
   return rows
 }
 
-export {getDocuments}
+export { getDocuments }

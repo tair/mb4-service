@@ -1,8 +1,7 @@
-import dotenv from 'dotenv';
-import process from 'node:process';
+import dotenv from 'dotenv'
 
 // read .env file
-dotenv.config();
+dotenv.config()
 
 const config = {
   media: {
@@ -16,8 +15,8 @@ const config = {
     database: process.env.DB_SCHEMA,
     password: process.env.DB_PASSWORD,
     dialect: 'mysql',
-    logging: console.logging
+    logging: console.logging,
   },
 }
 
-export default config;
+export default config

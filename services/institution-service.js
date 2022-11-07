@@ -1,7 +1,8 @@
-import sequelizeConn from '../util/db.js';
+import sequelizeConn from '../util/db.js'
 
 async function fetchInstitutions(projectId) {
-  let [rows] = await sequelizeConn.query(`
+  let [rows] = await sequelizeConn.query(
+    `
       SELECT ins.name as name
       FROM institutions ins
       INNER JOIN institutions_x_projects insp
@@ -16,4 +17,4 @@ async function fetchInstitutions(projectId) {
   return res
 }
 
-export {fetchInstitutions}
+export { fetchInstitutions }
