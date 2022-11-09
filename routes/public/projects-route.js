@@ -20,9 +20,9 @@ projectsRouter.get(
   '/institutions',
   projectsController.getInstitutionsWithProjects
 )
+projectsRouter.get('/titles', projectsController.getProjectTitles)
 
 projectsRouter.get('/:id', projectsController.getProjectsById)
-projectsRouter.get('/titles/:sort_by', projectsController.getProjectTitles)
 
 projectsRouter.get('/:id/media', mediaController.getMediaFiles)
 
