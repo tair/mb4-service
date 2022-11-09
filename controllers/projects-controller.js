@@ -25,10 +25,8 @@ async function getProjectsById(req, res) {
 }
 
 async function getProjectTitles(req, res) {
-  const sort_by = req.params.sort_by
-
   try {
-    const result = await projectService.getProjectTitles(sort_by)
+    const result = await projectService.getProjectTitles()
     res.status(200).json(result)
   } catch (e) {
     console.error('Error while getting project titles (controller).', e)
