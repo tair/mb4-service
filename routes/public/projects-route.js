@@ -21,8 +21,11 @@ projectsRouter.get(
   projectsController.getInstitutionsWithProjects
 )
 
+projectsRouter.get('/taxonomy', projectsController.getProjectTaxonomy)
+
+projectsRouter.get('/titles', projectsController.getProjectTitles)
+
 projectsRouter.get('/:id', projectsController.getProjectsById)
-projectsRouter.get('/titles/:sort_by', projectsController.getProjectTitles)
 
 projectsRouter.get('/:id/media', mediaController.getMediaFiles)
 
