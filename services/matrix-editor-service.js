@@ -46,7 +46,7 @@ class MatrixEditorService {
         c.cell_id, c.taxon_id, c.character_id, c.state_id, c.user_id, c.is_npa, c.is_uncertain,
         c.created_on, c.start_value, c.end_value, ch.type
       FROM cells c
-      INNER JOIN matrix_character_order AS mco 
+      INNER JOIN matrix_character_order AS mco
         ON mco.character_id = c.character_id AND mco.matrix_id = c.matrix_id
       INNER JOIN characters AS ch
         ON ch.character_id = mco.character_id
@@ -443,7 +443,7 @@ class MatrixEditorService {
     const [[{ count }]] = await sequelizeConn.query(
       `
       SELECT COUNT(*) AS count
-      FROM taxa 
+      FROM taxa
       WHERE project_id = ? AND taxon_id IN (?)`,
       { replacements: [this.project.project_id, taxaIds] }
     )
@@ -471,9 +471,9 @@ class MatrixEditorService {
 
     await sequelizeConn.query(
       `
-        UPDATE matrix_taxa_order 
-        SET position = position + ? 
-        WHERE position >= ? AND matrix_id = ? 
+        UPDATE matrix_taxa_order
+        SET position = position + ?
+        WHERE position >= ? AND matrix_id = ?
         ORDER BY position DESC`,
       {
         replacements: [taxaIds.length, position, this.matrix.matrix_id],
@@ -499,9 +499,9 @@ class MatrixEditorService {
 
     await sequelizeConn.query(
       `
-      UPDATE matrix_taxa_order 
-      SET position=@tmp_position:=@tmp_position+1 
-      WHERE matrix_id = ? AND (@tmp_position:=0)+1 
+      UPDATE matrix_taxa_order
+      SET position=@tmp_position:=@tmp_position+1
+      WHERE matrix_id = ? AND (@tmp_position:=0)+1
       ORDER BY position`,
       { replacements: [this.matrix.matrix_id], transaction: transaction }
     )
@@ -579,9 +579,9 @@ class MatrixEditorService {
     // Renumber the taxa position in the matrix is that is monotonically increasing.
     await sequelizeConn.query(
       `
-      UPDATE matrix_taxa_order 
-      SET position=@tmp_position:=@tmp_position+1 
-      WHERE matrix_id = ? AND (@tmp_position:=0)+1 
+      UPDATE matrix_taxa_order
+      SET position=@tmp_position:=@tmp_position+1
+      WHERE matrix_id = ? AND (@tmp_position:=0)+1
       ORDER BY position`,
       { replacements: [this.matrix.matrix_id], transaction: transaction }
     )
@@ -607,9 +607,9 @@ class MatrixEditorService {
 
     await sequelizeConn.query(
       `
-      UPDATE matrix_taxa_order 
-      SET position=position + ? 
-      WHERE matrix_id = ? AND position > ? 
+      UPDATE matrix_taxa_order
+      SET position=position + ?
+      WHERE matrix_id = ? AND position > ?
       ORDER BY position DESC`,
       {
         replacements: [taxaIds.length, this.matrix.matrix_id, index],
@@ -619,9 +619,9 @@ class MatrixEditorService {
 
     await sequelizeConn.query(
       `
-      UPDATE matrix_taxa_order 
-      SET position=@tmp_position:=@tmp_position+1 
-      WHERE (@tmp_position:=?)+1 AND matrix_id = ? AND taxon_id IN (?) 
+      UPDATE matrix_taxa_order
+      SET position=@tmp_position:=@tmp_position+1
+      WHERE (@tmp_position:=?)+1 AND matrix_id = ? AND taxon_id IN (?)
       ORDER BY position`,
       {
         replacements: [index, this.matrix.matrix_id, taxaIds],
@@ -631,9 +631,9 @@ class MatrixEditorService {
 
     await sequelizeConn.query(
       `
-      UPDATE matrix_taxa_order 
-      SET position=@tmp_position:=@tmp_position+1 
-      WHERE matrix_id = ? AND (@tmp_position:=0)+1 
+      UPDATE matrix_taxa_order
+      SET position=@tmp_position:=@tmp_position+1
+      WHERE matrix_id = ? AND (@tmp_position:=0)+1
       ORDER BY position`,
       { replacements: [this.matrix.matrix_id], transaction: transaction }
     )
@@ -1194,7 +1194,7 @@ class MatrixEditorService {
     const time = Date.now()
     const [characterRows] = await sequelizeConn.query(
       `
-        SELECT character_id 
+        SELECT character_id
         FROM matrix_character_order AS mco
         WHERE matrix_id = ?`,
       { replacements: [this.matrix.matrix_id] }
@@ -1214,7 +1214,7 @@ class MatrixEditorService {
       INNER JOIN projects_x_users AS pxu ON pxu.project_id = m.project_id
       LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
       WHERE
-        ccl.matrix_id = ? AND pxu.user_id = ? AND 
+        ccl.matrix_id = ? AND pxu.user_id = ? AND
         (mto.group_id = pmxg.group_id OR mto.user_id = ? OR mto.user_id IS NULL OR mto.group_id IS NULL)
       GROUP BY ccl.character_id`,
       {
@@ -1472,8 +1472,8 @@ class MatrixEditorService {
       INNER JOIN matrix_taxa_order AS mto ON mto.matrix_id = c.matrix_id AND mto.taxon_id = c.taxon_id
       INNER JOIN projects_x_users AS pxu ON m.project_id = pxu.project_id
       LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
-      WHERE 
-        (c.state_id IS NULL OR c.is_npa = 1) AND 
+      WHERE
+        (c.state_id IS NULL OR c.is_npa = 1) AND
         pxu.user_id = ? AND cxm.matrix_id = ? AND cxm.set_by_automation = 1 AND
         (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id IS NULL OR mto.user_id = pxu.user_id) AND
         cxm.taxon_id IN (?) AND cxm.character_id IN (?)`,
@@ -1534,16 +1534,16 @@ class MatrixEditorService {
 
     const [unscoredCellsRows] = await sequelizeConn.query(
       `
-			SELECT mf.media_id, mto.taxon_id, mco.character_id
-			FROM matrix_character_order mco
-			INNER JOIN matrix_taxa_order AS mto ON mto.matrix_id = mco.matrix_id
-			INNER JOIN matrices AS m ON m.matrix_id = mto.matrix_id
-			LEFT JOIN cells AS cl ON cl.character_id = mco.character_id AND cl.matrix_id = mco.matrix_id AND cl.taxon_id = mto.taxon_id
-			INNER JOIN characters_x_media AS csxm ON csxm.character_id = mco.character_id
-			INNER JOIN media_files AS mf2v ON mf2v.media_id = csxm.media_id AND m.project_id = mf2v.project_id
-			INNER JOIN taxa_x_specimens AS txs ON txs.taxon_id = mto.taxon_id
-			INNER JOIN media_files AS mf ON mf.view_id = mf2v.view_id AND mf.specimen_id = txs.specimen_id AND m.project_id = mf.project_id
-			WHERE mco.matrix_id = ? AND mto.taxon_id IN (?) AND mco.character_id IN (?) AND cl.cell_id IS NULL`,
+      SELECT mf.media_id, mto.taxon_id, mco.character_id
+      FROM matrix_character_order mco
+      INNER JOIN matrix_taxa_order AS mto ON mto.matrix_id = mco.matrix_id
+      INNER JOIN matrices AS m ON m.matrix_id = mto.matrix_id
+      LEFT JOIN cells AS cl ON cl.character_id = mco.character_id AND cl.matrix_id = mco.matrix_id AND cl.taxon_id = mto.taxon_id
+      INNER JOIN characters_x_media AS csxm ON csxm.character_id = mco.character_id
+      INNER JOIN media_files AS mf2v ON mf2v.media_id = csxm.media_id AND m.project_id = mf2v.project_id
+      INNER JOIN taxa_x_specimens AS txs ON txs.taxon_id = mto.taxon_id
+      INNER JOIN media_files AS mf ON mf.view_id = mf2v.view_id AND mf.specimen_id = txs.specimen_id AND m.project_id = mf.project_id
+      WHERE mco.matrix_id = ? AND mto.taxon_id IN (?) AND mco.character_id IN (?) AND cl.cell_id IS NULL`,
       { replacement: [this.matrix.matrix_id, taxaIds, characterIds] }
     )
     goodCellMedia.push(...unscoredCellsRows)
@@ -1551,17 +1551,17 @@ class MatrixEditorService {
     // Get all cells media that which was used in cell automation and user has access to.
     const [oldCellsRows] = await sequelizeConn.query(
       `
-			SELECT
-				cxm.link_id, cxm.media_id, cxm.taxon_id, cxm.character_id
-			FROM cells_x_media AS cxm
-			INNER JOIN cells AS c ON c.taxon_id = cxm.taxon_id AND c.character_id = cxm.character_id AND c.matrix_id = cxm.matrix_id
-			INNER JOIN matrix_taxa_order AS mto ON mto.matrix_id = c.matrix_id AND cxm.taxon_id = c.taxon_id
-			INNER JOIN matrices AS m ON mto.matrix_id = m.matrix_id
-			INNER JOIN media_files AS mf ON mf.media_id = cxm.media_id AND mf.project_id = m.project_id
-			INNER JOIN projects_x_users AS pxu ON m.project_id = pxu.project_id AND pxu.user_id = ?
+      SELECT
+        cxm.link_id, cxm.media_id, cxm.taxon_id, cxm.character_id
+      FROM cells_x_media AS cxm
+      INNER JOIN cells AS c ON c.taxon_id = cxm.taxon_id AND c.character_id = cxm.character_id AND c.matrix_id = cxm.matrix_id
+      INNER JOIN matrix_taxa_order AS mto ON mto.matrix_id = c.matrix_id AND cxm.taxon_id = c.taxon_id
+      INNER JOIN matrices AS m ON mto.matrix_id = m.matrix_id
+      INNER JOIN media_files AS mf ON mf.media_id = cxm.media_id AND mf.project_id = m.project_id
+      INNER JOIN projects_x_users AS pxu ON m.project_id = pxu.project_id AND pxu.user_id = ?
       LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
-			WHERE
-				cxm.matrix_id = ? AND cxm.set_by_automation = 1 AND
+      WHERE
+        cxm.matrix_id = ? AND cxm.set_by_automation = 1 AND
         (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id IS NULL OR mto.user_id = ?) AND
         cxm.taxon_id IN (?) AND cxm.character_id IN (?)`,
       {
@@ -1701,7 +1701,7 @@ class MatrixEditorService {
       FROM taxa_x_media txm
       INNER JOIN media_files AS mf ON mf.media_id = txm.media_id
       INNER JOIN taxa AS t ON t.taxon_id = txm.taxon_id
-      WHERE mf.project_id = ? 
+      WHERE mf.project_id = ?
       ORDER BY t.taxon_id`,
       { replacements: [this.project.project_id] }
     )
@@ -1748,11 +1748,11 @@ class MatrixEditorService {
   async canEditCharacters(characterIds) {
     const [[{ count }]] = await sequelizeConn.query(
       `
-			SELECT COUNT(mco.character_id) AS count
-			FROM matrix_character_order mco
-			INNER JOIN characters AS c ON mco.character_id = c.character_id
-			INNER JOIN matrices AS m ON mco.matrix_id = m.matrix_id AND c.project_id = m.project_id
-			WHERE m.matrix_id = ? AND mco.character_id IN (?)`,
+      SELECT COUNT(mco.character_id) AS count
+      FROM matrix_character_order mco
+      INNER JOIN characters AS c ON mco.character_id = c.character_id
+      INNER JOIN matrices AS m ON mco.matrix_id = m.matrix_id AND c.project_id = m.project_id
+      WHERE m.matrix_id = ? AND mco.character_id IN (?)`,
       { replacements: [this.matrix.matrix_id, characterIds] }
     )
     return count == characterIds.length
@@ -1761,10 +1761,10 @@ class MatrixEditorService {
   async areCharactersDiscrete(characterIds) {
     const [[{ count }]] = await sequelizeConn.query(
       `
-			SELECT COUNT(mco.character_id) AS count
-			FROM matrix_character_order mco
-			INNER JOIN characters AS c ON c.character_id = mco.character_id
-			WHERE c.type = 0 AND mco.matrix_id = ? AND mco.character_id IN (?)`,
+      SELECT COUNT(mco.character_id) AS count
+      FROM matrix_character_order mco
+      INNER JOIN characters AS c ON c.character_id = mco.character_id
+      WHERE c.type = 0 AND mco.matrix_id = ? AND mco.character_id IN (?)`,
       { replacements: [this.matrix.matrix_id, characterIds] }
     )
     return count == characterIds.length
