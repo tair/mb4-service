@@ -11,10 +11,12 @@ router.post('/reorderTaxa', controller.reorderTaxa)
 router.post('/setTaxaNotes', controller.setTaxaNotes)
 router.post('/setTaxaAccess', controller.setTaxaAccess)
 
+router.post('/addCellMedia', controller.addCellMedia)
 router.post('/getAllCellNotes', controller.getAllCellNotes)
 router.post('/getCellCounts', controller.getCellCounts)
 router.post('/getCellData', controller.getCellData)
 router.post('/getCellMedia', controller.getCellMedia)
+router.post('/removeCellMedia', controller.removeCellMedia)
 router.post('/setCellNotes', controller.setCellNotes)
 router.post('/setCellStates', controller.setCellStates)
 

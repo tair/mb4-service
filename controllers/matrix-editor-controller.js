@@ -132,7 +132,7 @@ export async function setCellStates(req, res) {
 export async function setCellNotes(req, res) {
   const taxaIds = parseIntArray(req.body.taxa_ids)
   const characterIds = parseIntArray(req.body.character_ids)
-  const notes = req.body.notes;
+  const notes = req.body.notes
   const status = parseNullableInt(req.body.status)
   const options = req.body.options
   const matrixEditorService = await getMatrix(req)
@@ -142,6 +142,38 @@ export async function setCellNotes(req, res) {
     notes,
     status,
     options
+  )
+  data.ok = true
+  res.status(200).json(data)
+}
+
+export async function addCellMedia(req, res) {
+  const taxonId = parseInt(req.body.taxon_id)
+  const characterIds = parseIntArray(req.body.character_ids)
+  const mediaIds = parseIntArray(req.body.media_ids)
+  const batchMode = parseInt(req.body.batchmode)
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.addCellMedia(
+    taxonId,
+    characterIds,
+    mediaIds,
+    batchMode
+  )
+  data.ok = true
+  res.status(200).json(data)
+}
+
+export async function removeCellMedia(req, res) {
+  const taxonId = parseInt(req.body.taxon_id)
+  const characterId = parseInt(req.body.character_id)
+  const linkId = parseInt(req.body.link_id)
+  const shouldTransferCitations = parseInt(req.body.should_transfer_citations)
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.removeCellMedia(
+    taxonId,
+    characterId,
+    linkId,
+    shouldTransferCitations
   )
   data.ok = true
   res.status(200).json(data)

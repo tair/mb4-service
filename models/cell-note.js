@@ -57,7 +57,7 @@ export default class CellNote extends Model {
           allowNull: false,
           validate: {
             isIn: [[0, 50, 100]],
-          }
+          },
         },
         ancestor_note_id: {
           type: DataTypes.INTEGER.UNSIGNED,
