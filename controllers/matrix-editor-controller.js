@@ -113,6 +113,22 @@ export async function loadTaxaMedia(req, res) {
   res.status(200).json(data)
 }
 
+export async function setCellStates(req, res) {
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  const characterIds = parseIntArray(req.body.character_ids)
+  const stateIds = parseIntArray(req.body.state_ids)
+  const options = req.body.options
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.setCellStates(
+    taxaIds,
+    characterIds,
+    stateIds,
+    options
+  )
+  data.ok = true
+  res.status(200).json(data)
+}
+
 export async function logError(req) {
   console.log('Error: ', req.body)
 }
@@ -128,7 +144,8 @@ export async function getMatrix(req) {
 
 function parseIntArray(array) {
   if (Array.isArray(array)) {
-    return Array.from(new Set(array.map((i) => parseInt(i))))
+    const ints = array.filter((i) => i != null).map((i) => parseInt(i))
+    return Array.from(new Set(ints))
   }
   return []
 }

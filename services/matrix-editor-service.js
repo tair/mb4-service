@@ -1,10 +1,15 @@
 import _sequelize from 'sequelize'
 import sequelizeConn from '../util/db.js'
-import { models } from '../models/init-models.js'
-import { getRoles } from '../services/user-roles-service.js'
+import { Op } from 'sequelize'
+import { CELL_BATCH_TYPES } from '../util/cells.js'
 import { MATRIX_OPTIONS } from '../util/matrix.js'
+import { Table } from '../util/table.js'
+import { array_difference, array_intersect, time } from '../util/util.js'
 import { getMedia } from '../util/media.js'
+import { getRoles } from '../services/user-roles-service.js'
+import { getStatesIdsForCharacter } from '../services/character-service.js'
 import { getTaxonName, TAXA_FIELD_NAMES } from '../util/taxa.js'
+import { models } from '../models/init-models.js'
 
 class MatrixEditorService {
   constructor(project, matrix, user, readonly) {
@@ -41,7 +46,7 @@ class MatrixEditorService {
         c.cell_id, c.taxon_id, c.character_id, c.state_id, c.user_id, c.is_npa, c.is_uncertain,
         c.created_on, c.start_value, c.end_value, ch.type
       FROM cells c
-      INNER JOIN matrix_character_order AS mco 
+      INNER JOIN matrix_character_order AS mco
         ON mco.character_id = c.character_id AND mco.matrix_id = c.matrix_id
       INNER JOIN characters AS ch
         ON ch.character_id = mco.character_id
@@ -433,12 +438,13 @@ class MatrixEditorService {
       throw 'You are not allowed to add taxa'
     }
 
-    // Ensure that all of the taxa belongs to this project. This ensures that the user is not
-    // passing in invalid taxa.
+    // Ensure that all of the taxa belongs to this project. This ensures that
+    // the user is not passing in invalid taxa.
     const [[{ count }]] = await sequelizeConn.query(
       `
       SELECT COUNT(*) AS count
-      FROM taxa WHERE project_id = ? AND taxon_id IN (?)`,
+      FROM taxa
+      WHERE project_id = ? AND taxon_id IN (?)`,
       { replacements: [this.project.project_id, taxaIds] }
     )
     if (count != taxaIds.length) {
@@ -465,9 +471,9 @@ class MatrixEditorService {
 
     await sequelizeConn.query(
       `
-        UPDATE matrix_taxa_order 
-        SET position = position + ? 
-        WHERE position >= ? AND matrix_id = ? 
+        UPDATE matrix_taxa_order
+        SET position = position + ?
+        WHERE position >= ? AND matrix_id = ?
         ORDER BY position DESC`,
       {
         replacements: [taxaIds.length, position, this.matrix.matrix_id],
@@ -493,9 +499,9 @@ class MatrixEditorService {
 
     await sequelizeConn.query(
       `
-      UPDATE matrix_taxa_order 
-      SET position=@tmp_position:=@tmp_position+1 
-      WHERE matrix_id = ? AND (@tmp_position:=0)+1 
+      UPDATE matrix_taxa_order
+      SET position=@tmp_position:=@tmp_position+1
+      WHERE matrix_id = ? AND (@tmp_position:=0)+1
       ORDER BY position`,
       { replacements: [this.matrix.matrix_id], transaction: transaction }
     )
@@ -573,9 +579,9 @@ class MatrixEditorService {
     // Renumber the taxa position in the matrix is that is monotonically increasing.
     await sequelizeConn.query(
       `
-      UPDATE matrix_taxa_order 
-      SET position=@tmp_position:=@tmp_position+1 
-      WHERE matrix_id = ? AND (@tmp_position:=0)+1 
+      UPDATE matrix_taxa_order
+      SET position=@tmp_position:=@tmp_position+1
+      WHERE matrix_id = ? AND (@tmp_position:=0)+1
       ORDER BY position`,
       { replacements: [this.matrix.matrix_id], transaction: transaction }
     )
@@ -601,9 +607,9 @@ class MatrixEditorService {
 
     await sequelizeConn.query(
       `
-      UPDATE matrix_taxa_order 
-      SET position=position + ? 
-      WHERE matrix_id = ? AND position > ? 
+      UPDATE matrix_taxa_order
+      SET position=position + ?
+      WHERE matrix_id = ? AND position > ?
       ORDER BY position DESC`,
       {
         replacements: [taxaIds.length, this.matrix.matrix_id, index],
@@ -613,9 +619,9 @@ class MatrixEditorService {
 
     await sequelizeConn.query(
       `
-      UPDATE matrix_taxa_order 
-      SET position=@tmp_position:=@tmp_position+1 
-      WHERE (@tmp_position:=?)+1 AND matrix_id = ? AND taxon_id IN (?) 
+      UPDATE matrix_taxa_order
+      SET position=@tmp_position:=@tmp_position+1
+      WHERE (@tmp_position:=?)+1 AND matrix_id = ? AND taxon_id IN (?)
       ORDER BY position`,
       {
         replacements: [index, this.matrix.matrix_id, taxaIds],
@@ -625,9 +631,9 @@ class MatrixEditorService {
 
     await sequelizeConn.query(
       `
-      UPDATE matrix_taxa_order 
-      SET position=@tmp_position:=@tmp_position+1 
-      WHERE matrix_id = ? AND (@tmp_position:=0)+1 
+      UPDATE matrix_taxa_order
+      SET position=@tmp_position:=@tmp_position+1
+      WHERE matrix_id = ? AND (@tmp_position:=0)+1
       ORDER BY position`,
       { replacements: [this.matrix.matrix_id], transaction: transaction }
     )
@@ -656,7 +662,6 @@ class MatrixEditorService {
 
     const transaction = await sequelizeConn.transaction()
 
-    const Op = _sequelize.Op
     await models.Taxon.update(
       { notes: notes },
       {
@@ -683,7 +688,6 @@ class MatrixEditorService {
 
     const transaction = await sequelizeConn.transaction()
 
-    const Op = _sequelize.Op
     await models.MatrixTaxaOrder.update(
       {
         user_id: userId,
@@ -744,9 +748,10 @@ class MatrixEditorService {
       let clause = ''
       const taxon = await models.Taxon.findByPk(taxonId)
       if (taxon != null) {
-        // Instead of searching by a single taxon, we are searching for media belonging to similar taxa which match
-        // the genus, species, and subspecies if available. If none are available, let's instead return all media
-        // associated with the project.
+        // Instead of searching by a single taxon, we are searching for media
+        // belonging to similar taxa which match the genus, species, and
+        // subspecies if available. If none are available, let's instead return
+        // all media associated with the project.
         const fields = ['subspecific_epithet', 'specific_epithet', 'genus']
         for (const field of fields) {
           const unit = taxon[field]
@@ -781,15 +786,15 @@ class MatrixEditorService {
       }
     }
 
-    // Sort by the last the time user recently used the media. This ensures that recently used media
-    // is at the top of the media grid.
+    // Sort by the last the time user recently used the media. This ensures
+    // that recently used media is at the top of the media grid.
     if (mediaIds.length) {
       const [rows] = await sequelizeConn.query(
         `
-      SELECT media_id, MAX(created_on) AS created_on
-      FROM cells_x_media
-      WHERE matrix_id = ? AND user_id = ? AND media_id IN(?)
-      GROUP BY media_id`,
+        SELECT media_id, MAX(created_on) AS created_on
+        FROM cells_x_media
+        WHERE matrix_id = ? AND user_id = ? AND media_id IN(?)
+        GROUP BY media_id`,
         { replacements: [this.matrix.matrix_id, this.user.user_id, mediaIds] }
       )
 
@@ -809,6 +814,196 @@ class MatrixEditorService {
 
     return {
       media: media,
+    }
+  }
+
+  async setCellStates(taxaIds, characterIds, stateIds, options) {
+    if (taxaIds.length == 0) {
+      throw 'Please specify at least one taxon'
+    }
+
+    if (characterIds.length == 0) {
+      throw 'Please specify at least one character'
+    }
+
+    if (this.matrix.getOption('DISABLE_SCORING')) {
+      throw 'Scoring has been disabled by the project administrator'
+    }
+
+    if (!(await this.canDo('editCellData'))) {
+      throw 'You are not allowed to set states in this matrix'
+    }
+
+    if (!(await this.canEditTaxa(taxaIds))) {
+      throw 'You are not allowed to modify the selected taxa'
+    }
+
+    if (!(await this.canEditCharacters(characterIds))) {
+      throw 'User does not have access to edit all characters'
+    }
+
+    const batchMode = options != null && parseInt(options['batchmode'])
+    const uncertain = options != null && !!options['uncertain']
+
+    // Check for valid state combinations for uncertain scores. This disallow
+    // setting "NPA" along with additional states. "NPA" are should be the only
+    // selected state in a cell score.
+    if (stateIds.length > 1 && stateIds.includes(-1 /* NPA */)) {
+      throw 'Invalid state combination for cells'
+    }
+
+    // Ensure that single cells must be polymorphic and cannot be uncertain.
+    if (uncertain && stateIds.length <= 1) {
+      throw 'Single cells cannot be uncertain'
+    }
+
+    // Ensure that sells cannot be uncertain and include the "NPA" score.
+    if (uncertain && stateIds.includes(-1 /* NPA */)) {
+      throw 'Uncertain cells not include "NPA" and additional states'
+    }
+
+    // Ensure that when multiple charactes are requested, the state ids are not
+    // character-specific but instead applicable to all charcaters.
+    if (characterIds.length > 1) {
+      if (stateIds.length > 1) {
+        throw 'Invalid state combination for multiple characters'
+      }
+      if (stateIds.length == 1 && stateIds[0] > 0) {
+        throw 'Cannot set a specific state for multiple characters'
+      }
+    } else {
+      const characterId = parseInt(characterIds[0])
+      const characterStateIds = await getStatesIdsForCharacter(characterId)
+      const allStateIds = [-1, 0, ...characterStateIds]
+      const invalidStateIds = stateIds.filter((i) => !allStateIds.includes(i))
+      if (invalidStateIds.length) {
+        throw 'Invalid state ID  for character'
+      }
+    }
+
+    if (stateIds.length && !(await this.areCharactersDiscrete(characterIds))) {
+      throw 'Continuous characters cannot be have states'
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    let cellBatch
+    if (batchMode) {
+      cellBatch = models.CellBatchLog.build({
+        user_id: this.user.user_id,
+        matrix_id: this.matrix.matrix_id,
+        batch_type: CELL_BATCH_TYPES.MEDIA_BATCH_SET_SCORE,
+        started_on: time(),
+      })
+    }
+
+    const insertedScores = []
+    const cellChangesResults = []
+    const allCellScores = await this.getCellsStates(taxaIds, characterIds)
+    for (const characterId of characterIds) {
+      for (const taxonId of taxaIds) {
+        let cellScores = allCellScores.get(taxonId, characterId)
+        if (cellScores == null) {
+          cellScores = new Map()
+        }
+
+        const cellScoresIds = Array.from(cellScores.keys())
+        const scoresIdsToDelete = array_difference(cellScoresIds, stateIds)
+        const scoresIdsToInsert = array_difference(stateIds, cellScoresIds)
+        const unchangedScoreIds = array_intersect(cellScoresIds, stateIds)
+
+        // Determine whether we need to update the uncertainity.
+        for (const scoresId of unchangedScoreIds) {
+          const cellScore = cellScores.get(scoresId)
+          if (cellScore.is_uncertain != uncertain) {
+            await models.Cell.update(
+              { is_uncertain: uncertain },
+              {
+                where: { cell_id: cellScore.cell_id },
+                transaction: transaction,
+              }
+            )
+            // Update the in-memory record so that it matches what's in the
+            // database.
+            cellScore.is_uncertain = uncertain
+          }
+          cellChangesResults.push(cellScore)
+        }
+
+        for (const scoresId of scoresIdsToDelete) {
+          const cellScore = cellScores.get(scoresId)
+          await models.Cell.destroy({
+            where: { cell_id: cellScore.cell_id },
+            transaction: transaction,
+          })
+          cellScore.cell_id = 0 // Signal that the cell should be deleted.
+          cellChangesResults.push(cellScore)
+        }
+
+        for (const scoreId of scoresIdsToInsert) {
+          const cell = await models.Cell.create(
+            {
+              matrix_id: this.matrix.matrix_id,
+              taxon_id: taxonId,
+              character_id: characterId,
+              user_id: this.user.user_id,
+              state_id: scoreId > 0 ? scoreId : null,
+              is_npa: scoreId == -1 ? 1 : 0,
+              is_uncertain: uncertain,
+              start_value: null,
+              end_value: null,
+            },
+            { transaction: transaction }
+          )
+          cellChangesResults.push(cell)
+          insertedScores.push(cell)
+        }
+      }
+    }
+
+    if (this.matrix.getOption('APPLY_CHARACTERS_WHILE_SCORING') == 1) {
+      const scores = await this.applyStateRules(insertedScores)
+      cellChangesResults.push(...scores)
+    }
+
+    const deletedCellMedia =
+      this.matrix.getOption('ENABLE_CELL_MEDIA_AUTOMATION') == 1
+        ? await this.cellMediaToDeleteFromCharacterView(taxaIds, characterIds)
+        : []
+    if (deletedCellMedia.length > 0) {
+      const linkIds = deletedCellMedia.map((media) => parseInt(media.link_id))
+      await models.CellsXMedium.destroy({
+        where: {
+          where: { link_id: { [Op.in]: linkIds } },
+          transaction: transaction,
+        },
+      })
+    }
+
+    if (batchMode) {
+      let description
+      if (batchMode == 2) {
+        const character = await models.Character.findByPk(characterIds[0])
+        description = `Batch scoring added to ${taxaIds.length} taxa in ${character.name} column`
+      } else if (batchMode == 1) {
+        const taxon = await models.Taxon.findByPk(taxaIds[0])
+        description = `Batch scoring added to ${
+          characterIds.length
+        } characters in ${getTaxonName(taxon)} row`
+      } else {
+        throw 'Unable batch mode'
+      }
+
+      cellBatch.finished_on = time()
+      cellBatch.description = description
+      await cellBatch.save({ transaction: transaction })
+    }
+
+    await transaction.commit()
+    return {
+      ts: time(),
+      cells: this.convertCellQueryToResults(cellChangesResults),
+      deleted_cell_media: deletedCellMedia,
     }
   }
 
@@ -999,14 +1194,14 @@ class MatrixEditorService {
     const time = Date.now()
     const [characterRows] = await sequelizeConn.query(
       `
-        SELECT character_id 
+        SELECT character_id
         FROM matrix_character_order AS mco
         WHERE matrix_id = ?`,
       { replacements: [this.matrix.matrix_id] }
     )
     for (const row of characterRows) {
       const characterId = parseInt(row.character_id)
-      times.set(characterId, time)
+      times.set(characterId, insertedTime)
     }
 
     const [lastScoredTimesRows] = await sequelizeConn.query(
@@ -1019,7 +1214,7 @@ class MatrixEditorService {
       INNER JOIN projects_x_users AS pxu ON pxu.project_id = m.project_id
       LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
       WHERE
-        ccl.matrix_id = ? AND pxu.user_id = ? AND 
+        ccl.matrix_id = ? AND pxu.user_id = ? AND
         (mto.group_id = pmxg.group_id OR mto.user_id = ? OR mto.user_id IS NULL OR mto.group_id IS NULL)
       GROUP BY ccl.character_id`,
       {
@@ -1136,11 +1331,283 @@ class MatrixEditorService {
     return roles.includes('admin')
   }
 
+  async getCellsStates(taxaIds, characterIds) {
+    const [rows] = await sequelizeConn.query(
+      `
+        SELECT cell_id, taxon_id, character_id, state_id, is_npa, is_uncertain, start_value, end_value, created_on
+        FROM cells
+        WHERE matrix_id = ? AND character_id IN (?) AND taxon_id IN (?)`,
+      { replacements: [this.matrix.matrix_id, characterIds, taxaIds] }
+    )
+
+    const stateIds = new Table()
+    for (const row of rows) {
+      const isNPA = parseInt(row.is_npa)
+      const isUncertain = parseInt(row.is_uncertain)
+      const characterId = parseInt(row.character_id)
+      const taxonId = parseInt(row.taxon_id)
+      const stateId =
+        row.state_id == null ? (isNPA ? -1 : 0) : parseInt(row.state_id)
+      const cell = {
+        cell_id: parseInt(row.cell_id),
+        taxon_id: taxonId,
+        character_id: characterId,
+        state_id: stateId,
+        user_id: parseInt(row.user_id),
+        created_on: parseInt(row.created_on),
+        is_npa: isNPA,
+        is_uncertain: isUncertain,
+        start_value: row.start_value,
+        end_value: row.end_value,
+      }
+      stateIds.set(taxonId, characterId, stateId, cell)
+    }
+
+    return stateIds
+  }
+
+  async applyStateRules(scores, transaction) {
+    if (scores.length == 0) {
+      return []
+    }
+
+    const characterIds = Array.from(
+      new Set(scores.map((score) => parseInt(score.character_id)))
+    )
+    const taxonIds = Array.from(
+      new Set(scores.map((score) => parseInt(score.taxon_id)))
+    )
+
+    const [rulesRows] = await sequelizeConn.query(
+      `
+        SELECT
+          cr.rule_id, cr.character_id, cr.state_id, cra.character_id action_character_id,
+          cra.state_id action_state_id, cra.action
+        FROM character_rules cr
+        INNER JOIN character_rule_actions AS cra ON cr.rule_id = cra.rule_id
+        WHERE cr.character_id IN (?) AND cra.action = "SET_STATE"`,
+      { replacements: [characterIds], transaction: transaction }
+    )
+    const scoresRules = new Table()
+    const actionCharacterIds = []
+    for (const row of rulesRows) {
+      const characterId = parseInt(row.character_id)
+      const actionCharacterId = parseInt(row.action_character_id)
+      const stateId = row.state_id == null ? 0 : parseInt(row.state_id)
+      if (!scoresRules.has(characterId, stateId)) {
+        scoresRules.set(characterId, stateId, [])
+      }
+      scoresRules.get(characterId, stateId).push(row)
+      actionCharacterIds.push(actionCharacterId)
+    }
+
+    const ruleBasedChanges = []
+    const allowOverwritingByRules = this.matrix.getOption(
+      'ALLOW_OVERWRITING_BY_RULES'
+    )
+    const existingScores = await this.getCellsStates(
+      taxonIds,
+      actionCharacterIds
+    )
+    for (const score of scores) {
+      const characterId = parseInt(score.character_id)
+      const taxonId = parseInt(score.taxon_id)
+      const stateId =
+        score.state_id == null
+          ? score.is_npa
+            ? -1
+            : 0
+          : parseInt(score.state_id)
+      const scoreRules = scoresRules.get(characterId, stateId)
+      for (const rule of scoreRules) {
+        const actionCharacterId = parseInt(rule.action_character_id)
+        const existingScore = existingScores.get(taxonId, actionCharacterId)
+
+        if (existingScore && existingScore.size > 0) {
+          if (!allowOverwritingByRules) {
+            continue
+          }
+          const cellIds = Array.from(existingScore.values()).map((score) =>
+            parseInt(score.cell_id)
+          )
+          await models.Cell.destroy({
+            where: { cell_id: { [Op.in]: cellIds } },
+            transaction: transaction,
+          })
+        }
+
+        const actionStateId =
+          rule.action_state_id == null ? null : parseInt(rule.action_state_id)
+        const cell = await models.Cell.create(
+          {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: taxonId,
+            character_id: actionCharacterId,
+            user_id: this.user.user_id,
+            state_id: actionStateId,
+            is_npa: 0,
+            is_uncertain: score.is_uncertain,
+          },
+          { transaction: transaction }
+        )
+        ruleBasedChanges.push(cell)
+      }
+    }
+
+    return ruleBasedChanges
+  }
+
+  async cellMediaToDeleteFromCharacterView(taxaIds, characterIds) {
+    const goodCellMedia = []
+    const deletedCellMedia = []
+    // delete NPA or "-" cells
+    const [npaCellsRows] = await sequelizeConn.query(
+      `
+      SELECT
+        cxm.link_id, cxm.media_id, cxm.taxon_id, cxm.character_id
+      FROM cells_x_media AS cxm
+      INNER JOIN matrices AS m ON m.matrix_id = cxm.matrix_id
+      INNER JOIN media_files AS mf ON mf.media_id = cxm.media_id AND mf.project_id = m.project_id
+      INNER JOIN cells AS c ON c.taxon_id = cxm.taxon_id AND c.character_id = cxm.character_id AND c.matrix_id = cxm.matrix_id
+      INNER JOIN matrix_taxa_order AS mto ON mto.matrix_id = c.matrix_id AND mto.taxon_id = c.taxon_id
+      INNER JOIN projects_x_users AS pxu ON m.project_id = pxu.project_id
+      LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
+      WHERE
+        (c.state_id IS NULL OR c.is_npa = 1) AND
+        pxu.user_id = ? AND cxm.matrix_id = ? AND cxm.set_by_automation = 1 AND
+        (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id IS NULL OR mto.user_id = pxu.user_id) AND
+        cxm.taxon_id IN (?) AND cxm.character_id IN (?)`,
+      {
+        replacement: [
+          this.user.user_id,
+          this.matrix.matrix_id,
+          taxaIds,
+          characterIds,
+        ],
+      }
+    )
+    deletedCellMedia.push(...npaCellsRows)
+
+    const [scoredCellsRows] = await sequelizeConn.query(
+      `
+      SELECT
+        mf.media_id, mto.taxon_id, mco.character_id
+      FROM matrix_character_order mco
+      INNER JOIN matrix_taxa_order AS mto ON mto.matrix_id = mco.matrix_id
+      INNER JOIN character_states AS cs ON cs.character_id = mco.character_id
+      INNER JOIN cells AS cl ON cl.character_id = mco.character_id AND cl.matrix_id = mco.matrix_id AND cl.taxon_id = mto.taxon_id AND cl.state_id = cs.state_id
+      INNER JOIN characters_x_media AS csxm ON csxm.character_id = mco.character_id AND csxm.state_id = cs.state_id
+      INNER JOIN matrices AS m ON m.matrix_id = mto.matrix_id
+      INNER JOIN media_files AS mf2v ON csxm.media_id = mf2v.media_id AND mf2v.project_id = m.project_id
+      INNER JOIN taxa_x_specimens AS txs ON txs.taxon_id = mto.taxon_id
+      INNER JOIN media_files AS mf ON mf.view_id = mf2v.view_id AND mf.specimen_id = txs.specimen_id
+      WHERE
+        mco.matrix_id = ? AND mto.taxon_id IN (?) AND mco.character_id IN (?) AND
+        cl.is_npa = 0 AND cl.state_id IS NOT NULL`,
+      { replacement: [this.matrix.matrix_id, taxaIds, characterIds] }
+    )
+    goodCellMedia.push(...scoredCellsRows)
+
+    // respect ontology rules:
+    if (this.matrix.getOption('APPLY_CHARACTERS_WHILE_SCORING') == '1') {
+      const [ontologyRulesRows] = await sequelizeConn.query(
+        `
+          SELECT
+            mf.media_id, mto.taxon_id, cra.character_id
+          FROM matrix_character_order mco
+          INNER JOIN matrix_taxa_order AS mto ON mto.matrix_id = mco.matrix_id
+          INNER JOIN matrices AS m ON m.matrix_id = mco.matrix_id
+          INNER JOIN character_states AS cs ON cs.character_id = mco.character_id
+          INNER JOIN cells AS cl ON cl.character_id = mco.character_id AND cl.matrix_id = mco.matrix_id AND cl.taxon_id = mto.taxon_id AND cl.state_id = cs.state_id
+          INNER JOIN characters_x_media AS csxm ON csxm.character_id = mco.character_id AND csxm.state_id = cs.state_id
+          INNER JOIN media_files AS mf2v ON csxm.media_id = mf2v.media_id AND mf2v.project_id = m.project_id
+          INNER JOIN taxa_x_specimens AS txs ON txs.taxon_id = mto.taxon_id
+          INNER JOIN media_files AS mf ON mf.view_id = mf2v.view_id AND mf.specimen_id = txs.specimen_id AND mf.project_id = m.project_id
+          INNER JOIN character_rules AS cr ON cr.character_id = csxm.character_id AND cr.state_id IS NULL
+          INNER JOIN character_rule_actions AS cra ON cr.rule_id = cra.rule_id AND cra.action = 'ADD_MEDIA'
+          INNER JOIN matrix_character_order AS mcoa ON mcoa.character_id = cra.character_id AND mcoa.matrix_id = mco.matrix_id
+          WHERE mco.matrix_id = ? AND mto.taxon_id IN (?) AND mco.character_id IN (?)`,
+        { replacement: [this.matrix.matrix_id, taxaIds, characterIds] }
+      )
+      goodCellMedia.push(...ontologyRulesRows)
+    }
+
+    const [unscoredCellsRows] = await sequelizeConn.query(
+      `
+      SELECT mf.media_id, mto.taxon_id, mco.character_id
+      FROM matrix_character_order mco
+      INNER JOIN matrix_taxa_order AS mto ON mto.matrix_id = mco.matrix_id
+      INNER JOIN matrices AS m ON m.matrix_id = mto.matrix_id
+      LEFT JOIN cells AS cl ON cl.character_id = mco.character_id AND cl.matrix_id = mco.matrix_id AND cl.taxon_id = mto.taxon_id
+      INNER JOIN characters_x_media AS csxm ON csxm.character_id = mco.character_id
+      INNER JOIN media_files AS mf2v ON mf2v.media_id = csxm.media_id AND m.project_id = mf2v.project_id
+      INNER JOIN taxa_x_specimens AS txs ON txs.taxon_id = mto.taxon_id
+      INNER JOIN media_files AS mf ON mf.view_id = mf2v.view_id AND mf.specimen_id = txs.specimen_id AND m.project_id = mf.project_id
+      WHERE mco.matrix_id = ? AND mto.taxon_id IN (?) AND mco.character_id IN (?) AND cl.cell_id IS NULL`,
+      { replacement: [this.matrix.matrix_id, taxaIds, characterIds] }
+    )
+    goodCellMedia.push(...unscoredCellsRows)
+
+    // Get all cells media that which was used in cell automation and user has access to.
+    const [oldCellsRows] = await sequelizeConn.query(
+      `
+      SELECT
+        cxm.link_id, cxm.media_id, cxm.taxon_id, cxm.character_id
+      FROM cells_x_media AS cxm
+      INNER JOIN cells AS c ON c.taxon_id = cxm.taxon_id AND c.character_id = cxm.character_id AND c.matrix_id = cxm.matrix_id
+      INNER JOIN matrix_taxa_order AS mto ON mto.matrix_id = c.matrix_id AND cxm.taxon_id = c.taxon_id
+      INNER JOIN matrices AS m ON mto.matrix_id = m.matrix_id
+      INNER JOIN media_files AS mf ON mf.media_id = cxm.media_id AND mf.project_id = m.project_id
+      INNER JOIN projects_x_users AS pxu ON m.project_id = pxu.project_id AND pxu.user_id = ?
+      LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
+      WHERE
+        cxm.matrix_id = ? AND cxm.set_by_automation = 1 AND
+        (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id IS NULL OR mto.user_id = ?) AND
+        cxm.taxon_id IN (?) AND cxm.character_id IN (?)`,
+      {
+        replacement: [
+          this.user.user_id,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          taxaIds,
+          characterIds,
+        ],
+      }
+    )
+
+    outer: for (const row of oldCellsRows) {
+      for (const good of goodCellMedia) {
+        if (
+          row.media_id == good.media_id &&
+          row.taxon_id == good.taxon_id &&
+          row.character_id == good.character_id
+        ) {
+          continue outer
+        }
+      }
+      deletedCellMedia.push(row)
+    }
+
+    return deletedCellMedia
+  }
+
   convertCellQueryToResults(rows) {
     const cells = []
     for (const row of rows) {
       const taxonId = parseInt(row.taxon_id)
       const characterId = parseInt(row.character_id)
+      const cellId = parseInt(row.cell_id)
+
+      // This represents a deleted scores so that the client can remove it from its model.
+      if (cellId == 0) {
+        cells.push({
+          id: cellId,
+          tid: taxonId,
+          cid: characterId,
+        })
+        continue
+      }
+
       const cell = {
         id: parseInt(row.cell_id),
         tid: taxonId,
@@ -1234,7 +1701,7 @@ class MatrixEditorService {
       FROM taxa_x_media txm
       INNER JOIN media_files AS mf ON mf.media_id = txm.media_id
       INNER JOIN taxa AS t ON t.taxon_id = txm.taxon_id
-      WHERE mf.project_id = ? 
+      WHERE mf.project_id = ?
       ORDER BY t.taxon_id`,
       { replacements: [this.project.project_id] }
     )
@@ -1276,6 +1743,31 @@ class MatrixEditorService {
       }
     )
     return count == taxaIds.length
+  }
+
+  async canEditCharacters(characterIds) {
+    const [[{ count }]] = await sequelizeConn.query(
+      `
+      SELECT COUNT(mco.character_id) AS count
+      FROM matrix_character_order mco
+      INNER JOIN characters AS c ON mco.character_id = c.character_id
+      INNER JOIN matrices AS m ON mco.matrix_id = m.matrix_id AND c.project_id = m.project_id
+      WHERE m.matrix_id = ? AND mco.character_id IN (?)`,
+      { replacements: [this.matrix.matrix_id, characterIds] }
+    )
+    return count == characterIds.length
+  }
+
+  async areCharactersDiscrete(characterIds) {
+    const [[{ count }]] = await sequelizeConn.query(
+      `
+      SELECT COUNT(mco.character_id) AS count
+      FROM matrix_character_order mco
+      INNER JOIN characters AS c ON c.character_id = mco.character_id
+      WHERE c.type = 0 AND mco.matrix_id = ? AND mco.character_id IN (?)`,
+      { replacements: [this.matrix.matrix_id, characterIds] }
+    )
+    return count == characterIds.length
   }
 
   async getMediaByIds(mediaIds) {

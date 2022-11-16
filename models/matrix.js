@@ -116,4 +116,8 @@ export default class Matrix extends Model {
       }
     )
   }
+
+  getOption(key) {
+    return this.other_options[key]
+  }
 }
