@@ -25,10 +25,8 @@ async function getProjectsById(req, res) {
 }
 
 async function getProjectTitles(req, res) {
-  const sort_by = req.params.sort_by
-
   try {
-    const result = await projectService.getProjectTitles(sort_by)
+    const result = await projectService.getProjectTitles()
     res.status(200).json(result)
   } catch (e) {
     console.error('Error while getting project titles (controller).', e)
@@ -68,6 +66,16 @@ async function getInstitutionsWithProjects(req, res) {
   }
 }
 
+async function getProjectTaxonomy(req, res) {
+  try {
+    const result = await projectService.getProjectTaxonomy()
+    res.status(200).json(result)
+  } catch (e) {
+    console.error('Error while getting taxonomy (controller).', e)
+    res.status(500).json({ message: 'Error while fetching taxonomy.' })
+  }
+}
+
 export {
   getProjects,
   getProjectsById,
@@ -75,4 +83,5 @@ export {
   getAuthorsWithProjects,
   getJournalsWithProjects,
   getInstitutionsWithProjects,
+  getProjectTaxonomy,
 }
