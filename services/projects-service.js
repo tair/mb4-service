@@ -132,10 +132,63 @@ async function getJournalsWithProjects() {
   }
 }
 
+//////////////////////////////////////////////////
+async function getAllTaxonomy() {
+  let [all_taxon] = await sequelizeConn.query(`
+  select taxon_id, parent_id, taxonomic_rank, name, published_specimen_count
+  from resolved_taxonomy where parent_id is not null`)
+
+  return all_taxon
+}
+
+function getRootTaxonany(all_taxon) {
+  let root_rows = []
+  for (let i = 0; i < all_taxon.length; i++) {
+    if (all_taxon[i].taxonomic_rank == 'superkingdom')
+      root_rows.push(all_taxon[i])
+  }
+
+  return root_rows
+}
+
+function getTaxonomyByParentId(all_taxon, parent_id) {
+  let root_rows = []
+  for (let i = 0; i < all_taxon.length; i++) {
+    if (all_taxon[i].parent_id == parent_id) root_rows.push({ ...all_taxon[i] })
+  }
+
+  if (!root_rows || root_rows.length == 0) return
+
+  let rows = []
+
+  for (let i = 0; i < root_rows.length; i++) {
+    let children = getTaxonomyByParentId(all_taxon, root_rows[i].taxon_id)
+    rows.push({ ...root_rows[i], children: children })
+  }
+
+  return rows
+}
+//////////////////////////////////////
+
+async function getProjectTaxonomy() {
+  let all_taxon = await getAllTaxonomy()
+  let root_rows = getRootTaxonany(all_taxon)
+
+  let rows = []
+
+  for (let i = 0; i < root_rows.length; i++) {
+    let children = getTaxonomyByParentId(all_taxon, root_rows[i].taxon_id)
+    rows.push({ ...root_rows[i], children: children })
+  }
+
+  return rows
+}
+
 export {
   getProjects,
   getProjectTitles,
   getAuthorsWithProjects,
   getJournalsWithProjects,
   getInstitutionsWithProjects,
+  getProjectTaxonomy,
 }
