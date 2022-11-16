@@ -1,6 +1,7 @@
 import express from 'express'
 import projectsRouter from './routes/projects-route.js'
 import publicProjectsRouter from './routes/public/projects-route.js'
+import publicStatsRouter from './routes/public/stats-route.js'
 import authRouter from './routes/auth-route.js'
 import userRouter from './routes/user-route.js'
 
@@ -30,16 +31,13 @@ app.get('/', (req, res) => {
 app.use('/auth', authRouter)
 app.use('/projects', projectsRouter)
 app.use('/public/projects', publicProjectsRouter)
+app.use('/public/stats', publicStatsRouter)
 app.use('/users', userRouter)
 
-app.use((err, req, res, next) => {
+app.use((err, req, res) => {
   const statusCode = err.statusCode || 500
   console.error(err.message, err.stack)
-  if (req.xhr) {
-    res.status(statusCode).json({ message: err.message, data: err.data })
-  } else {
-    next(err)
-  }
+  res.status(statusCode).json({ message: err.message, data: err.data })
 })
 
 export default app
