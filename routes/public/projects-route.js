@@ -20,6 +20,9 @@ projectsRouter.get(
   '/institutions',
   projectsController.getInstitutionsWithProjects
 )
+
+projectsRouter.get('/taxonomy', projectsController.getProjectTaxonomy)
+
 projectsRouter.get('/titles', projectsController.getProjectTitles)
 
 projectsRouter.get('/:id', projectsController.getProjectsById)

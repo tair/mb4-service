@@ -66,6 +66,16 @@ async function getInstitutionsWithProjects(req, res) {
   }
 }
 
+async function getProjectTaxonomy(req, res) {
+  try {
+    const result = await projectService.getProjectTaxonomy()
+    res.status(200).json(result)
+  } catch (e) {
+    console.error('Error while getting taxonomy (controller).', e)
+    res.status(500).json({ message: 'Error while fetching taxonomy.' })
+  }
+}
+
 export {
   getProjects,
   getProjectsById,
@@ -73,4 +83,5 @@ export {
   getAuthorsWithProjects,
   getJournalsWithProjects,
   getInstitutionsWithProjects,
+  getProjectTaxonomy,
 }
