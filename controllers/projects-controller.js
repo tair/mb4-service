@@ -1,7 +1,7 @@
 import * as projectService from '../services/projects-service.js'
 import * as ProjectDetailService from '../services/project-detail-service.js'
 
-async function getProjects(req, res, next) {
+async function getProjects(req, res) {
   try {
     const projects = await projectService.getProjects()
     res.status(200).json(projects)

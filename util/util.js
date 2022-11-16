@@ -32,7 +32,7 @@ export async function readFile(fileName) {
 
 export async function writeToFile(fileName, content) {
   try {
-    const data = fs.writeFileSync(fileName, content)
+    fs.writeFileSync(fileName, content)
   } catch (err) {
     console.error(err)
   }

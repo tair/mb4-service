@@ -1,32 +1,23 @@
 import express from 'express'
-import * as matrixEditorController from '../controllers/matrix-editor-controller.js'
+import * as controller from '../controllers/matrix-editor-controller.js'
 
-const matrixEditorRouter = express.Router({ mergeParams: true })
+const router = express.Router({ mergeParams: true })
 
-matrixEditorRouter.post(
-  '/getAvailableTaxa',
-  matrixEditorController.getAvailableTaxa
-)
-matrixEditorRouter.post(
-  '/addTaxaToMatrix',
-  matrixEditorController.addTaxaToMatrix
-)
-matrixEditorRouter.post(
-  '/removeTaxaFromMatrix',
-  matrixEditorController.removeTaxaFromMatrix
-)
-matrixEditorRouter.post('/reorderTaxa', matrixEditorController.reorderTaxa)
-matrixEditorRouter.post('/setTaxaNotes', matrixEditorController.setTaxaNotes)
-matrixEditorRouter.post('/setTaxaAccess', matrixEditorController.setTaxaAccess)
+router.post('/getAvailableTaxa', controller.getAvailableTaxa)
+router.post('/addTaxaToMatrix', controller.addTaxaToMatrix)
+router.post('/loadTaxaMedia', controller.loadTaxaMedia)
+router.post('/removeTaxaFromMatrix', controller.removeTaxaFromMatrix)
+router.post('/reorderTaxa', controller.reorderTaxa)
+router.post('/setTaxaNotes', controller.setTaxaNotes)
+router.post('/setTaxaAccess', controller.setTaxaAccess)
 
-matrixEditorRouter.post(
-  '/getAllCellNotes',
-  matrixEditorController.getAllCellNotes
-)
-matrixEditorRouter.post('/getCellCounts', matrixEditorController.getCellCounts)
-matrixEditorRouter.post('/getCellData', matrixEditorController.getCellData)
-matrixEditorRouter.post('/getCellMedia', matrixEditorController.getCellMedia)
-matrixEditorRouter.post('/getMatrixData', matrixEditorController.getMatrixData)
-matrixEditorRouter.post('/logError', matrixEditorController.logError)
+router.post('/getAllCellNotes', controller.getAllCellNotes)
+router.post('/getCellCounts', controller.getCellCounts)
+router.post('/getCellData', controller.getCellData)
+router.post('/getCellMedia', controller.getCellMedia)
 
-export default matrixEditorRouter
+// General endpoints
+router.post('/getMatrixData', controller.getMatrixData)
+router.post('/logError', controller.logError)
+
+export default router

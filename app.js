@@ -34,11 +34,10 @@ app.use('/public/projects', publicProjectsRouter)
 app.use('/public/stats', publicStatsRouter)
 app.use('/users', userRouter)
 
-app.use((err, req, res, next) => {
+app.use((err, req, res) => {
   const statusCode = err.statusCode || 500
   console.error(err.message, err.stack)
   res.status(statusCode).json({ message: err.message, data: err.data })
-  return
 })
 
 export default app

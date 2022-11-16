@@ -9,7 +9,7 @@
     "start": "node server.js",
     "dev": "nodemon --ignore data/ --ignore db-dev/ server.js",
     "debug": "nodemon --inspect=0.0.0.0:9229 --ignore data/ --ignore db-dev/ server.js",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint . --ext .js",
     "pretty": "prettier --write \"./**/*.{js,js,json,vue}\"",
     "generate-model": "sequelize-auto -o \"./models\" -d morphobank -h mb4-db-dev -u morphobank -p 3306 -x {password} -e mysql -l esm --cf k --cp o --cm p --sg",
     "generate-model-ts": "sequelize-auto -o \"./models\" -d morphobank -h mb4-db-dev -u morphobank -p 3306 -x {password} -e mysql -l ts --cf k --cp o --cm p --sg"
@@ -29,6 +29,7 @@
     "sequelize": "^6.23.1"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^5.41.0",
     "eslint": "^8.23.1",
     "nodemon": "^2.0.15",
     "prettier": "2.6.2",
