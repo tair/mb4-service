@@ -96,11 +96,85 @@ export async function addTaxonMedia(req, res) {
   res.status(200).json(data)
 }
 
+export async function removeTaxonMedia(req, res) {
+  const linkId = parseInt(req.body.link_id)
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.removeTaxonMedia(linkId)
+  data.ok = true
+  res.status(200).json(data)
+}
+
 export async function loadTaxaMedia(req, res) {
   const taxonId = parseInt(req.body.taxon_id)
   const search = req.body.search
   const matrixEditorService = await getMatrix(req)
   const data = await matrixEditorService.loadTaxaMedia(taxonId, search)
+  data.ok = true
+  res.status(200).json(data)
+}
+
+export async function setCellStates(req, res) {
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  const characterIds = parseIntArray(req.body.character_ids)
+  const stateIds = parseIntArray(req.body.state_ids)
+  const options = req.body.options
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.setCellStates(
+    taxaIds,
+    characterIds,
+    stateIds,
+    options
+  )
+  data.ok = true
+  res.status(200).json(data)
+}
+
+export async function setCellNotes(req, res) {
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  const characterIds = parseIntArray(req.body.character_ids)
+  const notes = req.body.notes
+  const status = parseNullableInt(req.body.status)
+  const options = req.body.options
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.setCellNotes(
+    taxaIds,
+    characterIds,
+    notes,
+    status,
+    options
+  )
+  data.ok = true
+  res.status(200).json(data)
+}
+
+export async function addCellMedia(req, res) {
+  const taxonId = parseInt(req.body.taxon_id)
+  const characterIds = parseIntArray(req.body.character_ids)
+  const mediaIds = parseIntArray(req.body.media_ids)
+  const batchMode = parseInt(req.body.batchmode)
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.addCellMedia(
+    taxonId,
+    characterIds,
+    mediaIds,
+    batchMode
+  )
+  data.ok = true
+  res.status(200).json(data)
+}
+
+export async function removeCellMedia(req, res) {
+  const taxonId = parseInt(req.body.taxon_id)
+  const characterId = parseInt(req.body.character_id)
+  const linkId = parseInt(req.body.link_id)
+  const shouldTransferCitations = parseInt(req.body.should_transfer_citations)
+  const matrixEditorService = await getMatrix(req)
+  const data = await matrixEditorService.removeCellMedia(
+    taxonId,
+    characterId,
+    linkId,
+    shouldTransferCitations
+  )
   data.ok = true
   res.status(200).json(data)
 }
@@ -120,7 +194,12 @@ export async function getMatrix(req) {
 
 function parseIntArray(array) {
   if (Array.isArray(array)) {
-    return Array.from(new Set(array.map((i) => parseInt(i))))
+    const ints = array.filter((i) => i != null).map((i) => parseInt(i))
+    return Array.from(new Set(ints))
   }
   return []
+}
+
+function parseNullableInt(value) {
+  return value == null ? null : parseInt(value)
 }

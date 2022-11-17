@@ -1,6 +1,8 @@
 import bcrypt from 'bcrypt'
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
+import process from 'node:process'
+import { Buffer } from 'node:buffer'
 import { models } from '../models/init-models.js'
 import { validationResult } from 'express-validator'
 

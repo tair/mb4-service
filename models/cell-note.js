@@ -48,11 +48,16 @@ export default class CellNote extends Model {
         },
         notes: {
           type: DataTypes.TEXT,
+          // TODO(kenzley): We should consider making this null. Currently, this
+          // is set to the empty string when it can be easily set as null.
           allowNull: false,
         },
         status: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          validate: {
+            isIn: [[0, 50, 100]],
+          },
         },
         ancestor_note_id: {
           type: DataTypes.INTEGER.UNSIGNED,

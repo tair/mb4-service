@@ -1,4 +1,5 @@
 import dotenv from 'dotenv'
+import process from 'node:process'
 
 // read .env file
 dotenv.config()

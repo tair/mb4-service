@@ -23,6 +23,7 @@ export default class CellsXMedium extends Model {
         notes: {
           type: DataTypes.TEXT,
           allowNull: false,
+          defaultValue: '',
         },
         taxon_id: {
           type: DataTypes.INTEGER.UNSIGNED,
