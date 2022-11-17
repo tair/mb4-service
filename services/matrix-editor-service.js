@@ -1048,7 +1048,7 @@ class MatrixEditorService {
           where: {
             matrix_id: this.matrix.matrix_id,
             taxon_id: taxonId,
-            character_id: characterId
+            character_id: characterId,
           },
           defaults: {
             matrix_id: this.matrix.matrix_id,
@@ -1096,6 +1096,135 @@ class MatrixEditorService {
       taxa_ids: taxaIds,
       notes: notes,
       status: status,
+    }
+  }
+
+  async addCellMedia(taxonId, characterIds, mediaIds, batchMode) {
+    if (!(await this.canDo('editCellData'))) {
+      throw 'You are not allowed to add media to cells'
+    }
+
+    if (!(await this.canEditTaxa([taxonId]))) {
+      throw 'You are not allowed to modify the selected taxon'
+    }
+
+    if (!(await this.canEditCharacters(characterIds))) {
+      throw 'User does not have access to edit all characters'
+    }
+
+    const mediaList = await this.getMediaByIds(mediaIds)
+    if (mediaList.size != mediaIds.length) {
+      throw 'One or more of the media do not belong to the project'
+    }
+
+    let cellBatch
+    if (batchMode) {
+      cellBatch = models.CellBatchLog.build({
+        user_id: this.user.user_id,
+        matrix_id: this.matrix.matrix_id,
+        batch_type: CELL_BATCH_TYPES.MEDIA_BATCH_ADD,
+        started_on: time(),
+      })
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    const insertedCellMedia = []
+    const mediaMap = new Map()
+    for (const [mediaId, media] of mediaList) {
+      mediaMap.set(mediaId, {
+        icon: getMedia(media, 'icon'),
+        tiny: getMedia(media, 'tiny'),
+      })
+      for (const characterId of characterIds) {
+        const [cellMedia, created] = await models.CellsXMedium.findOrCreate({
+          where: {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: taxonId,
+            character_id: characterId,
+            media_id: mediaId,
+          },
+          defaults: {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: taxonId,
+            character_id: characterId,
+            media_id: mediaId,
+            created_on: time(),
+            source: 'HTML5',
+          },
+          transaction: transaction,
+        })
+        if (created) {
+          insertedCellMedia.push(cellMedia)
+        }
+      }
+    }
+
+    if (this.matrix.getOption('APPLY_CHARACTERS_WHILE_SCORING') == 1) {
+      const media = await this.applyMediaRules(insertedCellMedia)
+      insertedCellMedia.push(...media)
+    }
+
+    if (insertedCellMedia.length == 0) {
+      await transaction.rollback()
+      return {}
+    }
+
+    if (batchMode) {
+      const taxon = await models.Taxon.findByPk(taxaIds[0])
+      cellBatch.finished_on = time()
+      cellBatch.description = `${mediaIds.length} media added to ${characterIds.length} characters (s) in ${getTaxonName(taxon)} row`
+      await cellBatch.save({ transaction: transaction })
+    }
+
+    const mediaResults = []
+    for (const cellMedium of insertedCellMedia) {
+      const mediaId = parseInt(cellMedium.media_id)
+      mediaResults.push({
+        link_id: parseInt(cellMedium.link_id),
+        character_id: parseInt(cellMedium.character_id),
+        taxon_id: parseInt(cellMedium.taxon_id),
+        media_id: mediaId,
+        ...mediaMap.get(mediaId),
+      })
+    }
+
+    await transaction.commit()
+    return {
+      media: mediaResults,
+    }
+  }
+
+  async removeCellMedia(taxonId, characterId, linkId, shouldTransferCitations) {
+    if (!(await this.canDo('editCellData'))) {
+      throw 'You are not allowed to remove media from cells'
+    }
+
+    if (!(await this.canEditTaxa([taxonId]))) {
+      throw 'You are not allowed to modify the selected taxon'
+    }
+
+    if (!(await this.canEditCharacters([characterId]))) {
+      throw 'User does not have access to edit all characters'
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    const cellMedia = await models.CellsXMedium.findByPk(linkId)
+    if (cellMedia) {
+      if (shouldTransferCitations) {
+        await this.copyMediaCitationsToCell(cellMedia, transaction)
+      }
+
+      await cellMedia.destroy({ transaction: transaction })
+    }
+
+    await transaction.commit()
+    return {
+      character_id: characterId,
+      taxon_id: taxonId,
+      link_id: linkId,
+      should_transfer_citations: shouldTransferCitations,
     }
   }
 
@@ -1547,6 +1676,112 @@ class MatrixEditorService {
     }
 
     return ruleBasedChanges
+  }
+
+  async applyMediaRules(cellMedia, transaction) {
+    if (cellMedia.length == 0) {
+      return []
+    }
+
+    const characterIds = Array.from(
+      new Set(cellMedia.map((m) => parseInt(m.character_id)))
+    )
+
+    const [rows] = await sequelizeConn.query(
+      `
+        SELECT
+          cr.character_id, cra.character_id action_character_id
+        FROM character_rules cr
+        INNER JOIN character_rule_actions AS cra ON cr.rule_id = cra.rule_id
+        WHERE cr.character_id IN (?) AND cra.action = 'ADD_MEDIA'`,
+      { replacements: [characterIds], transaction: transaction }
+    )
+
+    if (rows.length == 0) {
+      return []
+    }
+
+    const mediaRules = new Map()
+    for (const row of rows) {
+      const characterId = parseInt(row.character_id)
+      const actionCharacterId = parseInt(row.action_character_id)
+      if (!mediaRules.has(characterId)) {
+        mediaRules.set(characterId, [])
+      }
+      mediaRules.get(characterId).push(actionCharacterId)
+    }
+
+    const insertedCellMedia = []
+    for (const cellMedium of cellMedia) {
+      const mediaId = parseInt(cellMedium.media_id)
+      const characterId = parseInt(cellMedium.character_id)
+      const actionCharacterIds = mediaRules.get(characterId)
+      for (const actionCharacterId of actionCharacterIds) {
+        const [cellMedium, created] = await models.CellsXMedium.findOrCreate({
+          where: {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: cellMedia.taxon_id,
+            character_id: characterId,
+            media_id: mediaId,
+          },
+          defaults: {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: cellMedia.taxon_id,
+            character_id: actionCharacterId,
+            media_id: mediaId,
+            created_on: time(),
+            source: 'HTML5',
+          },
+          transaction: transaction,
+        })
+        if (created) {
+          insertedCellMedia.push(cellMedium)
+        }
+      }
+    }
+    return insertedCellMedia
+  }
+
+  async copyMediaCitationsToCell(cellMedia, transaction) {
+    const [rows] = await sequelizeConn.query(
+      `
+      SELECT mfxbr.media_id, mfxbr.reference_id, cxm.taxon_id, cxm.character_id, cxm.matrix_id
+      FROM cells_x_media cxm
+      INNER JOIN media_files AS mf ON mf.media_id = cxm.media_id
+      INNER JOIN media_files_x_bibliographic_references AS mfxbr ON cxm.media_id = mfxbr.media_id
+      INNER JOIN matrices AS m ON m.matrix_id = cxm.matrix_id AND m.project_id = mf.project_id
+      INNER JOIN matrix_taxa_order AS mto ON mto.matrix_id = cxm.matrix_id AND mto.taxon_id = cxm.taxon_id
+      INNER JOIN matrix_character_order AS mco ON mco.matrix_id = cxm.matrix_id AND mco.character_id = cxm.character_id
+      INNER JOIN taxa AS t ON t.taxon_id = cxm.taxon_id
+      INNER JOIN characters AS c ON c.character_id = cxm.character_id
+      LEFT JOIN cells_x_bibliographic_references AS cxbr ON
+        cxbr.taxon_id = cxm.taxon_id AND
+        cxbr.character_id = cxm.character_id AND
+        cxbr.matrix_id = cxm.matrix_id AND
+        cxbr.reference_id = mfxbr.reference_id
+      INNER JOIN bibliographic_references AS br ON br.reference_id = mfxbr.reference_id
+      WHERE
+        cxbr.link_id IS NULL AND cxm.link_id = ?`,
+      { replacements: [cellMedia.link_id], transaction: transaction }
+    )
+
+    if (rows.length == 0) {
+      return
+    }
+
+    for (const row of rows) {
+      await models.CellsXBibliographicReference.create(
+        {
+          matrix_id: this.matrix.matrix_id,
+          taxon_id: row.taxon_id,
+          character_id: row.character_id,
+          reference_id: row.reference_id,
+          user_id: this.user.user_id,
+          source: 'HTML5',
+        },
+        { transaction: transaction }
+      )
+    }
   }
 
   async cellMediaToDeleteFromCharacterView(taxaIds, characterIds) {
