@@ -74,9 +74,26 @@ class MatrixEditorService {
     }
   }
 
-  // TODO(alvaro): Implement this.
-  getAllCellNotes() {
-    return { notes: [] }
+  async getAllCellNotes() {
+    const [rows] = await sequelizeConn.query(
+      `
+      SELECT cn.taxon_id, cn.character_id, cn.status, cn.notes
+      FROM cell_notes cn
+      WHERE cn.matrix_id = ?`,
+      { replacements: [this.matrix.matrix_id] }
+    )
+
+    const notes = []
+    for (const row of rows) {
+      notes.push({
+        character_id: parseInt(row.character_id),
+        taxon_id: parseInt(row.taxon_id),
+        status: parseInt(row.status),
+        notes: row.notes,
+      })
+    }
+
+    return { notes: notes }
   }
 
   // TODO(alvaro): Implement this.
