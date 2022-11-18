@@ -15,8 +15,17 @@ export async function getCellData(req, res) {
 }
 
 export async function getCellCounts(req, res) {
+  const startCharacterNum = parseInt(req.body.start_character_num)
+  const endCharacterNum = parseInt(req.body.end_character_num)
+  const startTaxonNum = parseInt(req.body.start_taxon_num)
+  const endTaxonNum = parseInt(req.body.end_taxon_num)
   const matrixEditorService = await getMatrix(req)
-  const data = await matrixEditorService.getCellCounts()
+  const data = await matrixEditorService.getCellCounts(
+    startCharacterNum,
+    endCharacterNum,
+    startTaxonNum,
+    endTaxonNum
+  )
   data.ok = true
   res.status(200).json(data)
 }

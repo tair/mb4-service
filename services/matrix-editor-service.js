@@ -62,14 +62,144 @@ class MatrixEditorService {
     }
   }
 
-  // TODO(alvaro): Implement this.
-  async getCellCounts() {
+  async getCellCounts(
+    startCharacterNum,
+    endCharacterNum,
+    startTaxonNum,
+    endTaxonNum
+  ) {
+    const [citationCountRows] = await sequelizeConn.query(
+      `
+      SELECT count(*) citation_count, cxbr.taxon_id, cxbr.character_id
+      FROM cells_x_bibliographic_references cxbr
+      INNER JOIN matrix_character_order AS mco
+        ON mco.character_id = cxbr.character_id AND cxbr.matrix_id = mco.matrix_id
+      INNER JOIN matrix_taxa_order AS mto
+        ON mto.taxon_id = cxbr.taxon_id AND cxbr.matrix_id = mto.matrix_id
+      WHERE
+        cxbr.matrix_id = ? AND
+        mco.position >= ? AND mco.position <= ? AND
+        mto.position >= ? AND mto.position <= ?
+      GROUP BY
+        cxbr.taxon_id, cxbr.character_id`,
+      {
+        replacements: [
+          this.matrix.matrix_id,
+          startCharacterNum,
+          endCharacterNum,
+          startTaxonNum,
+          endTaxonNum,
+        ],
+      }
+    )
+    const citationCounts = {}
+    for (const row of citationCountRows) {
+      const characterId = parseInt(row.character_id)
+      const taxonId = parseInt(row.taxon_id)
+      if (!(taxonId in citationCounts)) {
+        citationCounts[taxonId] = {}
+      }
+      citationCounts[taxonId][characterId] = parseInt(row.citation_count)
+    }
+
+    if (await this.shouldLimitToPublishedData()) {
+      return {
+        counts: { citation_counts: citationCounts },
+      }
+    }
+
+    const [lastChangeTimesRows] = await sequelizeConn.query(
+      `
+      SELECT c.character_id, c.taxon_id, max(changed_on) last_change
+      FROM cell_change_log c
+      INNER JOIN matrix_character_order AS mco
+        ON mco.character_id = c.character_id AND mco.matrix_id = c.matrix_id
+      INNER JOIN matrix_taxa_order AS mto
+        ON mto.taxon_id = c.taxon_id AND mto.matrix_id = c.matrix_id
+      WHERE
+        c.matrix_id = ? AND
+        mco.position >= ? AND mco.position <= ? AND
+        mto.position >= ? AND mto.position <= ?
+      GROUP BY
+        character_id, taxon_id`,
+      {
+        replacements: [
+          this.matrix.matrix_id,
+          startCharacterNum,
+          endCharacterNum,
+          startTaxonNum,
+          endTaxonNum,
+        ],
+      }
+    )
+    const changeTimes = {}
+    for (const row of lastChangeTimesRows) {
+      const characterId = parseInt(row.character_id)
+      const taxonId = parseInt(row.taxon_id)
+      if (!(taxonId in changeTimes)) {
+        changeTimes[taxonId] = {}
+      }
+      changeTimes[taxonId][characterId] = parseInt(row.last_change)
+    }
+
+    const [commentCountRows] = await sequelizeConn.query(
+      `
+      SELECT count(*) c, a.specifier_id, a.subspecifier_id
+      FROM annotations a
+      WHERE a.row_id = ? AND a.table_num = 5
+      GROUP BY a.specifier_id, a.subspecifier_id`,
+      { replacements: [this.matrix.matrix_id] }
+    )
+    const commentCounts = {}
+    for (const row of commentCountRows) {
+      const characterId = parseInt(row.specifier_id)
+      const taxonId = parseInt(row.subspecifier_id)
+      if (!(taxonId in commentCounts)) {
+        commentCounts[taxonId] = {}
+      }
+      commentCounts[taxonId][characterId] = parseInt(row.c)
+    }
+
+    const [unreadCommentCountRows] = await sequelizeConn.query(
+      `
+      SELECT count(*) c, a.specifier_id, a.subspecifier_id
+      FROM annotations AS a
+      LEFT JOIN (
+        SELECT a2.annotation_id
+        FROM annotation_events ae
+        INNER JOIN annotations AS a2 ON
+          a2.annotation_id = ae.annotation_id AND
+          a2.row_id = ? AND
+          a2.table_num = 5
+        WHERE ae.user_id = ?
+        GROUP BY a2.annotation_id
+      ) AS ce ON a.annotation_id = ce.annotation_id
+      WHERE ce.annotation_id IS NULL AND a.row_id = ? AND a.table_num = 5
+      GROUP BY a.specifier_id, a.subspecifier_id`,
+      {
+        replacements: [
+          this.matrix.matrix_id,
+          this.user.user_id,
+          this.matrix.matrix_id,
+        ],
+      }
+    )
+    const unreadCommentCount = {}
+    for (const row of unreadCommentCountRows) {
+      const characterId = parseInt(row.specifier_id)
+      const taxonId = parseInt(row.subspecifier_id)
+      if (!(taxonId in unreadCommentCount)) {
+        unreadCommentCount[taxonId] = {}
+      }
+      unreadCommentCount[taxonId][characterId] = parseInt(row.c)
+    }
+
     return {
       counts: {
-        updates: {},
-        citation_counts: {},
-        comment_counts: {},
-        unread_comment_counts: {},
+        updates: changeTimes,
+        citation_counts: citationCounts,
+        comment_counts: commentCounts,
+        unread_comment_counts: unreadCommentCount,
       },
     }
   }
@@ -320,7 +450,7 @@ class MatrixEditorService {
   async shouldLimitToPublishedData() {
     const roles = await this.getRoles()
     const isAnonymousReviewer = roles.includes('anonymous_reviewer')
-    return this.project.status == 1 || isAnonymousReviewer || this.readonly
+    return this.project.published == 1 || isAnonymousReviewer || this.readonly
   }
 
   getRoles() {
