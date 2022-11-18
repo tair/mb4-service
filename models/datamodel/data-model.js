@@ -1,7 +1,6 @@
 import { TABLE_NUMBER } from './table-number.js'
 
 class DataModel {
-
   getTableNumber(model) {
     const tableName = model.getTableName()
     return TABLE_NUMBER[tableName]
@@ -15,5 +14,4 @@ class DataModel {
     }
     return null
   }
-
 }

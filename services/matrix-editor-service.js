@@ -79,9 +79,65 @@ class MatrixEditorService {
     return { notes: [] }
   }
 
-  // TODO(alvaro): Implement this.
-  getCellMedia() {
-    return { media: [] }
+  async getCellMedia() {
+    const clause = this.shouldLimitToPublishedData()
+      ? ' AND mf.published = 0'
+      : ''
+
+    const [labelCountRows] = await sequelizeConn.query(
+      `
+      SELECT cxm.media_id, cxm.taxon_id, cxm.character_id, count(*) label_count
+      FROM media_labels ml
+      INNER JOIN cells_x_media AS cxm ON ml.link_id = cxm.link_id AND cxm.media_id = ml.media_id
+      INNER JOIN media_files AS mf ON cxm.media_id = mf.media_id
+      WHERE cxm.matrix_id = ? AND ml.table_num = 7 ${clause}
+      GROUP BY cxm.character_id, cxm.taxon_id, cxm.media_id`,
+      { replacements: [this.matrix.matrix_id] }
+    )
+
+    const labelCounts = new Table()
+    for (const row of labelCountRows) {
+      const taxonId = parseInt(row.taxon_id)
+      const characterId = parseInt(row.character_id)
+      const mediaId = parseInt(row.media_id)
+      const count = parseInt(row.label_count)
+      labelCounts.set(taxonId, characterId, mediaId, count)
+    }
+
+    const [mediaRows] = await sequelizeConn.query(
+      `
+      SELECT
+        cxm.media_id, cxm.taxon_id, cxm.character_id,
+        mf.media, mf.notes, cxm.link_id
+      FROM cells_x_media cxm
+      INNER JOIN media_files AS mf ON cxm.media_id = mf.media_id
+      WHERE cxm.matrix_id = ? ${clause}
+      GROUP BY cxm.link_id`,
+      { replacements: [this.matrix.matrix_id] }
+    )
+
+    const mediaList = []
+    for (const row of mediaRows) {
+      const linkId = parseInt(row.link_id)
+      const taxonId = parseInt(row.taxon_id)
+      const characterId = parseInt(row.character_id)
+      const mediaId = parseInt(row.media_id)
+      const media = {
+        link_id: linkId,
+        taxon_id: taxonId,
+        character_id: characterId,
+        media_id: mediaId,
+      }
+
+      const labelCount = labelCounts.get(taxonId, characterId, mediaId)
+      if (labelCount) {
+        media.label_count = labelCount
+      }
+
+      mediaList.push(media)
+    }
+
+    return { media: mediaList }
   }
 
   async getCharacters(characterIds = null) {
@@ -1173,7 +1229,9 @@ class MatrixEditorService {
     if (batchMode) {
       const taxon = await models.Taxon.findByPk(taxaIds[0])
       cellBatch.finished_on = time()
-      cellBatch.description = `${mediaIds.length} media added to ${characterIds.length} characters (s) in ${getTaxonName(taxon)} row`
+      cellBatch.description = `${mediaIds.length} media added to ${
+        characterIds.length
+      } characters (s) in ${getTaxonName(taxon)} row`
       await cellBatch.save({ transaction: transaction })
     }
 
