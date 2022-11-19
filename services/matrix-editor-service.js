@@ -1,8 +1,7 @@
-import _sequelize from 'sequelize'
 import sequelizeConn from '../util/db.js'
-import { Op } from 'sequelize'
 import { CELL_BATCH_TYPES } from '../util/cells.js'
 import { MATRIX_OPTIONS } from '../util/matrix.js'
+import { Op } from 'sequelize'
 import { Table } from '../util/table.js'
 import { array_difference, array_intersect, time } from '../util/util.js'
 import { getMedia } from '../util/media.js'
@@ -10,6 +9,9 @@ import { getRoles } from '../services/user-roles-service.js'
 import { getStatesIdsForCharacter } from '../services/character-service.js'
 import { getTaxonName, TAXA_FIELD_NAMES } from '../util/taxa.js'
 import { models } from '../models/init-models.js'
+import { UserError } from '../lib/user-errors.js'
+import { ForbiddenError } from '../lib/forbidden-error.js'
+import User from '../models/user.js'
 
 class MatrixEditorService {
   constructor(project, matrix, user, readonly) {
@@ -639,9 +641,7 @@ class MatrixEditorService {
   }
 
   async addTaxaToMatrix(taxaIds, afterTaxonId) {
-    if (!(await this.canDo('addTaxon'))) {
-      throw 'You are not allowed to add taxa'
-    }
+    await this.checkCanDo('addTaxon', 'You are not allowed to add taxa')
 
     // Ensure that all of the taxa belongs to this project. This ensures that
     // the user is not passing in invalid taxa.
@@ -653,7 +653,7 @@ class MatrixEditorService {
       { replacements: [this.project.project_id, taxaIds] }
     )
     if (count != taxaIds.length) {
-      throw 'Taxa is not in this project'
+      throw new UserError('Taxa is not in this project')
     }
 
     let position
@@ -665,7 +665,7 @@ class MatrixEditorService {
         },
       })
       if (insertion == null) {
-        throw 'Insertion position is not valid'
+        throw new UserError('Insertion position is not valid')
       }
       position = insertion.position + 1
     } else {
@@ -722,7 +722,9 @@ class MatrixEditorService {
 
   async removeTaxaFromMatrix(taxaIds) {
     if (!(await this.isAdminLike())) {
-      throw 'You must be an administrator to remove a taxon from this matrix'
+      throw new UserError(
+        'You must be an administrator to remove a taxon from this matrix'
+      )
     }
 
     const transaction = await sequelizeConn.transaction()
@@ -801,12 +803,13 @@ class MatrixEditorService {
 
   async reorderTaxa(taxaIds, index) {
     if (!taxaIds.length) {
-      throw 'No taxa were specified'
+      throw new UserError('No taxa were specified')
     }
 
-    if (!(await this.canDo('editCellData'))) {
-      throw 'You are not allowed to reorder this matrix'
-    }
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to reorder this matrix'
+    )
 
     const transaction = await sequelizeConn.transaction()
 
@@ -854,16 +857,14 @@ class MatrixEditorService {
 
   async setTaxaNotes(taxaIds, notes) {
     if (!taxaIds.length) {
-      throw 'You must specify taxa to modify the notes'
+      throw new UserError('You must specify taxa to modify the notes')
     }
 
-    if (!(await this.canDo('editTaxon'))) {
-      throw 'You are not allowed to modify taxa in this matrix'
-    }
-
-    if (!(await this.canEditTaxa(taxaIds))) {
-      throw 'You are not allowed to modify one or more of the selected taxa'
-    }
+    await this.checkCanDo(
+      'editTaxon',
+      'You are not allowed to modify taxa in this matrix'
+    )
+    await this.checkCanEditTaxa(taxaIds)
 
     const transaction = await sequelizeConn.transaction()
 
@@ -883,12 +884,15 @@ class MatrixEditorService {
   }
 
   async setTaxaAccess(taxaIds, userId, groupId) {
-    if (!(await this.canDo('editTaxon'))) {
-      throw 'You are not allowed to modify taxa in this matrix'
-    }
+    await this.checkCanDo(
+      'editTaxon',
+      'You are not allowed to modify taxa in this matrix'
+    )
 
     if (!(await this.isAdminLike())) {
-      throw 'You are not allowed to modify one or more of the selected taxa'
+      throw new UserError(
+        'You are not allowed to modify one or more of the selected taxa'
+      )
     }
 
     const transaction = await sequelizeConn.transaction()
@@ -916,9 +920,10 @@ class MatrixEditorService {
   }
 
   async removeTaxonMedia(linkId) {
-    if (!(await this.canDo('deleteTaxonMedia'))) {
-      throw 'You are not allowed to remove media from this taxon'
-    }
+    await this.checkCanDo(
+      'deleteTaxonMedia',
+      'You are not allowed to remove media from this taxon'
+    )
 
     const taxaMedia = await models.TaxaXMedium.findByPk(linkId)
 
@@ -930,12 +935,12 @@ class MatrixEditorService {
 
     const taxon = await models.Taxon.findByPk(taxaMedia.taxon_id)
     if (taxon == null || taxon.project_id != this.project.project_id) {
-      throw 'Taxon is not a part of this project'
+      throw new UserError('Taxon is not a part of this project')
     }
 
     const media = await models.MediaFile.findByPk(taxaMedia.media_id)
     if (media == null || media.project_id != this.project.project_id) {
-      throw 'Media is not a part of this project'
+      throw new UserError('Media is not a part of this project')
     }
 
     await taxaMedia.destroy()
@@ -1024,28 +1029,25 @@ class MatrixEditorService {
 
   async setCellStates(taxaIds, characterIds, stateIds, options) {
     if (taxaIds.length == 0) {
-      throw 'Please specify at least one taxon'
+      throw new UserError('Please specify at least one taxon')
     }
 
     if (characterIds.length == 0) {
-      throw 'Please specify at least one character'
+      throw new UserError('Please specify at least one character')
     }
 
     if (this.matrix.getOption('DISABLE_SCORING')) {
-      throw 'Scoring has been disabled by the project administrator'
+      throw new UserError(
+        'Scoring has been disabled by the project administrator'
+      )
     }
 
-    if (!(await this.canDo('editCellData'))) {
-      throw 'You are not allowed to set states in this matrix'
-    }
-
-    if (!(await this.canEditTaxa(taxaIds))) {
-      throw 'You are not allowed to modify the selected taxa'
-    }
-
-    if (!(await this.canEditCharacters(characterIds))) {
-      throw 'User does not have access to edit all characters'
-    }
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to set states in this matrix'
+    )
+    await this.checkCanEditTaxa(taxaIds)
+    await this.checkCanEditCharacters(characterIds)
 
     const batchMode = options != null && parseInt(options['batchmode'])
     const uncertain = options != null && !!options['uncertain']
@@ -1054,27 +1056,31 @@ class MatrixEditorService {
     // setting "NPA" along with additional states. "NPA" are should be the only
     // selected state in a cell score.
     if (stateIds.length > 1 && stateIds.includes(-1 /* NPA */)) {
-      throw 'Invalid state combination for cells'
+      throw new UserError('Invalid state combination for cells')
     }
 
     // Ensure that single cells must be polymorphic and cannot be uncertain.
     if (uncertain && stateIds.length <= 1) {
-      throw 'Single cells cannot be uncertain'
+      throw new UserError('Single cells cannot be uncertain')
     }
 
     // Ensure that sells cannot be uncertain and include the "NPA" score.
     if (uncertain && stateIds.includes(-1 /* NPA */)) {
-      throw 'Uncertain cells not include "NPA" and additional states'
+      throw new UserError(
+        'Uncertain cells not include "NPA" and additional states'
+      )
     }
 
     // Ensure that when multiple charactes are requested, the state ids are not
     // character-specific but instead applicable to all charcaters.
     if (characterIds.length > 1) {
       if (stateIds.length > 1) {
-        throw 'Invalid state combination for multiple characters'
+        throw new UserError('Invalid state combination for multiple characters')
       }
       if (stateIds.length == 1 && stateIds[0] > 0) {
-        throw 'Cannot set a specific state for multiple characters'
+        throw new UserError(
+          'Cannot set a specific state for multiple characters'
+        )
       }
     } else {
       const characterId = parseInt(characterIds[0])
@@ -1082,12 +1088,12 @@ class MatrixEditorService {
       const allStateIds = [-1, 0, ...characterStateIds]
       const invalidStateIds = stateIds.filter((i) => !allStateIds.includes(i))
       if (invalidStateIds.length) {
-        throw 'Invalid state ID  for character'
+        throw new UserError('Invalid state ID  for character')
       }
     }
 
-    if (stateIds.length && !(await this.areCharactersDiscrete(characterIds))) {
-      throw 'Continuous characters cannot be have states'
+    if (stateIds.length) {
+      await this.checkCanEditCharacters(characterIds)
     }
 
     const transaction = await sequelizeConn.transaction()
@@ -1196,7 +1202,7 @@ class MatrixEditorService {
           characterIds.length
         } characters in ${getTaxonName(taxon)} row`
       } else {
-        throw 'Unable batch mode'
+        throw new UserError('Unable batch mode')
       }
 
       cellBatch.finished_on = time()
@@ -1214,24 +1220,19 @@ class MatrixEditorService {
 
   async setCellNotes(taxaIds, characterIds, notes, status, options) {
     if (taxaIds.length == 0) {
-      throw 'Please specify at least one taxon'
+      throw new UserError('Please specify at least one taxon')
     }
 
     if (characterIds.length == 0) {
-      throw 'Please specify at least one character'
+      throw new UserError('Please specify at least one character')
     }
 
-    if (!(await this.canDo('editCellData'))) {
-      throw 'You are not allowed to set states in this matrix'
-    }
-
-    if (!(await this.canEditTaxa(taxaIds))) {
-      throw 'You are not allowed to modify the selected taxa'
-    }
-
-    if (!(await this.canEditCharacters(characterIds))) {
-      throw 'User does not have access to edit all characters'
-    }
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to set states in this matrix'
+    )
+    await this.checkCanEditTaxa(taxaIds)
+    await this.checkCanEditCharacters(characterIds)
 
     const batchMode = options != null && parseInt(options['batchmode'])
 
@@ -1286,7 +1287,7 @@ class MatrixEditorService {
         const taxon = await models.Taxon.findByPk(taxaIds[0])
         description = `Updated notes on ${getTaxonName(taxon)} row`
       } else {
-        throw 'Unable batch mode'
+        throw new UserError('Unable batch mode')
       }
 
       cellBatch.finished_on = time()
@@ -1305,21 +1306,16 @@ class MatrixEditorService {
   }
 
   async addCellMedia(taxonId, characterIds, mediaIds, batchMode) {
-    if (!(await this.canDo('editCellData'))) {
-      throw 'You are not allowed to add media to cells'
-    }
-
-    if (!(await this.canEditTaxa([taxonId]))) {
-      throw 'You are not allowed to modify the selected taxon'
-    }
-
-    if (!(await this.canEditCharacters(characterIds))) {
-      throw 'User does not have access to edit all characters'
-    }
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to add media to cells'
+    )
+    await this.checkCanEditTaxa([taxonId])
+    await this.checkCanEditCharacters(characterIds)
 
     const mediaList = await this.getMediaByIds(mediaIds)
     if (mediaList.size != mediaIds.length) {
-      throw 'One or more of the media do not belong to the project'
+      throw new User('One or more of the media do not belong to the project')
     }
 
     let cellBatch
@@ -1376,7 +1372,7 @@ class MatrixEditorService {
     }
 
     if (batchMode) {
-      const taxon = await models.Taxon.findByPk(taxaIds[0])
+      const taxon = await models.Taxon.findByPk(taxonId)
       cellBatch.finished_on = time()
       cellBatch.description = `${mediaIds.length} media added to ${
         characterIds.length
@@ -1403,17 +1399,12 @@ class MatrixEditorService {
   }
 
   async removeCellMedia(taxonId, characterId, linkId, shouldTransferCitations) {
-    if (!(await this.canDo('editCellData'))) {
-      throw 'You are not allowed to remove media from cells'
-    }
-
-    if (!(await this.canEditTaxa([taxonId]))) {
-      throw 'You are not allowed to modify the selected taxon'
-    }
-
-    if (!(await this.canEditCharacters([characterId]))) {
-      throw 'User does not have access to edit all characters'
-    }
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to remove media from cells'
+    )
+    await this.checkCanEditTaxa([taxonId])
+    await this.checkCanEditCharacters([characterId])
 
     const transaction = await sequelizeConn.transaction()
 
@@ -1617,21 +1608,6 @@ class MatrixEditorService {
   }
 
   async getCharacterLastUserScoringTimes() {
-    const times = new Map()
-
-    const time = Date.now()
-    const [characterRows] = await sequelizeConn.query(
-      `
-        SELECT character_id
-        FROM matrix_character_order AS mco
-        WHERE matrix_id = ?`,
-      { replacements: [this.matrix.matrix_id] }
-    )
-    for (const row of characterRows) {
-      const characterId = parseInt(row.character_id)
-      times.set(characterId, insertedTime)
-    }
-
     const [lastScoredTimesRows] = await sequelizeConn.query(
       `
       SELECT ccl.character_id, MAX(ccl.changed_on) AS last_scored_on
@@ -1653,6 +1629,8 @@ class MatrixEditorService {
         ],
       }
     )
+
+    const times = new Map()
     for (const row of lastScoredTimesRows) {
       const characterId = parseInt(row.character_id)
       const lastScoredOn = parseInt(row.last_scored_on)
@@ -2176,9 +2154,11 @@ class MatrixEditorService {
     return cells
   }
 
-  async canDo(action) {
+  async checkCanDo(action, message) {
     const actions = await this.getUserAllowableActions()
-    return actions.includes(action)
+    if (!actions.includes(action)) {
+      throw new ForbiddenError(message)
+    }
   }
 
   async getUserAllowableActions() {
@@ -2256,7 +2236,7 @@ class MatrixEditorService {
     return media
   }
 
-  async canEditTaxa(taxaIds) {
+  async checkCanEditTaxa(taxaIds) {
     const [[{ count }]] = await sequelizeConn.query(
       `
       SELECT COUNT(mto.taxon_id) AS count
@@ -2276,10 +2256,14 @@ class MatrixEditorService {
         ],
       }
     )
-    return count == taxaIds.length
+    if (count != taxaIds.length) {
+      throw new ForbiddenError(
+        'You are not allowed to modify the selected taxa'
+      )
+    }
   }
 
-  async canEditCharacters(characterIds) {
+  async checkCanEditCharacters(characterIds) {
     const [[{ count }]] = await sequelizeConn.query(
       `
       SELECT COUNT(mco.character_id) AS count
@@ -2289,10 +2273,14 @@ class MatrixEditorService {
       WHERE m.matrix_id = ? AND mco.character_id IN (?)`,
       { replacements: [this.matrix.matrix_id, characterIds] }
     )
-    return count == characterIds.length
+    if (count != characterIds.length) {
+      throw new ForbiddenError(
+        'User does not have access to edit all characters'
+      )
+    }
   }
 
-  async areCharactersDiscrete(characterIds) {
+  async checkCharactersAreDiscrete(characterIds) {
     const [[{ count }]] = await sequelizeConn.query(
       `
       SELECT COUNT(mco.character_id) AS count
@@ -2301,7 +2289,9 @@ class MatrixEditorService {
       WHERE c.type = 0 AND mco.matrix_id = ? AND mco.character_id IN (?)`,
       { replacements: [this.matrix.matrix_id, characterIds] }
     )
-    return count == characterIds.length
+    if (count != characterIds.length) {
+      throw new UserError('Continuous characters cannot be have states')
+    }
   }
 
   async getMediaByIds(mediaIds) {
