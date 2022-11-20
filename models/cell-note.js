@@ -62,6 +62,7 @@ export default class CellNote extends Model {
         ancestor_note_id: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
+          ancestored: true,
         },
         source: {
           type: DataTypes.STRING(40),
