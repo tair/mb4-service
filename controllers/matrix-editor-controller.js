@@ -103,6 +103,62 @@ export async function setCellStates(req, res) {
   )
 }
 
+export async function getCellCitations(req, res) {
+  const taxonId = parseInt(req.body.taxon_id)
+  const characterId = parseInt(req.body.character_id)
+  await applyMatrix(req, res, (service) =>
+    service.getCellCitations(taxonId, characterId)
+  )
+}
+
+export async function findCitation(req, res) {
+  const text = req.body.text
+  await applyMatrix(req, res, (service) => service.findCitation(text))
+}
+
+export async function addCellCitations(req, res) {
+  const taxaIds = parseIntArray(req.body.taxon_ids)
+  const characterIds = parseIntArray(req.body.character_ids)
+  const citationId = parseInt(req.body.citation_id)
+  const pp = req.body.pp
+  const notes = req.body.notes
+  const batchmode = req.body.batchmode
+  await applyMatrix(req, res, (service) =>
+    service.addCellCitations(
+      taxaIds,
+      characterIds,
+      citationId,
+      pp,
+      notes,
+      batchmode
+    )
+  )
+}
+
+export async function upsertCellCitation(req, res) {
+  const linkId = parseNullableInt(req.body.link_id)
+  const taxonId = parseInt(req.body.taxon_id)
+  const characterId = parseInt(req.body.character_id)
+  const citationId = parseInt(req.body.citation_id)
+  const pp = req.body.pp
+  const notes = req.body.notes
+  await applyMatrix(req, res, (service) =>
+    service.upsertCellCitation(
+      linkId,
+      taxonId,
+      characterId,
+      citationId,
+      pp,
+      notes
+    )
+  )
+}
+
+export async function removeCellCitation(req, res) {
+  const linkId = parseInt(req.body.link_id)
+  await applyMatrix(req, res, (service) => service.removeCellCitation(linkId))
+}
+
 export async function setCellNotes(req, res) {
   const taxaIds = parseIntArray(req.body.taxa_ids)
   const characterIds = parseIntArray(req.body.character_ids)
