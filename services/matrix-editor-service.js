@@ -26,7 +26,7 @@ class MatrixEditorService {
   static async create(projectId, matrixId, userId, readonly) {
     const project = await models.Project.findByPk(projectId)
     const matrix = await models.Matrix.findByPk(matrixId)
-    const user = await models.User.findByPk(userId)
+    const user = userId ? await models.User.findByPk(userId) : new models.User()
     return new MatrixEditorService(project, matrix, user, readonly)
   }
 
@@ -1721,7 +1721,7 @@ class MatrixEditorService {
   async getUserAccessInfo() {
     return {
       available_groups: await this.getMemberGroups(),
-      user_groups: this.getUserMemberGroups(),
+      user_groups: await this.getUserMemberGroups(),
       is_admin: await this.isAdminLike(),
       user_id: parseInt(this.user.user_id),
       last_login: 0, // TODO(alvaro): Implement this.
