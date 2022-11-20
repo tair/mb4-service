@@ -4,6 +4,8 @@ import { MATRIX_OPTIONS } from '../util/matrix.js'
 import { Op } from 'sequelize'
 import { Table } from '../util/table.js'
 import { array_difference, array_intersect, time } from '../util/util.js'
+import { getTextForBibliographicReference } from './bibliography-service.js'
+import { getCitationText } from '../util/citation.js'
 import { getMedia } from '../util/media.js'
 import { getRoles } from '../services/user-roles-service.js'
 import { getStatesIdsForCharacter } from '../services/character-service.js'
@@ -24,7 +26,7 @@ class MatrixEditorService {
   static async create(projectId, matrixId, userId, readonly) {
     const project = await models.Project.findByPk(projectId)
     const matrix = await models.Matrix.findByPk(matrixId)
-    const user = await models.User.findByPk(userId)
+    const user = userId ? await models.User.findByPk(userId) : new models.User()
     return new MatrixEditorService(project, matrix, user, readonly)
   }
 
@@ -289,6 +291,277 @@ class MatrixEditorService {
     }
 
     return { media: mediaList }
+  }
+
+  async getCellCitations(taxonId, characterId) {
+    const [rows] = await sequelizeConn.query(
+      `
+			SELECT *
+      FROM bibliographic_references br
+			INNER JOIN cells_x_bibliographic_references AS cxbr ON cxbr.reference_id = br.reference_id
+			WHERE
+				cxbr.matrix_id = ? AND cxbr.taxon_id = ? AND cxbr.character_id = ?`,
+      { replacements: [this.matrix.matrix_id, taxonId, characterId] }
+    )
+
+    const citations = []
+    for (const row of rows) {
+      citations.push({
+        link_id: parseInt(row.link_id),
+        citation_id: parseInt(row.reference_id),
+        name: getCitationText(row),
+        notes: row.notes,
+        pp: row.pp,
+      })
+    }
+
+    // TODO(kenzley): Make this into a matrix option so that users can have
+    //     this as a matrix option.
+    if (this.project.project_id == 773) {
+      const [rows] = await sequelizeConn.query(
+        `
+        SELECT br.*, mfxbr.pp, cxm.character_id, cxm.taxon_id, cxm.matrix_id
+        FROM cells_x_media cxm
+        INNER JOIN media_files_x_bibliographic_references AS mfxbr ON
+          cxm.media_id = mfxbr.media_id
+        INNER JOIN media_files AS mf ON 
+          mf.media_id = cxm.media_id
+        LEFT JOIN cells_x_bibliographic_references AS cxbr ON
+          cxbr.taxon_id = cxm.taxon_id AND 
+          cxbr.character_id = cxm.character_id AND
+          cxbr.matrix_id = cxm.matrix_id AND 
+          cxbr.reference_id = mfxbr.reference_id
+        INNER JOIN bibliographic_references AS br ON
+          br.reference_id = mfxbr.reference_id
+        WHERE
+          cxbr.link_id IS NULL AND
+          cxm.matrix_id = ? AND cxm.taxon_id = ? AND cxm.character_id = ?
+        GROUP BY br.reference_id`,
+        { replacements: [this.matrix.matrix_id, taxonId, characterId] }
+      )
+      for (const row of rows) {
+        citations.push({
+          link_id: 0,
+          citation_id: parseInt(row.citation_id),
+          name: getCitationText(row),
+          notes: 'Affiliated with cell media',
+          pp: row.pp,
+        })
+      }
+    }
+
+    return { citations: citations }
+  }
+
+  // TODO(kenzley): We need to implement this when the search engine is done.
+  async findCitation(text) {
+    return { text: text, citations: [] }
+  }
+
+  async addCellCitations(
+    taxaIds,
+    characterIds,
+    citationId,
+    pp,
+    notes,
+    batchMode
+  ) {
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to add citations for cells'
+    )
+
+    if (taxaIds.length == 0) {
+      throw new UserError('Please specify at least one taxon')
+    }
+
+    if (characterIds.length == 0) {
+      throw new UserError('Please specify at least one character')
+    }
+
+    await this.checkCanEditTaxa(taxaIds)
+    await this.checkCanEditCharacters(characterIds)
+
+    const citation = await models.BibliographicReference.findByPk(citationId)
+    if (citation == null) {
+      throw new UserError('Citation does not exist')
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    let cellBatch
+    if (batchMode) {
+      cellBatch = models.CellBatchLog.build({
+        user_id: this.user.user_id,
+        matrix_id: this.matrix.matrix_id,
+        batch_type: CELL_BATCH_TYPES.ADD_CELL_CITATION,
+        started_on: time(),
+      })
+    }
+
+    const citations = []
+    for (const taxonId of taxaIds) {
+      for (const characterId of characterIds) {
+        const [link] = await models.CellsXBibliographicReference.findOrCreate({
+          where: {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: taxonId,
+            character_id: characterId,
+            reference_id: citationId,
+          },
+          defaults: {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: taxonId,
+            character_id: characterId,
+            reference_id: citationId,
+            user_id: this.user.user_id,
+            pp: pp,
+            notes: notes,
+            source: 'HTML5',
+          },
+          transaction: transaction,
+        })
+        if (link) {
+          citations.push({
+            link_id: link.link_id,
+            taxon_id: taxonId,
+            character_id: characterId,
+          })
+        }
+      }
+    }
+
+    if (batchMode) {
+      let description = 'Added cell citations to '
+      if (batchMode == 2) {
+        const character = await models.Character.findByPk(characterIds[0])
+        description += `${taxaIds.length} taxa in ${character.name} column`
+      } else if (batchMode == 1) {
+        const taxon = await models.Taxon.findByPk(taxaIds[0])
+        description += `${characterIds.length} characters in ${getTaxonName(
+          taxon
+        )} row`
+      } else {
+        throw new UserError('Unable batch mode')
+      }
+
+      cellBatch.finished_on = time()
+      cellBatch.description = description
+      await cellBatch.save({ transaction: transaction })
+    }
+
+    await transaction.commit()
+    return {
+      citations: citations,
+      citation_id: citationId,
+      pp: pp,
+      notes: notes,
+      name: await getTextForBibliographicReference(citation),
+    }
+  }
+
+  async upsertCellCitation(
+    linkId,
+    taxonId,
+    characterId,
+    citationId,
+    pp,
+    notes
+  ) {
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to add citations for cells'
+    )
+
+    const transaction = await sequelizeConn.transaction()
+
+    const [link, built] = await models.CellsXBibliographicReference.findOrBuild(
+      {
+        where: {
+          link_id: linkId,
+        },
+        defaults: {
+          matrix_id: this.matrix.matrix_id,
+          taxon_id: taxonId,
+          character_id: characterId,
+          reference_id: citationId,
+          user_id: this.user.user_id,
+          pp: pp,
+          notes: notes,
+          source: 'HTML5',
+        },
+        transaction: transaction,
+      }
+    )
+
+    await this.checkCanEditTaxa([link.taxon_id])
+    await this.checkCanEditCharacters([link.character_id])
+
+    const citation = await models.BibliographicReference.findByPk(citationId)
+    if (citation == null) {
+      throw new UserError('Citation does not exist')
+    }
+
+    if (built) {
+      await link.save({ transaction: transaction })
+    } else {
+      if (link.matrix_id != this.matrix.matrix_id) {
+        throw new UserError('Citation is not for the specified matrix')
+      }
+      if (link.taxon_id != taxonId) {
+        throw new UserError('Citation is not match given taxon')
+      }
+      if (link.character_id != characterId) {
+        throw new UserError('Citation is not match given character')
+      }
+      if (link.reference_id != citationId) {
+        throw new UserError('Cell Citation does not match the citation')
+      }
+
+      link.pp = pp
+      link.notes = notes
+      await link.update({ transaction: transaction })
+    }
+
+    await transaction.commit()
+    return {
+      citation: {
+        link_id: parseInt(link.link_id),
+        citation_id: citationId,
+        pp: pp,
+        notes: notes,
+        name: await getTextForBibliographicReference(citation),
+      },
+    }
+  }
+
+  async removeCellCitation(linkId) {
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to remove citations for cells'
+    )
+
+    const link = await models.CellsXBibliographicReference.findByPk(linkId)
+    if (link == null) {
+      // Citation does not exist and therefore should be considered removed from
+      // the matrix. This happens when another user deletes the citation from
+      // the matrix but the current user still has a reference to it on the
+      // client.
+      return { link_id: linkId }
+    }
+
+    if (link.matrix_id != this.matrix.matrix_id) {
+      throw new UserError('Citation is not for the specified matrix')
+    }
+
+    await this.checkCanEditTaxa([link.taxon_id])
+    await this.checkCanEditCharacters([link.character_id])
+
+    const transaction = await sequelizeConn.transaction()
+    await link.destroy({ transaction: transaction })
+    await transaction.commit()
+
+    return { link_id: linkId }
   }
 
   async getCharacters(characterIds = null) {
@@ -1448,7 +1721,7 @@ class MatrixEditorService {
   async getUserAccessInfo() {
     return {
       available_groups: await this.getMemberGroups(),
-      user_groups: this.getUserMemberGroups(),
+      user_groups: await this.getUserMemberGroups(),
       is_admin: await this.isAdminLike(),
       user_id: parseInt(this.user.user_id),
       last_login: 0, // TODO(alvaro): Implement this.
