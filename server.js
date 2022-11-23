@@ -24,6 +24,7 @@ const onError = (error) => {
   if (error.syscall !== 'listen') {
     throw error
   }
+  const addr = server.address()
   const bind = typeof addr === 'string' ? 'pipe ' + addr : 'port ' + port
   switch (error.code) {
     case 'EACCES':
@@ -54,7 +55,7 @@ server.on('listening', onListening)
 
 sequelizeConn
   .sync()
-  .then((result) => {
+  .then(() => {
     server.listen(port)
   })
   .catch((err) => {
