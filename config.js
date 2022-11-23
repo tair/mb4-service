@@ -18,6 +18,13 @@ const config = {
     dialect: 'mysql',
     logging: console.logging,
   },
+  datacite: {
+    username: process.env.DATACITE_USERNAME,
+    password: process.env.DATACITE_PASSWORD,
+    shoulder: process.env.DATACITE_SHOULDER,
+    hostname: process.env.DATACITE_HOSTNAME,
+    urlPath: process.env.DATACITE_URL_PATH,
+  },
 }
 
 export default config
