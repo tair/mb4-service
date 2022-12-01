@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class CurationRequest extends Model {
@@ -23,6 +24,7 @@ export default class CurationRequest extends Model {
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          defaultValue: time,
         },
         completed_on: {
           type: DataTypes.INTEGER.UNSIGNED,

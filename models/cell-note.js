@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class CellNote extends Model {
@@ -41,10 +42,12 @@ export default class CellNote extends Model {
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          defaultValue: time,
         },
         last_modified_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          defaultValue: time,
         },
         notes: {
           type: DataTypes.TEXT,
@@ -56,7 +59,13 @@ export default class CellNote extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           validate: {
-            isIn: [[0, 50, 100]],
+            isIn: [
+              [
+                0, // New
+                50, // In Progress
+                100, // Complete
+              ],
+            ],
           },
         },
         ancestor_note_id: {

@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class Taxon extends Model {
@@ -117,20 +118,44 @@ export default class Taxon extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Anyone can edit this taxa
+                1, // Only the owner may edit this taxa
+              ],
+            ],
+          },
         },
         last_modified_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         otu: {
           type: DataTypes.STRING(30),
           allowNull: true,
+          validate: {
+            isIn: [
+              [
+                'supraspecific_clade',
+                'higher_taxon_class',
+                'higher_taxon_subclass',
+                'higher_taxon_order',
+                'higher_taxon_superfamily',
+                'higher_taxon_family',
+                'higher_taxon_subfamily',
+                'genus',
+                'specific_epithet',
+                'subspecific_epithet',
+              ],
+            ],
+          },
         },
         higher_taxon_suborder: {
           type: DataTypes.STRING(255),

@@ -42,6 +42,13 @@ export default class BibliographicAuthor extends Model {
         typecode: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          isIn: [
+            [
+              0, // Primary author
+              1, // Secondary author
+              2, // Editor
+            ],
+          ],
         },
       },
       {

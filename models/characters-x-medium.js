@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class CharactersXMedium extends Model {
@@ -48,6 +49,7 @@ export default class CharactersXMedium extends Model {
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          defaultValue: time,
         },
         source: {
           type: DataTypes.STRING(40),

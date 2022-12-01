@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class CharacterOrdering extends Model {
@@ -19,6 +20,14 @@ export default class CharacterOrdering extends Model {
           type: DataTypes.TINYINT,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Step Matrix
+                1, // CS Tree
+              ],
+            ],
+          },
         },
         step_matrix: {
           type: DataTypes.TEXT,
@@ -39,12 +48,12 @@ export default class CharacterOrdering extends Model {
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         last_modified_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
       },
       {

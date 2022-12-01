@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class Matrix extends Model {
@@ -33,6 +34,14 @@ export default class Matrix extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Publish when project is published
+                1, // Never publish to project
+              ],
+            ],
+          },
         },
         project_id: {
           type: DataTypes.INTEGER.UNSIGNED,
@@ -51,26 +60,58 @@ export default class Matrix extends Model {
         otu: {
           type: DataTypes.STRING(30),
           allowNull: false,
+          validate: {
+            isIn: [
+              [
+                'supraspecific_clade',
+                'higher_taxon_class',
+                'higher_taxon_subclass',
+                'higher_taxon_order',
+                'higher_taxon_superfamily',
+                'higher_taxon_family',
+                'higher_taxon_subfamily',
+                'genus',
+                'specific_epithet',
+                'subspecific_epithet',
+              ],
+            ],
+          },
         },
         access: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Anyone may edit this matrix
+                1, // Only the owner may edit this matrix
+              ],
+            ],
+          },
         },
         type: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Categorical
+                1, // Meristic
+              ],
+            ],
+          },
         },
         last_modified_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         other_options: {
           type: DataTypes.JSON,

@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class Annotation extends Model {
@@ -25,6 +26,14 @@ export default class Annotation extends Model {
           type: DataTypes.CHAR(1),
           allowNull: false,
           defaultValue: '',
+          validate: {
+            isIn: [
+              [
+                'C', // Comment
+                'O', // Observation
+              ],
+            ],
+          },
         },
         annotation: {
           type: DataTypes.TEXT,
@@ -33,7 +42,7 @@ export default class Annotation extends Model {
         created_on: {
           type: DataTypes.INTEGER,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         user_id: {
           type: DataTypes.INTEGER.UNSIGNED,

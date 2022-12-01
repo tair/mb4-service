@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class ProjectDocument extends Model {
@@ -22,6 +23,7 @@ export default class ProjectDocument extends Model {
         upload: {
           type: DataTypes.JSON,
           allowNull: true,
+          file: true,
         },
         title: {
           type: DataTypes.STRING(255),
@@ -38,14 +40,31 @@ export default class ProjectDocument extends Model {
         access: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          validate: {
+            isIn: [
+              [
+                0, // Anyone may edit this document.
+                1, // Only the owner may edit this document.
+              ],
+            ],
+          },
         },
         published: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          validate: {
+            isIn: [
+              [
+                0, // Publish when project is published
+                1, // Never publish to project
+              ],
+            ],
+          },
         },
         uploaded_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          defaultValue: time,
         },
         folder_id: {
           type: DataTypes.INTEGER.UNSIGNED,

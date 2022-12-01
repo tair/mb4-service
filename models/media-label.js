@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class MediaLabel extends Model {
@@ -33,6 +34,15 @@ export default class MediaLabel extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Area label
+                1, // Stick label
+                2, // Polygon Label
+              ],
+            ],
+          },
         },
         title: {
           type: DataTypes.STRING(255),
@@ -50,7 +60,7 @@ export default class MediaLabel extends Model {
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         table_num: {
           type: DataTypes.TINYINT.UNSIGNED,

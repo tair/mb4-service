@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class Institution extends Model {
@@ -19,6 +20,7 @@ export default class Institution extends Model {
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          defaultValue: time,
         },
         user_id: {
           type: DataTypes.INTEGER.UNSIGNED,

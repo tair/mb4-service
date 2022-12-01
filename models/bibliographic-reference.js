@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class BibliographicReference extends Model {
@@ -27,6 +28,7 @@ export default class BibliographicReference extends Model {
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          defaultValue: time,
         },
         article_title: {
           type: DataTypes.TEXT,
@@ -59,6 +61,7 @@ export default class BibliographicReference extends Model {
         pubyear: {
           type: DataTypes.SMALLINT.UNSIGNED,
           allowNull: true,
+          max: 3000,
         },
         publisher: {
           type: DataTypes.STRING(255),
@@ -127,6 +130,26 @@ export default class BibliographicReference extends Model {
         reference_type: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          isIn: [
+            [
+              0, // Generic
+              1, // Journal Article
+              2, // Book
+              3, // Book Section
+              4, // Manuscript
+              5, // Edited Book
+              6, // Magazine Artcile
+              7, // Newspaper Article
+              8, // Conference Proceedings
+              9, // Thesis
+              10, // Report
+              11, // Personal Communication
+              13, // Electronic Source
+              14, // Audiovisual Material
+              16, // Artwork
+              17, // Map
+            ],
+          ],
         },
         place_of_publication: {
           type: DataTypes.STRING(255),
@@ -135,6 +158,7 @@ export default class BibliographicReference extends Model {
         project_citation: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: true,
+          max: 1,
         },
       },
       {

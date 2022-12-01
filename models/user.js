@@ -14,6 +14,15 @@ export default class User extends Model {
         userclass: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Full access
+                255, // Deleted
+              ],
+            ],
+          },
         },
         password_hash: {
           type: DataTypes.STRING(60),
@@ -31,6 +40,9 @@ export default class User extends Model {
           type: DataTypes.STRING(255),
           allowNull: true,
           unique: 'u_email',
+          validate: {
+            isEmail: true,
+          },
         },
         vars: {
           type: DataTypes.JSON,

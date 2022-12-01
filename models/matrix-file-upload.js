@@ -14,6 +14,7 @@ export default class MatrixFileUpload extends Model {
         upload: {
           type: DataTypes.JSON,
           allowNull: true,
+          file: true,
         },
         comments: {
           type: DataTypes.TEXT,
@@ -49,6 +50,22 @@ export default class MatrixFileUpload extends Model {
         otu: {
           type: DataTypes.STRING(30),
           allowNull: false,
+          validate: {
+            isIn: [
+              [
+                'supraspecific_clade',
+                'higher_taxon_class',
+                'higher_taxon_subclass',
+                'higher_taxon_order',
+                'higher_taxon_superfamily',
+                'higher_taxon_family',
+                'higher_taxon_subfamily',
+                'genus',
+                'specific_epithet',
+                'subspecific_epithet',
+              ],
+            ],
+          },
         },
         format: {
           type: DataTypes.STRING(40),

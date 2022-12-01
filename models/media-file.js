@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class MediaFile extends Model {
@@ -36,6 +37,7 @@ export default class MediaFile extends Model {
         media: {
           type: DataTypes.JSON,
           allowNull: true,
+          media: true,
         },
         notes: {
           type: DataTypes.TEXT,
@@ -45,6 +47,14 @@ export default class MediaFile extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Publish when project is published
+                1, // Never publish to project
+              ],
+            ],
+          },
         },
         view_id: {
           type: DataTypes.INTEGER.UNSIGNED,
@@ -62,11 +72,36 @@ export default class MediaFile extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Not applicable
+                1, // Left side
+                2, // Right side
+              ],
+            ],
+          },
         },
         copyright_permission: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Copyright permission not set
+                // Person loading media owns copyright and grants permission for
+                // use of media on MorphoBank
+                1,
+                // Permission to use media on MorphoBank granted by copyright
+                // holder
+                2,
+                3, // Permission pending
+                4, // Copyright expired or work otherwise in public domain
+                5, // Copyright permission not yet requested
+              ],
+            ],
+          },
         },
         copyright_info: {
           type: DataTypes.STRING(255),
@@ -82,16 +117,24 @@ export default class MediaFile extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Anyone may edit this media item
+                1, // Only the owner may edit this media item
+              ],
+            ],
+          },
         },
         last_modified_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         url: {
           type: DataTypes.TEXT,
@@ -140,6 +183,35 @@ export default class MediaFile extends Model {
         copyright_license: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          validate: {
+            isIn: [
+              [
+                // Media reuse policy not set
+                0,
+                // CC0 - relinquish copyright
+                1,
+                // Attribution CC BY - reuse with attribution
+                2,
+                // Attribution-NonCommercial CC BY-NC - reuse but noncommercial
+                3,
+                // Attribution - ShareAlike CC BY - SA - reuse here and applied to
+                // future uses
+                4,
+                // Attribution- CC BY-NC-SA - reuse here and applied to future
+                // uses but noncommercial
+                5,
+                // Attribution-NoDerivs CC BY-ND - reuse but no changes
+                6,
+                // Attribution-NonCommercial-NoDerivs CC BY-NC-ND - reuse
+                // noncommerical no changes
+                7,
+                // Media released for onetime use, no reuse without permission
+                8,
+                // Unknown - Will set before project publication
+                20,
+              ],
+            ],
+          },
         },
         old_media_id: {
           type: DataTypes.INTEGER.UNSIGNED,
@@ -148,6 +220,7 @@ export default class MediaFile extends Model {
         ancestor_media_id: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
+          ancestored: true,
         },
         in_use_in_matrix: {
           type: DataTypes.TINYINT.UNSIGNED,
@@ -156,6 +229,17 @@ export default class MediaFile extends Model {
         cataloguing_status: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          validate: {
+            isIn: [
+              [
+                // Available in main search
+                0,
+                // Recently uploaded batch - needs to be curated before being
+                // released to general media pool
+                1,
+              ],
+            ],
+          },
         },
         eol_id: {
           type: DataTypes.TEXT,
