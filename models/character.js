@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class Character extends Model {
@@ -43,6 +44,17 @@ export default class Character extends Model {
           type: DataTypes.TINYINT,
           allowNull: true,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Unordered
+                1, // Ordered
+                2, // Irreversible
+                3, // Dollo
+                10, // User-defined
+              ],
+            ],
+          },
         },
         order_id: {
           type: DataTypes.INTEGER.UNSIGNED,
@@ -52,6 +64,15 @@ export default class Character extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Discrete
+                1, // Continuous
+                2, // Meristic
+              ],
+            ],
+          },
         },
         description: {
           type: DataTypes.TEXT,
@@ -61,20 +82,29 @@ export default class Character extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Anyone may edit this character
+                1, // Only the owner may edit this character
+              ],
+            ],
+          },
         },
         last_modified_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         ancestor_character_id: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
+          ancestored: true,
         },
         source: {
           type: DataTypes.STRING(40),

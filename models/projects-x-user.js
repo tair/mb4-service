@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class ProjectsXUser extends Model {
@@ -28,12 +29,22 @@ export default class ProjectsXUser extends Model {
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         membership_type: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Full membership (can edit everything)
+                1, // Observer (cannot edit)
+                2, // Character annotater (can edit characters and states only)
+                3, // Bibliography maintainer (can edit bibliography only)
+              ],
+            ],
+          },
         },
         last_accessed_on: {
           type: DataTypes.INTEGER.UNSIGNED,

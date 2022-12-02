@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class CipresRequest extends Model {
@@ -30,6 +31,7 @@ export default class CipresRequest extends Model {
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          defaultValue: time,
         },
         last_updated_on: {
           type: DataTypes.INTEGER.UNSIGNED,
@@ -50,10 +52,12 @@ export default class CipresRequest extends Model {
         input_file: {
           type: DataTypes.JSON,
           allowNull: true,
+          file: true,
         },
         output_file: {
           type: DataTypes.JSON,
           allowNull: true,
+          file: true,
         },
         cipres_settings: {
           type: DataTypes.JSON,

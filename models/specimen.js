@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class Specimen extends Model {
@@ -48,20 +49,36 @@ export default class Specimen extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Anyone can edit this specimen
+                1, // Only the owner may edit this specimen
+              ],
+            ],
+          },
         },
         last_modified_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         reference_source: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          validate: {
+            isIn: [
+              [
+                0, // Vouchered
+                1, // Unvouchered
+              ],
+            ],
+          },
         },
         uuid: {
           type: DataTypes.STRING(255),

@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class Project extends Model {
@@ -29,6 +30,14 @@ export default class Project extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Unpublished
+                1, // Published
+              ],
+            ],
+          },
         },
         deleted: {
           type: DataTypes.TINYINT.UNSIGNED,
@@ -38,7 +47,7 @@ export default class Project extends Model {
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         last_accessed_on: {
           type: DataTypes.INTEGER.UNSIGNED,
@@ -64,6 +73,7 @@ export default class Project extends Model {
         journal_cover: {
           type: DataTypes.JSON,
           allowNull: true,
+          media: true,
         },
         journal_year: {
           type: DataTypes.STRING(80),
@@ -85,6 +95,14 @@ export default class Project extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // No
+                1, // Yes
+              ],
+            ],
+          },
         },
         reviewer_login_password: {
           type: DataTypes.STRING(60),
@@ -102,31 +120,79 @@ export default class Project extends Model {
           type: DataTypes.TINYINT,
           allowNull: false,
           defaultValue: 1,
+          validate: {
+            isIn: [
+              [
+                0, // No
+                1, // Yes
+              ],
+            ],
+          },
         },
         publish_cell_comments: {
           type: DataTypes.TINYINT,
           allowNull: false,
           defaultValue: 1,
+          validate: {
+            isIn: [
+              [
+                0, // No
+                1, // Yes
+              ],
+            ],
+          },
         },
         publish_change_logs: {
           type: DataTypes.TINYINT,
           allowNull: false,
           defaultValue: 1,
+          validate: {
+            isIn: [
+              [
+                0, // No
+                1, // Yes
+              ],
+            ],
+          },
         },
         publish_cell_notes: {
           type: DataTypes.TINYINT,
           allowNull: false,
           defaultValue: 1,
+          validate: {
+            isIn: [
+              [
+                0, // No
+                1, // Yes
+              ],
+            ],
+          },
         },
         publish_character_notes: {
           type: DataTypes.TINYINT,
           allowNull: false,
           defaultValue: 1,
+          validate: {
+            isIn: [
+              [
+                0, // No
+                1, // Yes
+              ],
+            ],
+          },
         },
         publish_media_notes: {
           type: DataTypes.TINYINT,
           allowNull: false,
           defaultValue: 1,
+          validate: {
+            isIn: [
+              [
+                0, // No
+                1, // Yes
+              ],
+            ],
+          },
         },
         publish_inactive_members: {
           type: DataTypes.TINYINT,
@@ -136,6 +202,7 @@ export default class Project extends Model {
         exemplar_image: {
           type: DataTypes.JSON,
           allowNull: true,
+          media: true,
         },
         exemplar_caption: {
           type: DataTypes.TEXT,
@@ -164,6 +231,7 @@ export default class Project extends Model {
         ancestor_project_id: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
+          ancestored: true,
         },
         publish_matrix_media_only: {
           type: DataTypes.TINYINT.UNSIGNED,
@@ -174,6 +242,14 @@ export default class Project extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // No
+                1, // Yes
+              ],
+            ],
+          },
         },
         article_doi: {
           type: DataTypes.STRING(255),
@@ -186,6 +262,15 @@ export default class Project extends Model {
         nsf_funded: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: true,
+          defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // No
+                1, // Yes
+              ],
+            ],
+          },
         },
         disk_usage: {
           type: DataTypes.BIGINT.UNSIGNED,
@@ -201,6 +286,15 @@ export default class Project extends Model {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Published
+                1, // In Press
+                2, // Article i prep or in review
+              ],
+            ],
+          },
         },
         extinct_taxa_identified: {
           type: DataTypes.TINYINT.UNSIGNED,

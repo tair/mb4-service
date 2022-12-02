@@ -48,10 +48,19 @@ export default class CharacterState extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Anyone may edit this character state
+                1, // Only the owner may edit this character state
+              ],
+            ],
+          },
         },
         ancestor_state_id: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
+          ancestored: true,
         },
       },
       {

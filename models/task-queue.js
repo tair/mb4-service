@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class TaskQueue extends Model {
@@ -28,10 +29,21 @@ export default class TaskQueue extends Model {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Created
+                1, // Processing
+                2, // Completed
+                3, // Failed
+              ],
+            ],
+          },
         },
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          defaultValue: time,
         },
         completed_on: {
           type: DataTypes.INTEGER.UNSIGNED,

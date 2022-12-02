@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class ProjectDuplicationRequest extends Model {
@@ -26,10 +27,29 @@ export default class ProjectDuplicationRequest extends Model {
         onetime_use_action: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: true,
+          validate: {
+            isIn: [
+              [
+                1, // Keep onetime use media in existing project
+                100, // Move onetime use media to new project
+              ],
+            ],
+          },
         },
         status: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          defaultValue: 1,
+          validate: {
+            isIn: [
+              [
+                1, // Newly Submitted
+                50, // Approved
+                100, // Completed
+                200, // Denied
+              ],
+            ],
+          },
         },
         notes: {
           type: DataTypes.TEXT,
@@ -46,6 +66,7 @@ export default class ProjectDuplicationRequest extends Model {
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          defaultValue: time,
         },
       },
       {

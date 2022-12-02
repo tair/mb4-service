@@ -33,6 +33,7 @@ export default class MediaView extends Model {
         ancestor_view_id: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
+          ancestored: true,
         },
       },
       {

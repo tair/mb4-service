@@ -19,9 +19,13 @@ export default class CharacterRuleAction extends Model {
             key: 'rule_id',
           },
         },
+        // TODO: We should convert this to an small int rather than a string.
         action: {
           type: DataTypes.STRING(20),
           allowNull: false,
+          validate: {
+            isIn: [['SET_STATE', 'ADD_MEDIA']],
+          },
         },
         character_id: {
           type: DataTypes.INTEGER.UNSIGNED,

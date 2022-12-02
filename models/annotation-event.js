@@ -30,6 +30,8 @@ export default class AnnotationEvent extends Model {
         typecode: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          defaultValue: 0,
+          isIn: [[0]], // Opened.
         },
       },
       {

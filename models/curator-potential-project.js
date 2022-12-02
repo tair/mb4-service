@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class CuratorPotentialProject extends Model {
@@ -27,6 +28,9 @@ export default class CuratorPotentialProject extends Model {
         owner_email: {
           type: DataTypes.STRING(255),
           allowNull: false,
+          validate: {
+            isEmail: true,
+          },
         },
         journal_title: {
           type: DataTypes.STRING(1024),
@@ -96,6 +100,7 @@ export default class CuratorPotentialProject extends Model {
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          defaultValue: time,
         },
         last_modified: {
           type: DataTypes.INTEGER.UNSIGNED,
@@ -139,7 +144,17 @@ export default class CuratorPotentialProject extends Model {
         },
         checklist_extinct_taxa_present: {
           type: DataTypes.INTEGER.UNSIGNED,
-          allowNull: true,
+          allowNull: false,
+          defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // No
+                1, // Yes
+                2, // No extinct taxa in project
+              ],
+            ],
+          },
         },
         checklist_project_tweeted: {
           type: DataTypes.INTEGER.UNSIGNED,
@@ -149,11 +164,22 @@ export default class CuratorPotentialProject extends Model {
           type: DataTypes.STRING(100),
           allowNull: false,
           defaultValue: '',
+          validate: {
+            isIn: [['APPROVED', 'UNDER_CURATION', 'ARCHIVED']],
+          },
         },
         checklist_publication_is_url_listed: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // No
+                1, // Yes
+              ],
+            ],
+          },
         },
         notes: {
           type: DataTypes.TEXT,

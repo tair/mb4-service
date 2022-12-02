@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class Cell extends Model {
@@ -59,12 +60,12 @@ export default class Cell extends Model {
         last_modified_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         is_npa: {
           type: DataTypes.TINYINT,
@@ -79,6 +80,7 @@ export default class Cell extends Model {
         ancestor_cell_id: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
+          ancestored: true,
         },
         start_value: {
           type: DataTypes.DECIMAL(20, 10),

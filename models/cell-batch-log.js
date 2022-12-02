@@ -33,6 +33,19 @@ export default class CellBatchLog extends Model {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
           defaultValue: 0,
+          validate: {
+            isIn: [
+              [
+                0, // Media View Automation
+                1, // Media Batch Add
+                2, // Media Batch Delete
+                3, // Media batch Set Score
+                4, // Add Cell Citation
+                5, // Cell Batch Notes
+                6, // Copy Scores
+              ],
+            ],
+          },
         },
         description: {
           type: DataTypes.TEXT,

@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class CharacterRule extends Model {
@@ -34,6 +35,7 @@ export default class CharacterRule extends Model {
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          defaultValue: time,
         },
         source: {
           type: DataTypes.STRING(40),

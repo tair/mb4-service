@@ -37,6 +37,14 @@ export default class Folio extends Model {
         published: {
           type: DataTypes.TINYINT,
           allowNull: false,
+          validate: {
+            isIn: [
+              [
+                0, // Publish when project is published
+                1, // Never publish to project
+              ],
+            ],
+          },
         },
       },
       {
