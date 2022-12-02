@@ -15,6 +15,7 @@ export default class TaskQueue extends Model {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
         },
+        // TODO(kenzley): Replace row_key and entity_key with table_num and row_id.
         row_key: {
           type: DataTypes.CHAR(32),
           allowNull: true,
