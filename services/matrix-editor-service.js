@@ -71,19 +71,19 @@ class MatrixEditorService {
 
     const [cellRows] = await sequelizeConn.query(
       `
-			SELECT 
+      SELECT 
         c.cell_id, c.taxon_id, c.character_id, c.state_id, c.user_id, c.is_npa,
         c.is_uncertain, c.created_on, c.start_value, c.end_value, ch.type
-			FROM cells c
-			INNER JOIN matrix_character_order AS mco ON 
+      FROM cells c
+      INNER JOIN matrix_character_order AS mco ON 
         mco.character_id = c.character_id AND 
         mco.matrix_id = c.matrix_id
-			INNER JOIN characters AS ch ON 
+      INNER JOIN characters AS ch ON 
         ch.character_id = mco.character_id
-			INNER JOIN matrix_taxa_order AS mto ON 
+      INNER JOIN matrix_taxa_order AS mto ON 
         mto.taxon_id = c.taxon_id AND 
         mto.matrix_id = c.matrix_id
-			WHERE
+      WHERE
         c.matrix_id = ? AND
         c.taxon_id IN (?) AND
         c.character_id IN (?)
@@ -94,20 +94,20 @@ class MatrixEditorService {
     const mediaClause = shouldLimitToPublishedData ? 'mf.published = 0 AND' : ''
     const [labelCountRows] = await sequelizeConn.query(
       `
-			SELECT cxm.media_id, cxm.taxon_id, cxm.character_id, count(*) label_count
-			FROM media_labels ml
-			INNER JOIN cells_x_media AS cxm ON 
+      SELECT cxm.media_id, cxm.taxon_id, cxm.character_id, count(*) label_count
+      FROM media_labels ml
+      INNER JOIN cells_x_media AS cxm ON 
         ml.link_id = cxm.link_id AND 
         cxm.media_id = ml.media_id
-			INNER JOIN media_files AS mf ON 
+      INNER JOIN media_files AS mf ON 
         cxm.media_id = mf.media_id
-			WHERE
+      WHERE
         ${mediaClause}
         cxm.matrix_id = ? AND
         cxm.taxon_id IN (?) AND
         cxm.character_id IN (?) AND
         ml.table_num = 7
-			GROUP BY cxm.character_id, cxm.taxon_id, cxm.media_id`,
+      GROUP BY cxm.character_id, cxm.taxon_id, cxm.media_id`,
       { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
     )
     const labelCountMap = new Table()
@@ -121,17 +121,17 @@ class MatrixEditorService {
 
     const [mediaRows] = await sequelizeConn.query(
       `
-			SELECT
-				cxm.media_id, cxm.taxon_id, cxm.character_id,
+      SELECT
+        cxm.media_id, cxm.taxon_id, cxm.character_id,
       mf.media, mf.notes, cxm.link_id
-			FROM cells_x_media cxm
-			INNER JOIN media_files AS mf ON cxm.media_id = mf.media_id
-			WHERE
+      FROM cells_x_media cxm
+      INNER JOIN media_files AS mf ON cxm.media_id = mf.media_id
+      WHERE
         ${mediaClause}
         cxm.matrix_id = ? AND
         cxm.taxon_id IN (?) AND
         cxm.character_id IN (?)
-			GROUP BY cxm.link_id`,
+      GROUP BY cxm.link_id`,
       { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
     )
 
@@ -154,11 +154,11 @@ class MatrixEditorService {
 
     const [cellNotesRows] = await sequelizeConn.query(
       `
-			SELECT DISTINCT
-				cn.note_id, cn.notes, cn.taxon_id, cn.character_id, cn.matrix_id,
+      SELECT DISTINCT
+        cn.note_id, cn.notes, cn.taxon_id, cn.character_id, cn.matrix_id,
         cn.status, cn.ancestor_note_id
-			FROM cell_notes cn
-			WHERE
+      FROM cell_notes cn
+      WHERE
         cn.matrix_id = ? AND 
         cn.taxon_id IN (?) AND
         cn.character_id IN (?)`,
@@ -185,14 +185,14 @@ class MatrixEditorService {
     if (shouldLimitToPublishedData) {
       const [citationCountRows] = await sequelizeConn.query(
         `
-			SELECT count(*) citation_count, cxbr.taxon_id, cxbr.character_id
-			FROM cells_x_bibliographic_references cxbr
-			WHERE
+      SELECT count(*) citation_count, cxbr.taxon_id, cxbr.character_id
+      FROM cells_x_bibliographic_references cxbr
+      WHERE
         cxbr.matrix_id = ? AND
         cxbr.taxon_id IN (?) AND
         cxbr.character_id IN (?)
-			GROUP BY
-				cxbr.taxon_id, cxbr.character_id`,
+      GROUP BY
+        cxbr.taxon_id, cxbr.character_id`,
         { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
       )
 
