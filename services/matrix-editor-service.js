@@ -2011,6 +2011,11 @@ class MatrixEditorService {
   }
 
   async getCellsStates(taxaIds, characterIds) {
+    const stateIds = new Table()
+    if (taxaIds.length == 0 || characterIds.length == 0) {
+      return stateIds
+    }
+
     const [rows] = await sequelizeConn.query(
       `
         SELECT cell_id, taxon_id, character_id, state_id, is_npa, is_uncertain, start_value, end_value, created_on
@@ -2018,8 +2023,6 @@ class MatrixEditorService {
         WHERE matrix_id = ? AND character_id IN (?) AND taxon_id IN (?)`,
       { replacements: [this.matrix.matrix_id, characterIds, taxaIds] }
     )
-
-    const stateIds = new Table()
     for (const row of rows) {
       const isNPA = parseInt(row.is_npa)
       const isUncertain = parseInt(row.is_uncertain)
@@ -2098,6 +2101,10 @@ class MatrixEditorService {
             : 0
           : parseInt(score.state_id)
       const scoreRules = scoresRules.get(characterId, stateId)
+      if (!scoreRules) {
+        continue;
+      }
+
       for (const rule of scoreRules) {
         const actionCharacterId = parseInt(rule.action_character_id)
         const existingScore = existingScores.get(taxonId, actionCharacterId)
