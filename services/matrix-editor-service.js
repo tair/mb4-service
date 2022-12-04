@@ -2102,7 +2102,7 @@ class MatrixEditorService {
           : parseInt(score.state_id)
       const scoreRules = scoresRules.get(characterId, stateId)
       if (!scoreRules) {
-        continue;
+        continue
       }
 
       for (const rule of scoreRules) {
