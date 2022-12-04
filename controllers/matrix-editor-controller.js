@@ -214,13 +214,13 @@ export async function searchCells(req, res) {
   const limitToUnimagedCells = req.body.limitToUnimagedCells
   await applyMatrix(req, res, (service) =>
     service.searchCells(
-      partitionId, 
-      taxonId, 
-      limitToUnscoredCells, 
-      limitToScoredCells, 
-      limitToUndocumentedCells, 
-      limitToNPACells, 
-      limitToPolymorphicCells, 
+      partitionId,
+      taxonId,
+      limitToUnscoredCells,
+      limitToScoredCells,
+      limitToUndocumentedCells,
+      limitToNPACells,
+      limitToPolymorphicCells,
       limitToUnimagedCells
     )
   )
@@ -236,7 +236,7 @@ export async function searchCharacters(req, res) {
       partitionId,
       limitToUnscoredCells,
       limitToUnusedMedia,
-      limitToNPACells,
+      limitToNPACells
     )
   )
 }
@@ -246,11 +246,7 @@ export async function searchTaxa(req, res) {
   const limitToUnscoredCells = req.body.limitToUnscoredCells
   const limitToNPACells = req.body.limitToNPACells
   await applyMatrix(req, res, (service) =>
-    service.searchTaxa(
-      partitionId,
-      limitToUnscoredCells,
-      limitToNPACells,
-    )
+    service.searchTaxa(partitionId, limitToUnscoredCells, limitToNPACells)
   )
 }
 

@@ -67,7 +67,6 @@ class MatrixEditorService {
   }
 
   async fetchCellsData(taxaIds, characterIds) {
-
     const shouldLimitToPublishedData = await this.shouldLimitToPublishedData()
 
     const [cellRows] = await sequelizeConn.query(
@@ -185,7 +184,7 @@ class MatrixEditorService {
 
     if (shouldLimitToPublishedData) {
       const [citationCountRows] = await sequelizeConn.query(
-      `
+        `
 			SELECT count(*) citation_count, cxbr.taxon_id, cxbr.character_id
 			FROM cells_x_bibliographic_references cxbr
 			WHERE
@@ -206,8 +205,8 @@ class MatrixEditorService {
         }
         citationCounts[taxonId][characterId] = parseInt(row.citation_count)
       }
-      cells.counts  = {
-        citation_counts: citationCounts
+      cells.counts = {
+        citation_counts: citationCounts,
       }
     }
     return cells
@@ -2200,11 +2199,11 @@ class MatrixEditorService {
       taxaPartitionClause = `
         INNER JOIN taxa_x_partitions AS txp ON 
           txp.taxon_id = mto.taxon_id AND 
-          txp.partition_id = ?`;
+          txp.partition_id = ?`
       characterPartitionClause = `
         INNER JOIN characters_x_partitions AS cxp ON
           cxp.character_id = mco.character_id AND
-          cxp.partition_id = ?`;
+          cxp.partition_id = ?`
       replacements.push(partitionId, partitionId)
     }
 
@@ -2244,15 +2243,17 @@ class MatrixEditorService {
         GROUP BY mto.taxon_id
         ORDER BY mto.position`
     } else {
-      throw new UserError('Invalid search option');
+      throw new UserError('Invalid search option')
     }
 
-    const [rows] = await sequelizeConn.query(sql, { replacements: replacements })
+    const [rows] = await sequelizeConn.query(sql, {
+      replacements: replacements,
+    })
 
     const results = []
     for (const row of rows) {
       results.push({
-        taxon_id: row.taxon_id
+        taxon_id: row.taxon_id,
       })
     }
     return {
@@ -2260,7 +2261,16 @@ class MatrixEditorService {
     }
   }
 
-  async searchCells(partitionId, taxonId, limitToUnscoredCells, limitToScoredCells, limitToUndocumentedCells, limitToNPACells, limitToPolymorphicCells, limitToUnimagedCells) {
+  async searchCells(
+    partitionId,
+    taxonId,
+    limitToUnscoredCells,
+    limitToScoredCells,
+    limitToUndocumentedCells,
+    limitToNPACells,
+    limitToPolymorphicCells,
+    limitToUnimagedCells
+  ) {
     let taxaPartitionClause = ''
     let characterPartitionClause = ''
     const replacements = []
@@ -2268,22 +2278,26 @@ class MatrixEditorService {
       taxaPartitionClause = `
         INNER JOIN taxa_x_partitions AS txp ON 
           txp.taxon_id = mto.taxon_id AND 
-          txp.partition_id = ${partitionId}`;
+          txp.partition_id = ${partitionId}`
       characterPartitionClause = `
         INNER JOIN characters_x_partitions AS cxp ON
           cxp.character_id = mco.character_id AND
-          cxp.partition_id = ${partitionId}`;
+          cxp.partition_id = ${partitionId}`
       replacements.push(partitionId, partitionId)
     }
 
     let clause = ''
     if (taxonId) {
-      clause += "mto.taxon_id = ? AND";
+      clause += 'mto.taxon_id = ? AND'
       replacements.push(taxonId)
     }
 
     let sql
-    if (limitToScoredCells && limitToUndocumentedCells && limitToUnimagedCells) {
+    if (
+      limitToScoredCells &&
+      limitToUndocumentedCells &&
+      limitToUnimagedCells
+    ) {
       sql = `
         SELECT c.character_id, c.taxon_id
         FROM cells c
@@ -2423,10 +2437,12 @@ class MatrixEditorService {
         HAVING COUNT(*) > 1 AND COUNT(*) > COUNT(c.state_id)
         ORDER BY mco.position, mto.position`
     } else {
-      throw new UserError('Invalid search option');
+      throw new UserError('Invalid search option')
     }
 
-    const [rows] = await sequelizeConn.query(sql, { replacements: replacements })
+    const [rows] = await sequelizeConn.query(sql, {
+      replacements: replacements,
+    })
 
     const results = []
     for (const row of rows) {
@@ -2440,7 +2456,12 @@ class MatrixEditorService {
     }
   }
 
-  async searchCharacters(partitionId, limitToUnscoredCells, limitToUnusedMedia, limitToNPACells) {
+  async searchCharacters(
+    partitionId,
+    limitToUnscoredCells,
+    limitToUnusedMedia,
+    limitToNPACells
+  ) {
     let taxaPartitionClause = ''
     let characterPartitionClause = ''
     const replacements = []
@@ -2448,11 +2469,11 @@ class MatrixEditorService {
       taxaPartitionClause = `
         INNER JOIN taxa_x_partitions AS txp ON 
           txp.taxon_id = mto.taxon_id AND 
-          txp.partition_id = ${partitionId}`;
+          txp.partition_id = ${partitionId}`
       characterPartitionClause = `
         INNER JOIN characters_x_partitions AS cxp ON
           cxp.character_id = mco.character_id AND
-          cxp.partition_id = ${partitionId}`;
+          cxp.partition_id = ${partitionId}`
       replacements.push(partitionId, partitionId)
     }
 
@@ -2511,7 +2532,9 @@ class MatrixEditorService {
           mco.matrix_id = ${this.matrix.matrix_id}
         GROUP BY mco.character_id
         ORDER BY mco.position`
-      const [rows] = await sequelizeConn.query(sql, { replacements: replacements.splice(1) })
+      const [rows] = await sequelizeConn.query(sql, {
+        replacements: replacements.splice(1),
+      })
 
       const results = []
       for (const row of rows) {
@@ -2524,10 +2547,12 @@ class MatrixEditorService {
         results: results,
       }
     } else {
-      throw new Exception('Invalid search option');
+      throw new Exception('Invalid search option')
     }
 
-    const [rows] = await sequelizeConn.query(sql, { replacements: replacements })
+    const [rows] = await sequelizeConn.query(sql, {
+      replacements: replacements,
+    })
 
     const results = []
     for (const row of rows) {
