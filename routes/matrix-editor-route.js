@@ -14,6 +14,7 @@ router.post('/setTaxaAccess', controller.setTaxaAccess)
 // Cell specific endpoints
 router.post('/addCellCitations', controller.addCellCitations)
 router.post('/addCellMedia', controller.addCellMedia)
+router.post('/fetchCellsData', controller.fetchCellsData)
 router.post('/findCitation', controller.findCitation)
 router.post('/getAllCellNotes', controller.getAllCellNotes)
 router.post('/getCellCitations', controller.getCellCitations)
@@ -29,5 +30,10 @@ router.post('/upsertCellCitation', controller.upsertCellCitation)
 // General endpoints
 router.post('/getMatrixData', controller.getMatrixData)
 router.post('/logError', controller.logError)
+
+// Search endpoints
+router.post('/searchCells', controller.searchCells)
+router.post('/searchCharacters', controller.searchCharacters)
+router.post('/searchTaxa', controller.searchTaxa)
 
 export default router
