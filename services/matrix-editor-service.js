@@ -715,8 +715,8 @@ class MatrixEditorService {
         name: row.name,
         description: row.description,
         project_id: parseInt(row.project_id),
-        character_ids: characters.get(partitionId) ?? {},
-        taxa_ids: taxa.get(partitionId) ?? {},
+        character_ids: characters.get(partitionId) ?? [],
+        taxa_ids: taxa.get(partitionId) ?? [],
       })
     }
     return partitions
@@ -1705,13 +1705,7 @@ class MatrixEditorService {
       'You are not allowed to add partitions'
     )
 
-    const [[{ count }]] = await sequelizeConn.query(
-      'SELECT COUNT(*) AS count FROM partitions WHERE project_id = ? AND name = ?',
-      { replacements: [this.project.project_id, name] }
-    )
-    if (count) {
-      throw new UserError('Partition by the given name already exists')
-    }
+    await this.checkPartitionNameExists(name)
 
     const partition = await models.Partition.create({
       project_id: this.project.project_id,
@@ -1736,6 +1730,8 @@ class MatrixEditorService {
       'You are not allowed to modify partitions'
     )
 
+    await this.checkPartitionNameExists(name)
+  
     const transaction = await sequelizeConn.transaction()
     const partition = await models.Partition.findByPk(partitionId)
     if (!partition || partition.project_id != this.project.project_id) {
@@ -1762,6 +1758,8 @@ class MatrixEditorService {
       'editPartition',
       'You are not allowed to copy partitions'
     )
+
+    await this.checkPartitionNameExists(name)
 
     const partition = await models.Partition.findByPk(partitionId)
     if (!partition) {
@@ -1829,6 +1827,16 @@ class MatrixEditorService {
       taxa_ids: taxaIds,
       character_ids: characterIds,
     }
+  }
+
+  async checkPartitionNameExists(name) {
+    const [[{ count }]] = await sequelizeConn.query(
+      'SELECT COUNT(*) AS count FROM partitions WHERE project_id = ? AND name = ?',
+      { replacements: [this.project.project_id, name] }
+    )
+    if (count) {
+      throw new UserError('Partition by the given name already exists')
+    }   
   }
 
   async removePartition(partitionId) {
