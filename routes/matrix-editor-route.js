@@ -11,7 +11,7 @@ router.post('/reorderTaxa', controller.reorderTaxa)
 router.post('/setTaxaNotes', controller.setTaxaNotes)
 router.post('/setTaxaAccess', controller.setTaxaAccess)
 
-// Cell specific endpoints
+// Cell-specific endpoints
 router.post('/addCellCitations', controller.addCellCitations)
 router.post('/addCellMedia', controller.addCellMedia)
 router.post('/findCitation', controller.findCitation)
@@ -25,6 +25,19 @@ router.post('/removeCellMedia', controller.removeCellMedia)
 router.post('/setCellNotes', controller.setCellNotes)
 router.post('/setCellStates', controller.setCellStates)
 router.post('/upsertCellCitation', controller.upsertCellCitation)
+
+// Partition-specific endpoints
+router.post('/addCharactersToPartition', controller.addCharactersToPartition)
+router.post('/addPartition', controller.addPartition)
+router.post('/addTaxaToPartition', controller.addTaxaToPartition)
+router.post('/editPartition', controller.editPartition)
+router.post('/copyPartition', controller.copyPartition)
+router.post(
+  '/removeCharactersFromPartition',
+  controller.removeCharactersFromPartition
+)
+router.post('/removePartition', controller.removePartition)
+router.post('/removeTaxaToPartition', controller.removeTaxaFromPartition)
 
 // General endpoints
 router.post('/getMatrixData', controller.getMatrixData)

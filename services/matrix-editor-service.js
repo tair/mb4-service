@@ -520,7 +520,7 @@ class MatrixEditorService {
 
       link.pp = pp
       link.notes = notes
-      await link.update({ transaction: transaction })
+      await link.save({ transaction: transaction })
     }
 
     await transaction.commit()
@@ -1699,6 +1699,290 @@ class MatrixEditorService {
     }
   }
 
+  async addPartition(name, description) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to add partitions'
+    )
+
+    const [[{ count }]] = await sequelizeConn.query(
+      'SELECT COUNT(*) AS count FROM partitions WHERE project_id = ? AND name = ?',
+      { replacements: [this.project.project_id, name] }
+    )
+    if (count) {
+      throw new UserError('Partition by the given name already exists')
+    }
+
+    const partition = await models.Partition.create({
+      project_id: this.project.project_id,
+      user_id: this.user.user_id,
+      name: name,
+      description: description,
+      source: 'HTML5',
+    })
+
+    return {
+      id: partition.partition_id,
+      name: name,
+      description: description,
+      user_id: this.user.user_id,
+      project_id: this.project.project_id,
+    }
+  }
+
+  async editPartition(partitionId, name, description) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to modify partitions'
+    )
+
+    const transaction = await sequelizeConn.transaction()
+    const partition = await models.Partition.findByPk(partitionId)
+    if (!partition || partition.project_id != this.project.project_id) {
+      throw new UserError('Invalid Partition id')
+    }
+
+    partition.name = name
+    partition.description = description
+    partition.source = 'HTML5'
+
+    await partition.save({ transaction: transaction })
+    await transaction.commit()
+    return {
+      id: partition.partition_id,
+      name: name,
+      description: description,
+      user_id: this.user.user_id,
+      project_id: this.project.project_id,
+    }
+  }
+
+  async copyPartition(partitionId, name, description) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to copy partitions'
+    )
+
+    const partition = await models.Partition.findByPk(partitionId)
+    if (!partition) {
+      throw new UserError('Partition does not exist')
+    }
+    if (partition.project_id != this.project.project_id) {
+      throw new UserError('The given partition does not belong to this project')
+    }
+
+    const [characterRows] = await sequelizeConn.query(
+      'SELECT character_id FROM characters_x_partitions WHERE partition_id = ?',
+      { replacements: [partitionId] }
+    )
+    const characterIds = characterRows.map((row) => parseInt(row.character_id))
+
+    const [taxaRows] = await sequelizeConn.query(
+      'SELECT taxon_id FROM taxa_x_partitions WHERE partition_id = ? ',
+      { replacements: [partitionId] }
+    )
+    const taxaIds = taxaRows.map((row) => parseInt(row.taxon_id))
+
+    const transaction = await sequelizeConn.transaction()
+    const newPartition = await models.Partition.create(
+      {
+        project_id: this.project.project_id,
+        user_id: this.user.user_id,
+        name: name,
+        description: description,
+        source: 'HTML5',
+      },
+      { transaction: transaction }
+    )
+    for (const taxonId of taxaIds) {
+      await models.TaxaXPartition.create(
+        {
+          taxon_id: taxonId,
+          partition_id: newPartition.partition_id,
+          user_id: this.user.user_id,
+        },
+        {
+          transaction: transaction,
+        }
+      )
+    }
+
+    for (const characterId of characterIds) {
+      await models.CharactersXPartition.create(
+        {
+          character_id: characterId,
+          partition_id: newPartition.partition_id,
+          user_id: this.user.user_id,
+        },
+        {
+          transaction: transaction,
+        }
+      )
+    }
+    await transaction.commit()
+    return {
+      id: newPartition.partition_id,
+      name: name,
+      description: description,
+      user_id: this.user.user_id,
+      project_id: this.project.project_id,
+      taxa_ids: taxaIds,
+      character_ids: characterIds,
+    }
+  }
+
+  async removePartition(partitionId) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to remove partitions'
+    )
+    await models.Partition.destroy({
+      where: {
+        partition_id: partitionId,
+        project_id: this.project.project_id,
+      },
+    })
+    return {
+      id: partitionId,
+    }
+  }
+
+  async addCharactersToPartition(partitionId, characterIds) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to add characters to partitions'
+    )
+
+    const partition = await models.Partition.findByPk(partitionId)
+    if (!partition) {
+      throw new UserError('Partition does not exist')
+    }
+    if (partition.project_id != this.project.project_id) {
+      throw new UserError('The given partition does not belong to this project')
+    }
+
+    await this.checkCharactersInProject(characterIds)
+    const transaction = await sequelizeConn.transaction()
+    for (const characterId of characterIds) {
+      await models.CharactersXPartition.findOrCreate({
+        where: {
+          character_id: characterId,
+          partition_id: partitionId,
+        },
+        defaults: {
+          character_id: characterId,
+          partition_id: partitionId,
+          user_id: this.user.user_id,
+        },
+        transaction: transaction,
+      })
+    }
+    await transaction.commit()
+    return {
+      id: partitionId,
+      character_ids: characterIds,
+    }
+  }
+
+  async removeCharactersFromPartition(partitionId, characterIds) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to remove characters from partitions'
+    )
+
+    const partition = await models.Partition.findByPk(partitionId)
+    if (!partition) {
+      throw new UserError('Partition does not exist')
+    }
+    if (partition.project_id != this.project.project_id) {
+      throw new UserError('The given partition does not belong to this project')
+    }
+
+    await this.checkCharactersInProject(characterIds)
+    const transaction = await sequelizeConn.transaction()
+    await models.CharactersXPartition.destroy({
+      where: {
+        partition_id: partitionId,
+        character_id: { [Op.in]: characterIds },
+      },
+      individualHooks: true,
+      transaction: transaction,
+    })
+    await transaction.commit()
+    return {
+      id: partitionId,
+      character_ids: characterIds,
+    }
+  }
+
+  async addTaxaToPartition(partitionId, taxaIds) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to add taxa to partitions'
+    )
+
+    const partition = await models.Partition.findByPk(partitionId)
+    if (!partition) {
+      throw new UserError('Partition does not exist')
+    }
+    if (partition.project_id != this.project.project_id) {
+      throw new UserError('The given partition does not belong to this project')
+    }
+
+    await this.checkTaxaInProject(taxaIds)
+    const transaction = await sequelizeConn.transaction()
+    for (const taxonId of taxaIds) {
+      await models.TaxaXPartition.findOrCreate({
+        where: {
+          taxon_id: taxonId,
+          partition_id: partitionId,
+        },
+        defaults: {
+          taxon_id: taxonId,
+          partition_id: partitionId,
+          user_id: this.user.user_id,
+        },
+        transaction: transaction,
+      })
+    }
+    await transaction.commit()
+    return {
+      id: partitionId,
+      taxon_ids: taxaIds,
+    }
+  }
+
+  async removeTaxaFromPartition(partitionId, taxaIds) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to remove taxa from partitions'
+    )
+
+    const partition = await models.Partition.findByPk(partitionId)
+    if (!partition) {
+      throw new UserError('Partition does not exist')
+    }
+    if (partition.project_id != this.project.project_id) {
+      throw new UserError('The given partition does not belong to this project')
+    }
+
+    await this.checkTaxaInProject(taxaIds)
+    const transaction = await sequelizeConn.transaction()
+    await models.TaxaXPartition.destroy({
+      where: {
+        partition_id: partitionId,
+        taxon_id: { [Op.in]: taxaIds },
+      },
+      individualHooks: true,
+      transaction: transaction,
+    })
+    await transaction.commit()
+    return {
+      id: partitionId,
+      taxon_ids: taxaIds,
+    }
+  }
+
   getMatrixInfo() {
     return {
       id: this.matrix.matrix_id,
@@ -2509,6 +2793,40 @@ class MatrixEditorService {
     return media
   }
 
+  async checkTaxaInProject(taxaIds) {
+    const [[{ count }]] = await sequelizeConn.query(
+      `
+      SELECT COUNT(taxon_id) AS count
+      FROM taxa
+      WHERE project_id = ? AND taxon_id IN (?)`,
+      {
+        replacements: [this.project.project_id, taxaIds],
+      }
+    )
+    if (count != taxaIds.length) {
+      throw new ForbiddenError(
+        'The requested taxa are not in the current project'
+      )
+    }
+  }
+
+  async checkCharactersInProject(characterIds) {
+    const [[{ count }]] = await sequelizeConn.query(
+      `
+      SELECT COUNT(character_id) AS count
+      FROM characters
+      WHERE project_id = ? AND character_id IN (?)`,
+      {
+        replacements: [this.project.project_id, characterIds],
+      }
+    )
+    if (count != characterIds.length) {
+      throw new ForbiddenError(
+        'The requested characters are not in the current project'
+      )
+    }
+  }
+
   async checkCanEditTaxa(taxaIds) {
     const [[{ count }]] = await sequelizeConn.query(
       `
@@ -2603,8 +2921,7 @@ const FULL_USER_CAPABILITIES = [
   'editCellData',
   'editTaxon',
   'addCellComment',
-  'addCharacterToPartition',
-  'addTaxonToPartition',
+  'editPartition',
   'setMatrixOptions',
 ]
 
@@ -2621,8 +2938,7 @@ const CHARACTER_ANNOTATOR_CAPABILITIES = [
   'editTaxon',
   'addTaxonMedia',
   'deleteTaxonMedia',
-  'addCharacterToPartition',
-  'addTaxonToPartition',
+  'editPartition',
 ]
 
 export default MatrixEditorService

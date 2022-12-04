@@ -195,6 +195,69 @@ export async function removeCellMedia(req, res) {
   )
 }
 
+export async function addPartition(req, res) {
+  const name = req.body.name
+  const description = req.body.description
+  await applyMatrix(req, res, (service) =>
+    service.addPartition(name, description)
+  )
+}
+
+export async function editPartition(req, res) {
+  const partitionId = parseInt(req.body.partition_id)
+  const name = req.body.name
+  const description = req.body.description
+  await applyMatrix(req, res, (service) =>
+    service.editPartition(partitionId, name, description)
+  )
+}
+
+export async function copyPartition(req, res) {
+  const partitionId = parseInt(req.body.partition_id)
+  const name = req.body.name
+  const description = req.body.description
+  await applyMatrix(req, res, (service) =>
+    service.copyPartition(partitionId, name, description)
+  )
+}
+
+export async function removePartition(req, res) {
+  const partitionId = parseInt(req.body.partition_id)
+  await applyMatrix(req, res, (service) => service.removePartition(partitionId))
+}
+
+export async function addCharactersToPartition(req, res) {
+  const partitionId = parseInt(req.body.partition_id)
+  const characterIds = parseIntArray(req.body.character_ids)
+  await applyMatrix(req, res, (service) =>
+    service.addCharactersToPartition(partitionId, characterIds)
+  )
+}
+
+export async function removeCharactersFromPartition(req, res) {
+  const partitionId = parseInt(req.body.partition_id)
+  const characterIds = parseIntArray(req.body.character_ids)
+  await applyMatrix(req, res, (service) =>
+    service.removeCharactersFromPartition(partitionId, characterIds)
+  )
+}
+
+export async function addTaxaToPartition(req, res) {
+  const partitionId = parseInt(req.body.partition_id)
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  await applyMatrix(req, res, (service) =>
+    service.addTaxaToPartition(partitionId, taxaIds)
+  )
+}
+
+export async function removeTaxaFromPartition(req, res) {
+  const partitionId = parseInt(req.body.partition_id)
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  await applyMatrix(req, res, (service) =>
+    service.removeTaxaFromPartition(partitionId, taxaIds)
+  )
+}
+
 export async function logError(req) {
   console.log('JS error: ', req.body)
 }
@@ -218,9 +281,9 @@ export async function applyMatrix(req, res, func) {
   } catch (e) {
     console.log('Error', e)
     if (e instanceof UserError) {
-      res.status(e.getStatus()).json({ data: false, message: e.message })
+      res.status(e.getStatus()).json({ ok: false, errors: [e.message] })
     } else {
-      res.status(500).json({ data: false, message: 'Unknown error' })
+      res.status(500).json({ ok: false, errors: ['Unknown error'] })
     }
   }
 }
