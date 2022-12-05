@@ -9,6 +9,14 @@ export async function getCellData(req, res) {
   await applyMatrix(req, res, (service) => service.getCellData())
 }
 
+export async function fetchCellsData(req, res) {
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  const characterIds = parseIntArray(req.body.character_ids)
+  await applyMatrix(req, res, (service) =>
+    service.fetchCellsData(taxaIds, characterIds)
+  )
+}
+
 export async function getCellCounts(req, res) {
   const startCharacterNum = parseInt(req.body.start_character_num)
   const endCharacterNum = parseInt(req.body.end_character_num)
@@ -255,6 +263,53 @@ export async function removeTaxaFromPartition(req, res) {
   const taxaIds = parseIntArray(req.body.taxa_ids)
   await applyMatrix(req, res, (service) =>
     service.removeTaxaFromPartition(partitionId, taxaIds)
+  )
+}
+
+export async function searchCells(req, res) {
+  const partitionId = parseInt(req.body.partition_id)
+  const taxonId = parseInt(req.body.taxon_id)
+  const limitToUnscoredCells = req.body.limitToUnscoredCells
+  const limitToScoredCells = req.body.limitToScoredCells
+  const limitToUndocumentedCells = req.body.limitToUndocumentedCells
+  const limitToNPACells = req.body.limitToNPACells
+  const limitToPolymorphicCells = req.body.limitToPolymorphicCells
+  const limitToUnimagedCells = req.body.limitToUnimagedCells
+  await applyMatrix(req, res, (service) =>
+    service.searchCells(
+      partitionId,
+      taxonId,
+      limitToUnscoredCells,
+      limitToScoredCells,
+      limitToUndocumentedCells,
+      limitToNPACells,
+      limitToPolymorphicCells,
+      limitToUnimagedCells
+    )
+  )
+}
+
+export async function searchCharacters(req, res) {
+  const partitionId = parseInt(req.body.partition_id)
+  const limitToUnscoredCells = req.body.limitToUnscoredCells
+  const limitToUnusedMedia = req.body.limitToUnusedMedia
+  const limitToNPACells = req.body.limitToNPACells
+  await applyMatrix(req, res, (service) =>
+    service.searchCharacters(
+      partitionId,
+      limitToUnscoredCells,
+      limitToUnusedMedia,
+      limitToNPACells
+    )
+  )
+}
+
+export async function searchTaxa(req, res) {
+  const partitionId = parseInt(req.body.partition_id)
+  const limitToUnscoredCells = req.body.limitToUnscoredCells
+  const limitToNPACells = req.body.limitToNPACells
+  await applyMatrix(req, res, (service) =>
+    service.searchTaxa(partitionId, limitToUnscoredCells, limitToNPACells)
   )
 }
 
