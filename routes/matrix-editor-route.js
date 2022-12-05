@@ -11,6 +11,10 @@ router.post('/reorderTaxa', controller.reorderTaxa)
 router.post('/setTaxaNotes', controller.setTaxaNotes)
 router.post('/setTaxaAccess', controller.setTaxaAccess)
 
+// Character-specific-endpoints
+router.post('/addCharacterRuleAction', controller.addCharacterRuleAction)
+router.post('/removeCharacterRuleAction', controller.removeCharacterRuleAction)
+
 // Cell specific endpoints
 router.post('/addCellCitations', controller.addCellCitations)
 router.post('/addCellMedia', controller.addCellMedia)
