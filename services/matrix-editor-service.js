@@ -1446,6 +1446,136 @@ class MatrixEditorService {
     }
   }
 
+  async addCharacterRuleAction(
+    characterId,
+    stateId,
+    actionCharacterIds,
+    actionStateId,
+    action
+  ) {
+    // Since adding an ontology rule may modify cell scores or media, ensure
+    // that the user has access to edit the cell data.
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to add ontologies to this matrix'
+    )
+
+    // Ensure that if multiple action characters are defined, the given action
+    // state id is inapplicable.
+    if (actionStateId && actionCharacterIds.length > 1) {
+      throw new UserError('You cannot add one state for numerous characters')
+    }
+
+    if (stateId) {
+      const state = await models.CharacterState.findByPk(stateId)
+      if (state == null || state.character_id != characterId) {
+        throw new UserError('Invalid state for character')
+      }
+    }
+
+    if (actionStateId) {
+      const state = await models.CharacterState.findByPk(actionStateId)
+      if (state == null || state.character_id != actionCharacterIds[0]) {
+        throw new UserError('Invalid state for action character')
+      }
+    }
+
+    const transaction = await sequelizeConn.transaction()
+    const [characterRule] = await models.CharacterRule.findOrCreate({
+      where: {
+        character_id: characterId,
+        state_id: stateId,
+      },
+      defaults: {
+        character_id: characterId,
+        state_id: stateId,
+        user_id: this.user.user_id,
+        created_on: time(),
+        source: 'HTML5',
+      },
+      transaction: transaction,
+    })
+
+    const actionIds = []
+    for (const actionCharacterId of actionCharacterIds) {
+      const [rule, created] = await models.CharacterRuleAction.findOrCreate({
+        where: {
+          rule_id: characterRule.rule_id,
+          character_id: actionCharacterId,
+          action: action,
+        },
+        defaults: {
+          rule_id: characterRule.rule_id,
+          character_id: actionCharacterId,
+          action: action,
+          state_id: actionStateId,
+          user_id: this.user.user_id,
+        },
+        transaction: transaction,
+      })
+
+      if (!created) {
+        rule.state_id = actionStateId
+        await rule.save({ transaction: transaction })
+      }
+
+      const actionId = parseInt(rule.action_id)
+      actionIds.push(actionId)
+    }
+
+    await transaction.commit()
+    return {
+      ads: actionIds,
+      a: action,
+      cd: characterId,
+      sd: stateId,
+      acds: actionCharacterIds,
+      asd: actionStateId,
+    }
+  }
+
+  async removeCharacterRuleAction(characterId, actionId) {
+    // Since adding an ontology rule may modify cell scores or media, ensure
+    // that the user has access to edit the cell data.
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to remove ontologies to this matrix'
+    )
+
+    const character = await models.Character.findByPk(characterId)
+    if (character == null) {
+      throw new UserError('The character does not exist')
+    }
+    if (character.project_id != this.project.project_id) {
+      throw new UserError('This character does not belong to this project')
+    }
+
+    const action = await models.CharacterRuleAction.findByPk(actionId)
+    if (action) {
+      const transaction = await sequelizeConn.transaction()
+      const rule = await models.CharacterRule.findByPk(action.rule_id)
+      if (rule.character_id != characterId) {
+        throw new UserError('This action does not belong to this character')
+      }
+      await action.destroy({ transaction: transaction })
+
+      // If there are no other linked actions. Let's also delete the rule.
+      const [[{ count }]] = await sequelizeConn.query(
+        'SELECT COUNT(*) count FROM character_rule_actions WHERE rule_id = ?',
+        { replacements: [action.rule_id], transaction: transaction }
+      )
+      if (count == 0) {
+        await rule.destroy({ transaction: transaction })
+      }
+      await transaction.commit()
+    }
+
+    return {
+      action_id: actionId,
+      character_id: characterId,
+    }
+  }
+
   async setCellStates(taxaIds, characterIds, stateIds, options) {
     if (taxaIds.length == 0) {
       throw new UserError('Please specify at least one taxon')

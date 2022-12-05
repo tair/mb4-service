@@ -101,6 +101,31 @@ export async function loadTaxaMedia(req, res) {
   )
 }
 
+export async function addCharacterRuleAction(req, res) {
+  const characterId = parseInt(req.body.character_id)
+  const stateId = parseNullableInt(req.body.state_id)
+  const actionCharacterIds = parseIntArray(req.body.action_character_ids)
+  const actionStateId = parseNullableInt(req.body.action_state_id)
+  const action = req.body.action
+  await applyMatrix(req, res, (service) =>
+    service.addCharacterRuleAction(
+      characterId,
+      stateId,
+      actionCharacterIds,
+      actionStateId,
+      action
+    )
+  )
+}
+
+export async function removeCharacterRuleAction(req, res) {
+  const characterId = parseInt(req.body.character_id)
+  const actionId = parseInt(req.body.action_id)
+  await applyMatrix(req, res, (service) =>
+    service.removeCharacterRuleAction(characterId, actionId)
+  )
+}
+
 export async function setCellStates(req, res) {
   const taxaIds = parseIntArray(req.body.taxa_ids)
   const characterIds = parseIntArray(req.body.character_ids)

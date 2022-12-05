@@ -43,10 +43,6 @@ export default class CharacterRuleAction extends Model {
             key: 'state_id',
           },
         },
-        settings: {
-          type: DataTypes.JSON,
-          allowNull: true,
-        },
         user_id: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
