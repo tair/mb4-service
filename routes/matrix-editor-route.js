@@ -15,9 +15,10 @@ router.post('/setTaxaAccess', controller.setTaxaAccess)
 router.post('/addCharacterRuleAction', controller.addCharacterRuleAction)
 router.post('/removeCharacterRuleAction', controller.removeCharacterRuleAction)
 
-// Cell specific endpoints
+// Cell-specific endpoints
 router.post('/addCellCitations', controller.addCellCitations)
 router.post('/addCellMedia', controller.addCellMedia)
+router.post('/fetchCellsData', controller.fetchCellsData)
 router.post('/findCitation', controller.findCitation)
 router.post('/getAllCellNotes', controller.getAllCellNotes)
 router.post('/getCellCitations', controller.getCellCitations)
@@ -30,8 +31,26 @@ router.post('/setCellNotes', controller.setCellNotes)
 router.post('/setCellStates', controller.setCellStates)
 router.post('/upsertCellCitation', controller.upsertCellCitation)
 
+// Partition-specific endpoints
+router.post('/addCharactersToPartition', controller.addCharactersToPartition)
+router.post('/addPartition', controller.addPartition)
+router.post('/addTaxaToPartition', controller.addTaxaToPartition)
+router.post('/editPartition', controller.editPartition)
+router.post('/copyPartition', controller.copyPartition)
+router.post(
+  '/removeCharactersFromPartition',
+  controller.removeCharactersFromPartition
+)
+router.post('/removePartition', controller.removePartition)
+router.post('/removeTaxaToPartition', controller.removeTaxaFromPartition)
+
 // General endpoints
 router.post('/getMatrixData', controller.getMatrixData)
 router.post('/logError', controller.logError)
+
+// Search endpoints
+router.post('/searchCells', controller.searchCells)
+router.post('/searchCharacters', controller.searchCharacters)
+router.post('/searchTaxa', controller.searchTaxa)
 
 export default router

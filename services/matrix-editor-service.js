@@ -47,8 +47,8 @@ class MatrixEditorService {
     const [rows] = await sequelizeConn.query(
       `
       SELECT
-        c.cell_id, c.taxon_id, c.character_id, c.state_id, c.user_id, c.is_npa, c.is_uncertain,
-        c.created_on, c.start_value, c.end_value, ch.type
+        c.cell_id, c.taxon_id, c.character_id, c.state_id, c.user_id, c.is_npa,
+        c.is_uncertain, c.created_on, c.start_value, c.end_value, ch.type
       FROM cells c
       INNER JOIN matrix_character_order AS mco
         ON mco.character_id = c.character_id AND mco.matrix_id = c.matrix_id
@@ -64,6 +64,152 @@ class MatrixEditorService {
     return {
       cells: this.convertCellQueryToResults(rows),
     }
+  }
+
+  async fetchCellsData(taxaIds, characterIds) {
+    const shouldLimitToPublishedData = await this.shouldLimitToPublishedData()
+
+    const [cellRows] = await sequelizeConn.query(
+      `
+      SELECT 
+        c.cell_id, c.taxon_id, c.character_id, c.state_id, c.user_id, c.is_npa,
+        c.is_uncertain, c.created_on, c.start_value, c.end_value, ch.type
+      FROM cells c
+      INNER JOIN matrix_character_order AS mco ON 
+        mco.character_id = c.character_id AND 
+        mco.matrix_id = c.matrix_id
+      INNER JOIN characters AS ch ON 
+        ch.character_id = mco.character_id
+      INNER JOIN matrix_taxa_order AS mto ON 
+        mto.taxon_id = c.taxon_id AND 
+        mto.matrix_id = c.matrix_id
+      WHERE
+        c.matrix_id = ? AND
+        c.taxon_id IN (?) AND
+        c.character_id IN (?)
+      ORDER BY c.taxon_id, c.character_id`,
+      { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
+    )
+
+    const mediaClause = shouldLimitToPublishedData ? 'mf.published = 0 AND' : ''
+    const [labelCountRows] = await sequelizeConn.query(
+      `
+      SELECT cxm.media_id, cxm.taxon_id, cxm.character_id, count(*) label_count
+      FROM media_labels ml
+      INNER JOIN cells_x_media AS cxm ON 
+        ml.link_id = cxm.link_id AND 
+        cxm.media_id = ml.media_id
+      INNER JOIN media_files AS mf ON 
+        cxm.media_id = mf.media_id
+      WHERE
+        ${mediaClause}
+        cxm.matrix_id = ? AND
+        cxm.taxon_id IN (?) AND
+        cxm.character_id IN (?) AND
+        ml.table_num = 7
+      GROUP BY cxm.character_id, cxm.taxon_id, cxm.media_id`,
+      { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
+    )
+    const labelCountMap = new Table()
+    for (const row of labelCountRows) {
+      const mediaId = parseInt(row.media_id)
+      const taxonId = parseInt(row.taxon_id)
+      const characterId = parseInt(row.character_id)
+      const labelCount = parseInt(row.label_count)
+      labelCountMap.set(taxonId, characterId, mediaId, labelCount)
+    }
+
+    const [mediaRows] = await sequelizeConn.query(
+      `
+      SELECT
+        cxm.media_id, cxm.taxon_id, cxm.character_id,
+      mf.media, mf.notes, cxm.link_id
+      FROM cells_x_media cxm
+      INNER JOIN media_files AS mf ON cxm.media_id = mf.media_id
+      WHERE
+        ${mediaClause}
+        cxm.matrix_id = ? AND
+        cxm.taxon_id IN (?) AND
+        cxm.character_id IN (?)
+      GROUP BY cxm.link_id`,
+      { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
+    )
+
+    const cellMedia = []
+    for (const row of mediaRows) {
+      const linkId = parseInt(row.link_id)
+      const mediaId = parseInt(row.media_id)
+      const taxonId = parseInt(row.taxon_id)
+      const characterId = parseInt(row.character_id)
+      cellMedia.push({
+        link_id: linkId,
+        media_id: mediaId,
+        taxon_id: taxonId,
+        character_id: characterId,
+        tiny: getMedia(row.media, 'tiny'),
+        icon: getMedia(row.media, 'icon'),
+        label_count: labelCountMap.get(taxonId, characterId, mediaId) ?? 0,
+      })
+    }
+
+    const [cellNotesRows] = await sequelizeConn.query(
+      `
+      SELECT DISTINCT
+        cn.note_id, cn.notes, cn.taxon_id, cn.character_id, cn.matrix_id,
+        cn.status, cn.ancestor_note_id
+      FROM cell_notes cn
+      WHERE
+        cn.matrix_id = ? AND 
+        cn.taxon_id IN (?) AND
+        cn.character_id IN (?)`,
+      { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
+    )
+    const cellNotes = []
+    for (const cellNoteRow of cellNotesRows) {
+      cellNotes.push({
+        character_id: cellNoteRow.character_id,
+        taxon_id: cellNoteRow.taxon_id,
+        status: cellNoteRow.status,
+        notes: cellNoteRow.notes,
+      })
+    }
+
+    const cells = {
+      taxa_ids: taxaIds,
+      character_ids: characterIds,
+      cells: this.convertCellQueryToResults(cellRows),
+      notes: cellNotes,
+      media: cellMedia,
+    }
+
+    if (shouldLimitToPublishedData) {
+      const [citationCountRows] = await sequelizeConn.query(
+        `
+      SELECT count(*) citation_count, cxbr.taxon_id, cxbr.character_id
+      FROM cells_x_bibliographic_references cxbr
+      WHERE
+        cxbr.matrix_id = ? AND
+        cxbr.taxon_id IN (?) AND
+        cxbr.character_id IN (?)
+      GROUP BY
+        cxbr.taxon_id, cxbr.character_id`,
+        { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
+      )
+
+      const citationCounts = {}
+      for (const row of citationCountRows) {
+        const characterId = parseInt(row.character_id)
+        const taxonId = parseInt(row.taxon_id)
+        if (!(taxonId in citationCounts)) {
+          citationCounts[taxonId] = {}
+        }
+        citationCounts[taxonId][characterId] = parseInt(row.citation_count)
+      }
+      cells.counts = {
+        citation_counts: citationCounts,
+      }
+    }
+    return cells
   }
 
   async getCellCounts(
@@ -296,11 +442,11 @@ class MatrixEditorService {
   async getCellCitations(taxonId, characterId) {
     const [rows] = await sequelizeConn.query(
       `
-			SELECT *
+      SELECT *
       FROM bibliographic_references br
-			INNER JOIN cells_x_bibliographic_references AS cxbr ON cxbr.reference_id = br.reference_id
-			WHERE
-				cxbr.matrix_id = ? AND cxbr.taxon_id = ? AND cxbr.character_id = ?`,
+      INNER JOIN cells_x_bibliographic_references AS cxbr ON cxbr.reference_id = br.reference_id
+      WHERE
+        cxbr.matrix_id = ? AND cxbr.taxon_id = ? AND cxbr.character_id = ?`,
       { replacements: [this.matrix.matrix_id, taxonId, characterId] }
     )
 
@@ -520,7 +666,7 @@ class MatrixEditorService {
 
       link.pp = pp
       link.notes = notes
-      await link.update({ transaction: transaction })
+      await link.save({ transaction: transaction })
     }
 
     await transaction.commit()
@@ -715,8 +861,8 @@ class MatrixEditorService {
         name: row.name,
         description: row.description,
         project_id: parseInt(row.project_id),
-        character_ids: characters.get(partitionId) ?? {},
-        taxa_ids: taxa.get(partitionId) ?? {},
+        character_ids: characters.get(partitionId) ?? [],
+        taxa_ids: taxa.get(partitionId) ?? [],
       })
     }
     return partitions
@@ -1829,6 +1975,298 @@ class MatrixEditorService {
     }
   }
 
+  async addPartition(name, description) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to add partitions'
+    )
+
+    await this.checkPartitionNameExists(name)
+
+    const partition = await models.Partition.create({
+      project_id: this.project.project_id,
+      user_id: this.user.user_id,
+      name: name,
+      description: description,
+      source: 'HTML5',
+    })
+
+    return {
+      id: partition.partition_id,
+      name: name,
+      description: description,
+      user_id: this.user.user_id,
+      project_id: this.project.project_id,
+    }
+  }
+
+  async editPartition(partitionId, name, description) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to modify partitions'
+    )
+
+    await this.checkPartitionNameExists(name)
+  
+    const transaction = await sequelizeConn.transaction()
+    const partition = await models.Partition.findByPk(partitionId)
+    if (!partition || partition.project_id != this.project.project_id) {
+      throw new UserError('Invalid Partition id')
+    }
+
+    partition.name = name
+    partition.description = description
+    partition.source = 'HTML5'
+
+    await partition.save({ transaction: transaction })
+    await transaction.commit()
+    return {
+      id: partition.partition_id,
+      name: name,
+      description: description,
+      user_id: this.user.user_id,
+      project_id: this.project.project_id,
+    }
+  }
+
+  async copyPartition(partitionId, name, description) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to copy partitions'
+    )
+
+    await this.checkPartitionNameExists(name)
+
+    const partition = await models.Partition.findByPk(partitionId)
+    if (!partition) {
+      throw new UserError('Partition does not exist')
+    }
+    if (partition.project_id != this.project.project_id) {
+      throw new UserError('The given partition does not belong to this project')
+    }
+
+    const [characterRows] = await sequelizeConn.query(
+      'SELECT character_id FROM characters_x_partitions WHERE partition_id = ?',
+      { replacements: [partitionId] }
+    )
+    const characterIds = characterRows.map((row) => parseInt(row.character_id))
+
+    const [taxaRows] = await sequelizeConn.query(
+      'SELECT taxon_id FROM taxa_x_partitions WHERE partition_id = ? ',
+      { replacements: [partitionId] }
+    )
+    const taxaIds = taxaRows.map((row) => parseInt(row.taxon_id))
+
+    const transaction = await sequelizeConn.transaction()
+    const newPartition = await models.Partition.create(
+      {
+        project_id: this.project.project_id,
+        user_id: this.user.user_id,
+        name: name,
+        description: description,
+        source: 'HTML5',
+      },
+      { transaction: transaction }
+    )
+    for (const taxonId of taxaIds) {
+      await models.TaxaXPartition.create(
+        {
+          taxon_id: taxonId,
+          partition_id: newPartition.partition_id,
+          user_id: this.user.user_id,
+        },
+        {
+          transaction: transaction,
+        }
+      )
+    }
+
+    for (const characterId of characterIds) {
+      await models.CharactersXPartition.create(
+        {
+          character_id: characterId,
+          partition_id: newPartition.partition_id,
+          user_id: this.user.user_id,
+        },
+        {
+          transaction: transaction,
+        }
+      )
+    }
+    await transaction.commit()
+    return {
+      id: newPartition.partition_id,
+      name: name,
+      description: description,
+      user_id: this.user.user_id,
+      project_id: this.project.project_id,
+      taxa_ids: taxaIds,
+      character_ids: characterIds,
+    }
+  }
+
+  async checkPartitionNameExists(name) {
+    const [[{ count }]] = await sequelizeConn.query(
+      'SELECT COUNT(*) AS count FROM partitions WHERE project_id = ? AND name = ?',
+      { replacements: [this.project.project_id, name] }
+    )
+    if (count) {
+      throw new UserError('Partition by the given name already exists')
+    }   
+  }
+
+  async removePartition(partitionId) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to remove partitions'
+    )
+    await models.Partition.destroy({
+      where: {
+        partition_id: partitionId,
+        project_id: this.project.project_id,
+      },
+    })
+    return {
+      id: partitionId,
+    }
+  }
+
+  async addCharactersToPartition(partitionId, characterIds) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to add characters to partitions'
+    )
+
+    const partition = await models.Partition.findByPk(partitionId)
+    if (!partition) {
+      throw new UserError('Partition does not exist')
+    }
+    if (partition.project_id != this.project.project_id) {
+      throw new UserError('The given partition does not belong to this project')
+    }
+
+    await this.checkCharactersInProject(characterIds)
+    const transaction = await sequelizeConn.transaction()
+    for (const characterId of characterIds) {
+      await models.CharactersXPartition.findOrCreate({
+        where: {
+          character_id: characterId,
+          partition_id: partitionId,
+        },
+        defaults: {
+          character_id: characterId,
+          partition_id: partitionId,
+          user_id: this.user.user_id,
+        },
+        transaction: transaction,
+      })
+    }
+    await transaction.commit()
+    return {
+      id: partitionId,
+      character_ids: characterIds,
+    }
+  }
+
+  async removeCharactersFromPartition(partitionId, characterIds) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to remove characters from partitions'
+    )
+
+    const partition = await models.Partition.findByPk(partitionId)
+    if (!partition) {
+      throw new UserError('Partition does not exist')
+    }
+    if (partition.project_id != this.project.project_id) {
+      throw new UserError('The given partition does not belong to this project')
+    }
+
+    await this.checkCharactersInProject(characterIds)
+    const transaction = await sequelizeConn.transaction()
+    await models.CharactersXPartition.destroy({
+      where: {
+        partition_id: partitionId,
+        character_id: { [Op.in]: characterIds },
+      },
+      individualHooks: true,
+      transaction: transaction,
+    })
+    await transaction.commit()
+    return {
+      id: partitionId,
+      character_ids: characterIds,
+    }
+  }
+
+  async addTaxaToPartition(partitionId, taxaIds) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to add taxa to partitions'
+    )
+
+    const partition = await models.Partition.findByPk(partitionId)
+    if (!partition) {
+      throw new UserError('Partition does not exist')
+    }
+    if (partition.project_id != this.project.project_id) {
+      throw new UserError('The given partition does not belong to this project')
+    }
+
+    await this.checkTaxaInProject(taxaIds)
+    const transaction = await sequelizeConn.transaction()
+    for (const taxonId of taxaIds) {
+      await models.TaxaXPartition.findOrCreate({
+        where: {
+          taxon_id: taxonId,
+          partition_id: partitionId,
+        },
+        defaults: {
+          taxon_id: taxonId,
+          partition_id: partitionId,
+          user_id: this.user.user_id,
+        },
+        transaction: transaction,
+      })
+    }
+    await transaction.commit()
+    return {
+      id: partitionId,
+      taxon_ids: taxaIds,
+    }
+  }
+
+  async removeTaxaFromPartition(partitionId, taxaIds) {
+    await this.checkCanDo(
+      'editPartition',
+      'You are not allowed to remove taxa from partitions'
+    )
+
+    const partition = await models.Partition.findByPk(partitionId)
+    if (!partition) {
+      throw new UserError('Partition does not exist')
+    }
+    if (partition.project_id != this.project.project_id) {
+      throw new UserError('The given partition does not belong to this project')
+    }
+
+    await this.checkTaxaInProject(taxaIds)
+    const transaction = await sequelizeConn.transaction()
+    await models.TaxaXPartition.destroy({
+      where: {
+        partition_id: partitionId,
+        taxon_id: { [Op.in]: taxaIds },
+      },
+      individualHooks: true,
+      transaction: transaction,
+    })
+    await transaction.commit()
+    return {
+      id: partitionId,
+      taxon_ids: taxaIds,
+    }
+  }
+
   getMatrixInfo() {
     return {
       id: this.matrix.matrix_id,
@@ -2141,6 +2579,11 @@ class MatrixEditorService {
   }
 
   async getCellsStates(taxaIds, characterIds) {
+    const stateIds = new Table()
+    if (taxaIds.length == 0 || characterIds.length == 0) {
+      return stateIds
+    }
+
     const [rows] = await sequelizeConn.query(
       `
         SELECT cell_id, taxon_id, character_id, state_id, is_npa, is_uncertain, start_value, end_value, created_on
@@ -2148,8 +2591,6 @@ class MatrixEditorService {
         WHERE matrix_id = ? AND character_id IN (?) AND taxon_id IN (?)`,
       { replacements: [this.matrix.matrix_id, characterIds, taxaIds] }
     )
-
-    const stateIds = new Table()
     for (const row of rows) {
       const isNPA = parseInt(row.is_npa)
       const isUncertain = parseInt(row.is_uncertain)
@@ -2173,6 +2614,380 @@ class MatrixEditorService {
     }
 
     return stateIds
+  }
+
+  async searchTaxa(partitionId, limitToUnscoredCells, limitToNPACells) {
+    let taxaPartitionClause = ''
+    let characterPartitionClause = ''
+    const replacements = []
+    if (partitionId) {
+      taxaPartitionClause = `
+        INNER JOIN taxa_x_partitions AS txp ON 
+          txp.taxon_id = mto.taxon_id AND 
+          txp.partition_id = ?`
+      characterPartitionClause = `
+        INNER JOIN characters_x_partitions AS cxp ON
+          cxp.character_id = mco.character_id AND
+          cxp.partition_id = ?`
+      replacements.push(partitionId, partitionId)
+    }
+
+    let sql
+    if (limitToUnscoredCells) {
+      sql = `
+        SELECT fm.taxon_id
+        FROM(
+          SELECT mto.position, mto.taxon_id
+            FROM matrix_taxa_order mto
+            ${taxaPartitionClause}
+            INNER JOIN cells AS c ON c.matrix_id = mto.matrix_id AND c.taxon_id = mto.taxon_id
+            WHERE mto.matrix_id = ${this.matrix.matrix_id}
+            GROUP BY c.character_id, c.taxon_id
+        ) AS fm
+          GROUP BY fm.taxon_id
+          HAVING count(*) < (
+          SELECT count(*)
+            FROM matrix_character_order mco
+            ${characterPartitionClause}
+            WHERE mco.matrix_id = ${this.matrix.matrix_id}
+          )
+          ORDER BY fm.position`
+    } else if (limitToNPACells) {
+      sql = `
+        SELECT mto.taxon_id
+        FROM matrix_taxa_order mto
+        ${taxaPartitionClause}
+        INNER JOIN cells AS c ON
+          c.taxon_id = mto.taxon_id AND 
+          c.matrix_id = mto.matrix_id
+        INNER JOIN matrix_character_order AS mco ON
+          mco.character_id = c.character_id AND 
+          mco.matrix_id = c.matrix_id
+        ${characterPartitionClause}
+        WHERE c.is_npa = 1 AND mto.matrix_id = ${this.matrix.matrix_id}
+        GROUP BY mto.taxon_id
+        ORDER BY mto.position`
+    } else {
+      throw new UserError('Invalid search option')
+    }
+
+    const [rows] = await sequelizeConn.query(sql, {
+      replacements: replacements,
+    })
+
+    const results = []
+    for (const row of rows) {
+      results.push({
+        taxon_id: row.taxon_id,
+      })
+    }
+    return {
+      results: results,
+    }
+  }
+
+  async searchCells(
+    partitionId,
+    taxonId,
+    limitToUnscoredCells,
+    limitToScoredCells,
+    limitToUndocumentedCells,
+    limitToNPACells,
+    limitToPolymorphicCells,
+    limitToUnimagedCells
+  ) {
+    let taxaPartitionClause = ''
+    let characterPartitionClause = ''
+    const replacements = []
+    if (partitionId) {
+      taxaPartitionClause = `
+        INNER JOIN taxa_x_partitions AS txp ON 
+          txp.taxon_id = mto.taxon_id AND 
+          txp.partition_id = ${partitionId}`
+      characterPartitionClause = `
+        INNER JOIN characters_x_partitions AS cxp ON
+          cxp.character_id = mco.character_id AND
+          cxp.partition_id = ${partitionId}`
+      replacements.push(partitionId, partitionId)
+    }
+
+    let clause = ''
+    if (taxonId) {
+      clause += 'mto.taxon_id = ? AND'
+      replacements.push(taxonId)
+    }
+
+    let sql
+    if (
+      limitToScoredCells &&
+      limitToUndocumentedCells &&
+      limitToUnimagedCells
+    ) {
+      sql = `
+        SELECT c.character_id, c.taxon_id
+        FROM cells c
+        INNER JOIN matrix_taxa_order AS mto ON 
+          mto.taxon_id = c.taxon_id AND 
+          mto.matrix_id = c.matrix_id
+        ${taxaPartitionClause}
+        INNER JOIN matrix_character_order AS mco ON 
+          mco.character_id = c.character_id AND 
+          mco.matrix_id = mto.matrix_id
+        ${characterPartitionClause}
+        LEFT JOIN cells_x_media AS cxm ON 
+          cxm.taxon_id = mto.taxon_id AND 
+          cxm.character_id = mco.character_id AND 
+          cxm.matrix_id = mto.matrix_id
+        LEFT JOIN cell_notes AS cn ON 
+          cn.taxon_id = mto.taxon_id AND 
+          cn.character_id = mco.character_id AND 
+          cn.matrix_id = mto.matrix_id
+        LEFT JOIN cells_x_bibliographic_references AS cxbr ON
+          cxbr.taxon_id = mto.taxon_id AND 
+          cxbr.character_id = mco.character_id AND 
+          cxbr.matrix_id = mto.matrix_id
+        WHERE
+          cxm.taxon_id IS NULL AND cxm.character_id IS NULL AND
+          ((cn.taxon_id IS NULL AND cn.character_id IS NULL) OR cn.notes = '') AND
+          cxbr.taxon_id IS NULL AND cxbr.character_id IS NULL AND
+          c.is_npa = 0 AND 
+          c.state_id IS NOT NULL AND
+          ${clause}
+          c.matrix_id = ${this.matrix.matrix_id}
+          GROUP BY mco.character_id, mto.taxon_id
+          ORDER BY mco.position, mto.position`
+    } else if (limitToUndocumentedCells && limitToUnimagedCells) {
+      sql = `
+        SELECT mco.character_id, mto.taxon_id
+        FROM cells c
+        INNER JOIN matrix_taxa_order AS mto ON 
+          mto.taxon_id = c.taxon_id AND 
+          mto.matrix_id = c.matrix_id
+        ${taxaPartitionClause}
+        INNER JOIN matrix_character_order AS mco ON 
+          mco.character_id = c.character_id AND 
+          mco.matrix_id = mto.matrix_id
+        ${characterPartitionClause}
+        LEFT JOIN cells_x_media AS cxm ON 
+          cxm.taxon_id = mto.taxon_id AND 
+          cxm.character_id = mco.character_id AND 
+          cxm.matrix_id = mto.matrix_id
+        LEFT JOIN cell_notes AS cn ON 
+          cn.taxon_id = mto.taxon_id AND 
+          cn.character_id = mco.character_id AND 
+          cn.matrix_id = mto.matrix_id
+        LEFT JOIN cells_x_bibliographic_references AS cxbr ON 
+          cxbr.taxon_id = mto.taxon_id AND 
+          cxbr.character_id = mco.character_id AND 
+          cxbr.matrix_id = mto.matrix_id
+        WHERE
+          (cxm.taxon_id IS NULL AND cxm.character_id IS NULL AND cxm.matrix_id IS NULL) AND
+          ((cn.taxon_id IS NULL AND cn.character_id IS NULL AND cn.matrix_id IS NULL) OR cn.notes = '') AND
+          (cxbr.taxon_id IS NULL AND cxbr.character_id IS NULL AND cxbr.matrix_id IS NULL) AND
+          ${clause}
+          c.matrix_id = ${this.matrix.matrix_id}
+        GROUP BY mco.character_id, mto.taxon_id
+        ORDER BY mco.position, mto.position`
+    } else if (limitToUnscoredCells) {
+      sql = `
+        SELECT mco.character_id, mto.taxon_id
+        FROM matrix_taxa_order mto
+        ${taxaPartitionClause}
+        INNER JOIN matrix_character_order AS mco ON 
+          mco.matrix_id = mto.matrix_id
+        ${characterPartitionClause}
+        LEFT JOIN cells AS c ON 
+          c.taxon_id = mto.taxon_id AND 
+          c.character_id = mco.character_id AND 
+          c.matrix_id = mto.matrix_id
+        WHERE
+          (c.taxon_id IS NULL AND c.character_id IS NULL AND c.matrix_id IS NULL) AND
+          ${clause}
+          mto.matrix_id = ${this.matrix.matrix_id}
+        GROUP BY mco.character_id, mto.taxon_id
+        ORDER BY mco.position, mto.position`
+    } else if (limitToNPACells) {
+      sql = `
+        SELECT mco.character_id, mto.taxon_id
+        FROM cells c
+        INNER JOIN matrix_taxa_order AS mto ON 
+          mto.taxon_id = c.taxon_id AND 
+          mto.matrix_id = c.matrix_id
+        ${taxaPartitionClause}
+        INNER JOIN matrix_character_order AS mco ON 
+          mco.character_id = c.character_id AND 
+          mto.matrix_id = c.matrix_id
+        ${characterPartitionClause}
+        WHERE 
+          c.is_npa = 1 AND 
+          ${clause}
+          mto.matrix_id = ${this.matrix.matrix_id}
+        GROUP BY mco.position, mto.position, mco.character_id, mto.taxon_id
+        ORDER BY mco.position, mto.position`
+    } else if (limitToUnimagedCells) {
+      sql = `
+        SELECT mco.character_id, mto.taxon_id
+        FROM matrix_taxa_order mto
+        ${taxaPartitionClause}
+        INNER JOIN matrix_character_order AS mco ON 
+          mco.matrix_id = mto.matrix_id
+        ${characterPartitionClause}
+        LEFT JOIN cells_x_media AS cxm ON 
+          cxm.taxon_id = mto.taxon_id AND 
+          cxm.character_id = mco.character_id AND 
+          cxm.matrix_id = mto.matrix_id
+        WHERE 
+          cxm.taxon_id IS NULL AND 
+          cxm.character_id IS NULL AND
+          ${clause}
+          mto.matrix_id = ${this.matrix.matrix_id}
+        GROUP BY mco.character_id, mto.taxon_id
+        ORDER BY mco.position, mto.position`
+    } else if (limitToPolymorphicCells) {
+      sql = `
+       SELECT c.matrix_id, c.character_id, c.taxon_id
+        FROM cells AS c
+        INNER JOIN matrix_taxa_order mto ON 
+          mto.matrix_id = c.matrix_id AND
+          mto.taxon_id = c.taxon_id
+        ${taxaPartitionClause}
+        INNER JOIN matrix_character_order AS mco ON 
+          mco.matrix_id = c.matrix_id AND 
+          mco.character_id = c.character_id
+        ${characterPartitionClause}
+        WHERE 
+          ${clause}
+          c.matrix_id = ${this.matrix.matrix_id}
+        GROUP BY c.matrix_id, c.character_id, c.taxon_id
+        HAVING COUNT(*) > 1 AND COUNT(*) > COUNT(c.state_id)
+        ORDER BY mco.position, mto.position`
+    } else {
+      throw new UserError('Invalid search option')
+    }
+
+    const [rows] = await sequelizeConn.query(sql, {
+      replacements: replacements,
+    })
+
+    const results = []
+    for (const row of rows) {
+      results.push({
+        character_id: row.character_id,
+        taxon_id: row.taxon_id,
+      })
+    }
+    return {
+      results: results,
+    }
+  }
+
+  async searchCharacters(
+    partitionId,
+    limitToUnscoredCells,
+    limitToUnusedMedia,
+    limitToNPACells
+  ) {
+    let taxaPartitionClause = ''
+    let characterPartitionClause = ''
+    const replacements = []
+    if (partitionId) {
+      taxaPartitionClause = `
+        INNER JOIN taxa_x_partitions AS txp ON 
+          txp.taxon_id = mto.taxon_id AND 
+          txp.partition_id = ${partitionId}`
+      characterPartitionClause = `
+        INNER JOIN characters_x_partitions AS cxp ON
+          cxp.character_id = mco.character_id AND
+          cxp.partition_id = ${partitionId}`
+      replacements.push(partitionId, partitionId)
+    }
+
+    let sql
+    if (limitToUnscoredCells) {
+      sql = `
+        SELECT fm.character_id
+        FROM(
+          SELECT mco.position, mco.character_id
+            FROM matrix_character_order mco
+            ${characterPartitionClause}
+            INNER JOIN cells AS c ON c.matrix_id = mco.matrix_id AND c.character_id = mco.character_id
+            WHERE mco.matrix_id = ${this.matrix.matrix_id}
+            GROUP BY c.character_id, c.taxon_id
+        ) AS fm
+        GROUP BY fm.character_id
+        HAVING count(*) < (
+          SELECT count(*)
+          FROM matrix_taxa_order mto
+          ${taxaPartitionClause}
+          WHERE mto.matrix_id = ${this.matrix.matrix_id}
+        )
+        ORDER BY fm.position`
+    } else if (limitToNPACells) {
+      sql = `
+        SELECT mco.character_id
+        FROM matrix_character_order mco
+        ${characterPartitionClause}
+        INNER JOIN cells AS c ON 
+          c.character_id = mco.character_id AND 
+          c.matrix_id = mco.matrix_id
+        INNER JOIN matrix_taxa_order AS mto ON 
+          mto.taxon_id = c.taxon_id AND 
+          mto.matrix_id = c.matrix_id
+        ${taxaPartitionClause}
+        WHERE 
+          c.is_npa = 1 AND 
+          mco.matrix_id = ${this.matrix.matrix_id}
+        GROUP BY mco.character_id
+        ORDER BY mco.position`
+    } else if (limitToUnusedMedia) {
+      sql = `
+        SELECT 
+          mco.character_id, 
+          GROUP_CONCAT(DISTINCT chm.media_id ORDER BY chm.media_id SEPARATOR '; M') AS media_list
+        FROM matrix_character_order mco
+        ${characterPartitionClause}
+        INNER JOIN characters_x_media AS chm ON 
+          chm.character_id = mco.character_id
+        LEFT JOIN cells_x_media AS cxm ON 
+          cxm.character_id = mco.character_id AND 
+          cxm.matrix_id = mco.matrix_id AND 
+          chm.media_id = cxm.media_id
+        WHERE 
+          cxm.character_id IS NULL AND 
+          mco.matrix_id = ${this.matrix.matrix_id}
+        GROUP BY mco.character_id
+        ORDER BY mco.position`
+      const [rows] = await sequelizeConn.query(sql, {
+        replacements: replacements.splice(1),
+      })
+
+      const results = []
+      for (const row of rows) {
+        results.push({
+          character_id: row.character_id,
+          media_list: '; M' + row.media_list,
+        })
+      }
+      return {
+        results: results,
+      }
+    } else {
+      throw new Exception('Invalid search option')
+    }
+
+    const [rows] = await sequelizeConn.query(sql, {
+      replacements: replacements,
+    })
+
+    const results = []
+    for (const row of rows) {
+      results.push({
+        character_id: row.character_id,
+      })
+    }
+    return {
+      results: results,
+    }
   }
 
   async applyStateRules(scores, transaction) {
@@ -2228,6 +3043,10 @@ class MatrixEditorService {
             : 0
           : parseInt(score.state_id)
       const scoreRules = scoresRules.get(characterId, stateId)
+      if (!scoreRules) {
+        continue
+      }
+
       for (const rule of scoreRules) {
         const actionCharacterId = parseInt(rule.action_character_id)
         const existingScore = existingScores.get(taxonId, actionCharacterId)
@@ -2639,6 +3458,40 @@ class MatrixEditorService {
     return media
   }
 
+  async checkTaxaInProject(taxaIds) {
+    const [[{ count }]] = await sequelizeConn.query(
+      `
+      SELECT COUNT(taxon_id) AS count
+      FROM taxa
+      WHERE project_id = ? AND taxon_id IN (?)`,
+      {
+        replacements: [this.project.project_id, taxaIds],
+      }
+    )
+    if (count != taxaIds.length) {
+      throw new ForbiddenError(
+        'The requested taxa are not in the current project'
+      )
+    }
+  }
+
+  async checkCharactersInProject(characterIds) {
+    const [[{ count }]] = await sequelizeConn.query(
+      `
+      SELECT COUNT(character_id) AS count
+      FROM characters
+      WHERE project_id = ? AND character_id IN (?)`,
+      {
+        replacements: [this.project.project_id, characterIds],
+      }
+    )
+    if (count != characterIds.length) {
+      throw new ForbiddenError(
+        'The requested characters are not in the current project'
+      )
+    }
+  }
+
   async checkCanEditTaxa(taxaIds) {
     const [[{ count }]] = await sequelizeConn.query(
       `
@@ -2733,8 +3586,7 @@ const FULL_USER_CAPABILITIES = [
   'editCellData',
   'editTaxon',
   'addCellComment',
-  'addCharacterToPartition',
-  'addTaxonToPartition',
+  'editPartition',
   'setMatrixOptions',
 ]
 
@@ -2751,8 +3603,7 @@ const CHARACTER_ANNOTATOR_CAPABILITIES = [
   'editTaxon',
   'addTaxonMedia',
   'deleteTaxonMedia',
-  'addCharacterToPartition',
-  'addTaxonToPartition',
+  'editPartition',
 ]
 
 export default MatrixEditorService
