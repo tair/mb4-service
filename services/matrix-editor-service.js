@@ -14,6 +14,7 @@ import { models } from '../models/init-models.js'
 import { UserError } from '../lib/user-errors.js'
 import { ForbiddenError } from '../lib/forbidden-error.js'
 import User from '../models/user.js'
+import { TABLE_NUMBERS } from '../lib/table-number.js'
 
 class MatrixEditorService {
   constructor(project, matrix, user, readonly) {
@@ -71,17 +72,17 @@ class MatrixEditorService {
 
     const [cellRows] = await sequelizeConn.query(
       `
-      SELECT 
+      SELECT
         c.cell_id, c.taxon_id, c.character_id, c.state_id, c.user_id, c.is_npa,
         c.is_uncertain, c.created_on, c.start_value, c.end_value, ch.type
       FROM cells c
-      INNER JOIN matrix_character_order AS mco ON 
-        mco.character_id = c.character_id AND 
+      INNER JOIN matrix_character_order AS mco ON
+        mco.character_id = c.character_id AND
         mco.matrix_id = c.matrix_id
-      INNER JOIN characters AS ch ON 
+      INNER JOIN characters AS ch ON
         ch.character_id = mco.character_id
-      INNER JOIN matrix_taxa_order AS mto ON 
-        mto.taxon_id = c.taxon_id AND 
+      INNER JOIN matrix_taxa_order AS mto ON
+        mto.taxon_id = c.taxon_id AND
         mto.matrix_id = c.matrix_id
       WHERE
         c.matrix_id = ? AND
@@ -96,10 +97,10 @@ class MatrixEditorService {
       `
       SELECT cxm.media_id, cxm.taxon_id, cxm.character_id, count(*) label_count
       FROM media_labels ml
-      INNER JOIN cells_x_media AS cxm ON 
-        ml.link_id = cxm.link_id AND 
+      INNER JOIN cells_x_media AS cxm ON
+        ml.link_id = cxm.link_id AND
         cxm.media_id = ml.media_id
-      INNER JOIN media_files AS mf ON 
+      INNER JOIN media_files AS mf ON
         cxm.media_id = mf.media_id
       WHERE
         ${mediaClause}
@@ -159,7 +160,7 @@ class MatrixEditorService {
         cn.status, cn.ancestor_note_id
       FROM cell_notes cn
       WHERE
-        cn.matrix_id = ? AND 
+        cn.matrix_id = ? AND
         cn.taxon_id IN (?) AND
         cn.character_id IN (?)`,
       { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
@@ -470,12 +471,12 @@ class MatrixEditorService {
         FROM cells_x_media cxm
         INNER JOIN media_files_x_bibliographic_references AS mfxbr ON
           cxm.media_id = mfxbr.media_id
-        INNER JOIN media_files AS mf ON 
+        INNER JOIN media_files AS mf ON
           mf.media_id = cxm.media_id
         LEFT JOIN cells_x_bibliographic_references AS cxbr ON
-          cxbr.taxon_id = cxm.taxon_id AND 
+          cxbr.taxon_id = cxm.taxon_id AND
           cxbr.character_id = cxm.character_id AND
-          cxbr.matrix_id = cxm.matrix_id AND 
+          cxbr.matrix_id = cxm.matrix_id AND
           cxbr.reference_id = mfxbr.reference_id
         INNER JOIN bibliographic_references AS br ON
           br.reference_id = mfxbr.reference_id
@@ -802,16 +803,27 @@ class MatrixEditorService {
     return characterList
   }
 
-  async getPartitions() {
+  async getPartitions(partitionIds = null) {
+    const replacements = [this.matrix.matrix_id]
+    let clause = ''
+    if (partitionIds) {
+      clause = 'AND p.partition_id IN (?)'
+      replacements.push(partitionIds)
+    }
+
     const [characterRows] = await sequelizeConn.query(
       `
       SELECT cxp.partition_id, cxp.character_id
       FROM characters_x_partitions cxp
-      INNER JOIN matrix_character_order AS mco ON mco.character_id = cxp.character_id
-      INNER JOIN matrices AS m ON mco.matrix_id = m.matrix_id
-      INNER JOIN partitions AS p ON m.project_id = p.project_id AND cxp.partition_id = p.partition_id
-      WHERE m.matrix_id = ?`,
-      { replacements: [this.matrix.matrix_id] }
+      INNER JOIN matrix_character_order AS mco ON
+        mco.character_id = cxp.character_id
+      INNER JOIN matrices AS m ON
+        m.matrix_id = mco.matrix_id
+      INNER JOIN partitions AS p ON
+        p.project_id = m.project_id AND
+        p.partition_id = cxp.partition_id
+      WHERE m.matrix_id = ? ${clause}`,
+      { replacements: replacements }
     )
     const characters = new Map()
     for (const row of characterRows) {
@@ -827,11 +839,15 @@ class MatrixEditorService {
       `
       SELECT txp.partition_id, txp.taxon_id
       FROM taxa_x_partitions txp
-      INNER JOIN matrix_taxa_order AS mto ON mto.taxon_id = txp.taxon_id
-      INNER JOIN matrices AS m ON mto.matrix_id = m.matrix_id
-      INNER JOIN partitions AS p ON m.project_id = p.project_id AND txp.partition_id = p.partition_id
-      WHERE m.matrix_id = ? `,
-      { replacements: [this.matrix.matrix_id] }
+      INNER JOIN matrix_taxa_order AS mto ON
+        mto.taxon_id = txp.taxon_id
+      INNER JOIN matrices AS m ON
+        m.matrix_id = mto.matrix_id
+      INNER JOIN partitions AS p ON
+        p.project_id = m.project_id AND
+        p.partition_id = txp.partition_id
+      WHERE m.matrix_id = ? ${clause}`,
+      { replacements: replacements }
     )
     const taxa = new Map()
     for (const row of taxaRows) {
@@ -848,9 +864,9 @@ class MatrixEditorService {
       SELECT p.*
       FROM partitions p
       INNER JOIN matrices AS m ON p.project_id = m.project_id
-      WHERE m.matrix_id = ?
+      WHERE m.matrix_id = ? ${clause}
       ORDER BY p.name`,
-      { replacements: [this.matrix.matrix_id] }
+      { replacements: replacements }
     )
 
     const partitions = []
@@ -1576,6 +1592,433 @@ class MatrixEditorService {
     }
   }
 
+  async getRuleViolations() {
+    const violations = []
+
+    const [stateViolationsRows] = await sequelizeConn.query(
+      `
+      SELECT
+        cra.action_id, ca.taxon_id, cr.character_id AS rule_character_id,
+      cra.character_id AS action_character_id, cra.state_id
+      FROM matrix_character_order AS mco
+      INNER JOIN character_rules AS cr ON
+        cr.character_id = mco.character_id
+      INNER JOIN cells AS c ON
+        c.matrix_id = mco.matrix_id AND
+        c.character_id = cr.character_id AND
+        c.state_id = cr.state_id
+      INNER JOIN matrix_taxa_order AS mto ON
+        mto.taxon_id = c.taxon_id AND
+        mto.matrix_id = mco.matrix_id
+      INNER JOIN character_rule_actions AS cra ON
+        cra.rule_id = cr.rule_id AND
+        cra.action = 'SET_STATE'
+      INNER JOIN matrix_character_order AS mcoa ON
+        mcoa.character_id = cra.character_id AND
+        mcoa.matrix_id = mco.matrix_id
+      LEFT JOIN cells AS ca ON
+        ca.matrix_id = mcoa.matrix_id AND
+        ca.character_id = cra.character_id AND
+        ca.taxon_id = c.taxon_id
+      WHERE
+        mco.matrix_id = ? AND ca.state_id != cra.state_id
+      ORDER BY
+        mcoa.position, mto.position`,
+      { replacements: [this.matrix.matrix_id] }
+    )
+    for (const row of stateViolationsRows) {
+      violations.push({
+        aid: parseInt(row.action_id),
+        tid: parseInt(row.taxon_id),
+        rcid: parseInt(row.rule_character_id),
+        acid: parseInt(row.action_character_id),
+        sid: row.state_id == null ? 0 : parseInt(row.state_id),
+      })
+    }
+
+    const [mediaViolationsRows] = await sequelizeConn.query(
+      `
+      SELECT
+        cra.action_id, cxm.taxon_id, cr.character_id AS rule_character_id,
+      cra.character_id AS action_character_id, cra.state_id
+      FROM matrix_character_order AS mco
+      INNER JOIN character_rules AS cr ON
+        cr.character_id = mco.character_id
+      INNER JOIN cells_x_media AS cxm ON
+        cxm.character_id = mco.character_id AND
+        cxm.matrix_id = mco.matrix_id
+      INNER JOIN matrix_taxa_order AS mto ON
+        mto.matrix_id = mco.matrix_id AND
+        mto.taxon_id = cxm.taxon_id
+      INNER JOIN character_rule_actions AS cra ON
+        cra.rule_id = cr.rule_id AND
+        cra.action = 'ADD_MEDIA'
+      INNER JOIN matrix_character_order AS mcoa ON
+        mcoa.character_id = cra.character_id AND
+        mcoa.matrix_id = mco.matrix_id
+      LEFT JOIN cells_x_media AS cxma ON
+        cxma.character_id = mcoa.character_id AND
+        cxma.matrix_id = mcoa.matrix_id AND
+        cxma.media_id = cxm.media_id AND
+        cxma.taxon_id = cxm.taxon_id
+      WHERE
+        mco.matrix_id = ? AND cxma.media_id IS NULL
+      ORDER BY
+        mcoa.position, mto.position`,
+      { replacements: [this.matrix.matrix_id] }
+    )
+    for (const row of mediaViolationsRows) {
+      violations.push({
+        aid: parseInt(row.action_id),
+        tid: parseInt(row.taxon_id),
+        rcid: parseInt(row.rule_character_id),
+        acid: parseInt(row.action_character_id),
+        sid: row.state_id == null ? 0 : parseInt(row.state_id),
+      })
+    }
+
+    return {
+      violations: violations,
+    }
+  }
+
+  async fixRuleViolations(violations) {
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to modify cells this matrix'
+    )
+
+    const replacements = []
+
+    const taxaIds = []
+    const actionIds = []
+    const clauses = []
+    for (const violation of violations) {
+      const taxonId = parseInt(violation.tid)
+      const actionId = parseInt(violation.aid)
+      taxaIds.push(taxonId)
+      actionIds.push(actionId)
+      clauses.push('(cra.action_id = ? AND cxm.taxon_id = ?)')
+      replacements.push(actionId, taxonId)
+    }
+
+    await this.checkCanEditTaxa(taxaIds)
+
+    const characterRuleActions = new Map()
+    const [rulesRows] = await sequelizeConn.query(
+      `
+        SELECT
+          cra.action_id, cra.character_id, cra.state_id, cra.action
+        FROM matrix_character_order AS mco
+        INNER JOIN character_rules AS cr ON
+          cr.character_id = mco.character_id
+        INNER JOIN character_rule_actions AS cra ON
+          cra.rule_id = cr.rule_id
+        INNER JOIN matrix_character_order AS mcoa ON
+          mcoa.character_id = cra.character_id AND
+          mcoa.matrix_id = mco.matrix_id
+        WHERE mco.matrix_id = ? AND cra.action_id IN (?)`,
+      {
+        replacements: [this.matrix.matrix_id, actionIds],
+      }
+    )
+    for (const row of rulesRows) {
+      const actionId = parseInt(row.action_id)
+      characterRuleActions.set(actionId, {
+        character_id: parseInt(row.character_id),
+        state_id: row.state_id ? parseInt(row.state_id) : null,
+        action: row.action,
+      })
+    }
+
+    const [mediaRows] = await sequelizeConn.query(
+      `
+      SELECT
+        cra.action_id, cra.action, cxm.taxon_id, cra.character_id, cxm.media_id,
+        m.media
+      FROM matrix_character_order AS mco
+      INNER JOIN character_rules AS cr ON
+        cr.character_id = mco.character_id
+      INNER JOIN cells_x_media AS cxm ON
+        cxm.character_id = mco.character_id AND
+        cxm.matrix_id = mco.matrix_id
+      INNER JOIN matrix_taxa_order AS mto ON
+        mto.matrix_id = mco.matrix_id AND
+        mto.taxon_id = cxm.taxon_id
+      INNER JOIN character_rule_actions AS cra ON
+        cra.rule_id = cr.rule_id
+      INNER JOIN matrix_character_order AS mcoa ON
+        mcoa.character_id = cra.character_id AND
+        mcoa.matrix_id = mco.matrix_id
+      LEFT JOIN cells_x_media AS cxma ON
+        cxma.character_id = mcoa.character_id AND
+        cxma.matrix_id = mcoa.matrix_id AND
+        cxma.media_id = cxm.media_id AND
+        cxma.taxon_id = cxm.taxon_id
+      INNER JOIN media_files AS m ON
+        m.media_id = cxm.media_id
+      WHERE
+        mco.matrix_id = ? AND
+        cra.action = 'ADD_MEDIA' AND
+        cxma.media_id IS NULL AND (${clauses.join('OR')})`,
+      { replacements: [this.matrix.matrix_id, ...replacements] }
+    )
+    for (const row of mediaRows) {
+      const actionId = parseInt(row.action_id)
+      const characterRuleAction = characterRuleActions.get(actionId)
+      characterRuleAction.media_id = parseInt(row.media_id)
+      characterRuleAction.icon = getMedia(row.media, 'icon')
+      characterRuleAction.tiny = getMedia(row.media, 'tiny')
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    // The results from the violation fixes for cells and media
+    const changedCells = []
+    const changedMedia = []
+
+    for (const violation of violations) {
+      const taxonId = parseInt(violation.tid)
+      const actionId = parseInt(violation.aid)
+      const characterRuleAction = characterRuleActions.get(actionId)
+      const characterId = characterRuleAction['character_id']
+      switch (characterRuleAction['action']) {
+        case 'SET_STATE': {
+          await models.Cell.destroy({
+            where: {
+              matrix_id: this.matrix.matrix_id,
+              character_id: characterId,
+              taxon_id: taxonId,
+            },
+            individualHooks: true,
+            transaction: transaction,
+          })
+
+          const stateId = characterRuleAction['state_id']
+          const cell = await models.Cell.create(
+            {
+              matrix_id: this.matrix.matrix_id,
+              taxon_id: taxonId,
+              character_id: characterId,
+              user_id: this.user.user_id,
+              state_id: stateId > 0 ? stateId : null,
+            },
+            { transaction: transaction }
+          )
+          changedCells.push(cell)
+          break
+        }
+        case 'ADD_MEDIA': {
+          const mediaId = characterRuleAction['media_id']
+
+          const cellMedium = await models.CellsXMedium.create(
+            {
+              matrix_id: this.matrix.matrix_id,
+              taxon_id: taxonId,
+              character_id: characterId,
+              media_id: mediaId,
+              user_id: this.user.user_id,
+              source: 'HTML5',
+            },
+            { transaction: transaction }
+          )
+
+          changedMedia.push({
+            link_id: parseInt(cellMedium.link_id),
+            character_id: characterId,
+            taxon_id: taxonId,
+            media_id: mediaId,
+            icon: characterRuleAction.icon,
+            tiny: characterRuleAction.tiny,
+          })
+          break
+        }
+        default:
+          await transaction.rollback()
+          throw new UserError('Unknown character rule action')
+      }
+    }
+
+    await transaction.commit()
+    return {
+      ts: time(),
+      cells: this.convertCellQueryToResults(changedCells),
+      media: changedMedia,
+    }
+  }
+
+  async fixAllRuleViolations() {
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to modify cells this matrix'
+    )
+
+    const [allowedTaxaRows] = await sequelizeConn.query(
+      `
+      SELECT mto.taxon_id
+      FROM matrix_taxa_order mto
+      INNER JOIN matrices AS m ON
+        m.matrix_id = mto.matrix_id
+      INNER JOIN projects_x_users AS pxu ON
+        pxu.project_id = m.project_id
+      LEFT JOIN project_members_x_groups AS pmxg ON
+        pmxg.membership_id = pxu.link_id
+      WHERE
+        m.matrix_id = ? AND pxu.user_id = ? AND
+      (mto.group_id = pmxg.group_id OR mto.group_id IS NULL OR mto.user_id IS NULL OR mto.user_id = ?)`,
+      {
+        replacements: [
+          this.matrix.matrix_id,
+          this.user.user_id,
+          this.user.user_id,
+        ],
+      }
+    )
+    if (allowedTaxaRows.length == 0) {
+      throw new UserError(
+        'You are not allowed to modify any of the taxa in this matrix'
+      )
+    }
+    const allowedTaxaIds = []
+    for (const row of allowedTaxaRows) {
+      allowedTaxaIds.push(parseInt(row.taxon_id))
+    }
+
+    const [stateRows] = await sequelizeConn.query(
+      `
+      SELECT
+        c.taxon_id, cra.character_id, cra.state_id
+      FROM matrix_character_order AS mco
+      INNER JOIN character_rules AS cr ON
+        cr.character_id = mco.character_id
+      INNER JOIN cells AS c ON
+        c.matrix_id = mco.matrix_id AND
+        c.character_id = cr.character_id AND
+        c.state_id = cr.state_id
+      INNER JOIN matrix_taxa_order AS mto ON
+        mto.taxon_id = c.taxon_id AND
+        mto.matrix_id = mco.matrix_id
+      INNER JOIN character_rule_actions AS cra ON
+        cra.rule_id = cr.rule_id AND
+        cra.action = 'SET_STATE'
+      INNER JOIN matrix_character_order AS mcoa ON
+        mcoa.character_id = cra.character_id AND
+        mcoa.matrix_id = mco.matrix_id
+      LEFT JOIN cells AS ca ON
+        ca.matrix_id = mcoa.matrix_id AND
+        ca.character_id = cra.character_id AND
+        ca.taxon_id = c.taxon_id
+      WHERE
+        mco.matrix_id = ? AND
+        ca.state_id != cra.state_id AND
+        c.taxon_id IN (?)`,
+      {
+        replacements: [this.matrix.matrix_id, allowedTaxaIds],
+      }
+    )
+
+    const transaction = await sequelizeConn.transaction()
+
+    const changedCells = []
+    for (const row of stateRows) {
+      const characterId = parseInt(row.character_id)
+      const taxonId = parseInt(row.taxon_id)
+      await models.Cell.destroy({
+        where: {
+          matrix_id: this.matrix.matrix_id,
+          character_id: characterId,
+          taxon_id: taxonId,
+        },
+        individualHooks: true,
+        transaction: transaction,
+      })
+
+      const stateId = row.state_id
+      const cell = await models.Cell.create(
+        {
+          matrix_id: this.matrix.matrix_id,
+          taxon_id: taxonId,
+          character_id: characterId,
+          user_id: this.user.user_id,
+          state_id: stateId > 0 ? stateId : null,
+        },
+        { transaction: transaction }
+      )
+      changedCells.push(cell)
+    }
+
+    const [mediaRows] = await sequelizeConn.query(
+      `
+      SELECT
+        cxm.taxon_id, cra.character_id, cxm.media_id, m.media
+      FROM matrix_character_order AS mco
+      INNER JOIN character_rules AS cr ON
+        mco.character_id = cr.character_id
+      INNER JOIN cells_x_media AS cxm ON
+        cxm.character_id = mco.character_id AND
+        cxm.matrix_id = mco.matrix_id
+      INNER JOIN matrix_taxa_order AS mto ON
+        mto.matrix_id = mco.matrix_id AND
+        mto.taxon_id = cxm.taxon_id
+      INNER JOIN character_rule_actions AS cra ON
+        cra.rule_id = cr.rule_id AND
+        cra.action = 'ADD_MEDIA'
+      INNER JOIN matrix_character_order AS mcoa ON
+        cra.character_id = mcoa.character_id AND
+        mcoa.matrix_id = mco.matrix_id
+      LEFT JOIN cells_x_media AS cxma ON
+        cxma.character_id = mcoa.character_id AND
+        cxma.matrix_id = mcoa.matrix_id AND
+        cxma.media_id = cxm.media_id AND
+        cxma.taxon_id = cxm.taxon_id
+      INNER JOIN media_files AS m ON
+        m.media_id = cxm.media_id
+      WHERE
+        mco.matrix_id = ? AND
+        cxma.media_id IS NULL AND
+        cxm.taxon_id IN (?)
+      ORDER BY
+        mcoa.position, mto.position`,
+      {
+        replacements: [this.matrix.matrix_id, allowedTaxaIds],
+      }
+    )
+    const changedMedia = []
+    for (const row of mediaRows) {
+      const characterId = parseInt(row.character_id)
+      const taxonId = parseInt(row.taxon_id)
+      const mediaId = parseInt(row.media_id)
+
+      const cellMedium = await models.CellsXMedium.create(
+        {
+          matrix_id: this.matrix.matrix_id,
+          taxon_id: taxonId,
+          character_id: characterId,
+          media_id: mediaId,
+          user_id: this.user.user_id,
+          source: 'HTML5',
+        },
+        { transaction: transaction }
+      )
+
+      changedMedia.push({
+        link_id: parseInt(cellMedium.link_id),
+        character_id: characterId,
+        taxon_id: taxonId,
+        media_id: mediaId,
+        icon: getMedia(row.media, 'icon'),
+        tiny: getMedia(row.media, 'tiny'),
+      })
+    }
+
+    await transaction.commit()
+    return {
+      ts: time(),
+      cells: this.convertCellQueryToResults(changedCells),
+      media: changedMedia,
+    }
+  }
+
   async setCellStates(taxaIds, characterIds, stateIds, options) {
     if (taxaIds.length == 0) {
       throw new UserError('Please specify at least one taxon')
@@ -2007,7 +2450,7 @@ class MatrixEditorService {
     )
 
     await this.checkPartitionNameExists(name)
-  
+
     const transaction = await sequelizeConn.transaction()
     const partition = await models.Partition.findByPk(partitionId)
     if (!partition || partition.project_id != this.project.project_id) {
@@ -2112,7 +2555,7 @@ class MatrixEditorService {
     )
     if (count) {
       throw new UserError('Partition by the given name already exists')
-    }   
+    }
   }
 
   async removePartition(partitionId) {
@@ -2323,6 +2766,443 @@ class MatrixEditorService {
   // TODO(alvaro): Implement this.
   getNewSyncPoint() {
     return ''
+  }
+
+  async fetchChanges(changedTime) {
+    const modifiedCharacterIds = new Set()
+    const modifiedTaxaIds = new Set()
+    const cells = []
+    const notes = []
+    const citations = []
+    const media = []
+
+    // Query for deleted states, notes, and citations
+    const [deletedRows] = await sequelizeConn.query(
+      `
+      SELECT character_id, taxon_id, table_num, change_type
+			FROM cell_change_log
+			WHERE
+        matrix_id = ? AND
+        user_id != ? AND
+        changed_on > ? AND
+        table_num IN (6, 7, 29, 41)`,
+      { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
+    )
+    for (const row of deletedRows) {
+      const taxonId = parseInt(row.taxon_id)
+      const characterId = parseInt(row.character_id)
+      const tableNum = parseInt(row.table_num)
+
+      modifiedTaxaIds.add(taxonId)
+      modifiedCharacterIds.add(characterId)
+
+      switch (tableNum) {
+        case TABLE_NUMBERS.cells:
+          if (row.change_type == 'D') {
+            cells.push({
+              cell_id: 0,
+              taxon_id: taxonId,
+              character_id: characterId,
+            })
+          }
+          break
+        case TABLE_NUMBERS.cells_x_media:
+          if (row.change_type == 'D') {
+            media.push({
+              taxon_id: taxonId,
+              character_id: characterId,
+            })
+          }
+          break
+        case TABLE_NUMBERS.cell_notes:
+          if (row.change_type == 'D') {
+            notes.push({
+              notes: '',
+              status: 0,
+              taxon_id: taxonId,
+              character_id: characterId,
+            })
+          }
+          break
+        case TABLE_NUMBERS.cells_x_bibliographic_references:
+          citations.push({
+            taxon_id: taxonId,
+            character_id: characterId,
+          })
+          break
+      }
+    }
+
+    const [updatedScoresRows] = await sequelizeConn.query(
+      `
+      SELECT
+        DISTINCT c.cell_id, c.user_id, c.taxon_id, c.character_id, c.created_on,
+        c.state_id, c.is_npa, c.is_uncertain, c.start_value, c.end_value
+			FROM cells c
+			INNER JOIN cell_change_log AS ccl ON
+        ccl.matrix_id = c.matrix_id AND
+        ccl.character_id = c.character_id AND
+        ccl.taxon_id = c.taxon_id
+			WHERE
+        ccl.table_num = 6 AND
+        c.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.changed_on > ?`,
+      { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
+    )
+    for (const row of updatedScoresRows) {
+      const taxonId = parseInt(row.taxon_id)
+      const characterId = parseInt(row.character_id)
+      modifiedTaxaIds.add(taxonId)
+      modifiedCharacterIds.add(characterId)
+      cells.push(row)
+    }
+
+    const [updatedNotesRows] = await sequelizeConn.query(
+      `
+      SELECT DISTINCT note_id, n.notes, n.status, n.taxon_id, n.character_id
+			FROM cell_notes n
+			INNER JOIN cell_change_log AS ccl ON
+        ccl.matrix_id = n.matrix_id AND
+        ccl.character_id = n.character_id AND
+        ccl.taxon_id = n.taxon_id
+			WHERE
+        ccl.table_num = 29 AND
+        ccl.matrix_id = ? AND
+        ccl.user_id != ? AND
+        changed_on >= ?`,
+      { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
+    )
+    for (const row of updatedNotesRows) {
+      const taxonId = parseInt(row.taxon_id)
+      const characterId = parseInt(row.character_id)
+
+      modifiedTaxaIds.add(taxonId)
+      modifiedCharacterIds.add(characterId)
+
+      notes.push({
+        taxon_id: taxonId,
+        character_id: characterId,
+        status: parseInt(row.status),
+        notes: row.notes,
+      })
+    }
+
+    // Label counting for updated media
+    const [labelCountsRows] = await sequelizeConn.query(
+      `
+      SELECT cxm.character_id, cxm.taxon_id, cxm.media_id, count(*) label_count
+			FROM media_labels ml
+			INNER JOIN cells_x_media AS cxm ON
+        cxm.link_id = ml.link_id AND
+        cxm.media_id = ml.media_id
+			INNER JOIN media_files AS mf ON
+        mf.media_id = cxm.media_id
+			INNER JOIN cell_change_log AS ccl ON
+        ccl.matrix_id = cxm.matrix_id AND
+        ccl.character_id = cxm.character_id AND
+        ccl.taxon_id = cxm.taxon_id
+			WHERE
+        ml.table_num = 7 AND
+        cxm.matrix_id = ? AND
+        ccl.table_num = 7 AND
+        ccl.user_id != ? AND
+        ccl.changed_on >= ?
+			GROUP BY cxm.character_id, cxm.taxon_id, cxm.media_id`,
+      { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
+    )
+    const labelCounts = new Table()
+    for (const row of labelCountsRows) {
+      const taxonId = parseInt(row.taxon_id)
+      const characterId = parseInt(row.character_id)
+      const mediaId = parseInt(row.media_id)
+      const count = parseInt(row.label_count)
+      labelCounts.set(taxonId, characterId, mediaId, count)
+    }
+
+    const [mediaRows] = await sequelizeConn.query(
+      `
+      SELECT
+        cxm.media_id, cxm.taxon_id, cxm.character_id, mf.media, mf.notes,
+        cxm.link_id
+			FROM cells_x_media cxm
+			INNER JOIN cell_change_log AS ccl ON
+        ccl.matrix_id = cxm.matrix_id AND
+        ccl.character_id = cxm.character_id AND
+        ccl.taxon_id = cxm.taxon_id
+			INNER JOIN media_files AS mf ON
+        cxm.media_id = mf.media_id
+			WHERE
+        ccl.table_num = 7 AND
+        cxm.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.changed_on >= ?`,
+      { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
+    )
+    for (const row of mediaRows) {
+      const linkId = parseInt(row.link_id)
+      const taxonId = parseInt(row.taxon_id)
+      const characterId = parseInt(row.character_id)
+      const mediaId = parseInt(row.media_id)
+
+      modifiedTaxaIds.add(taxonId)
+      modifiedCharacterIds.add(characterId)
+
+      media.push({
+        link_id: linkId,
+        taxon_id: taxonId,
+        character_id: characterId,
+        media_id: mediaId,
+        icon: getMedia(row.media, 'icon'),
+        tiny: getMedia(row.media, 'tiny'),
+        label_count: labelCounts.get(taxonId, characterId, mediaId) ?? 0,
+      })
+    }
+
+    // The first query returns characters who were changed, the second query
+    // returns the character whose states were changed, the third query returns
+    // all updates to the character.
+    const [characterRows] = await sequelizeConn.query(
+      `
+      SELECT DISTINCT mco.character_id
+      FROM matrix_character_order AS mco
+      LEFT JOIN ca_change_log AS ccl ON
+        ccl.logged_row_id = mco.character_id
+      WHERE
+        mco.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.log_datetime > ? AND
+        ccl.logged_table_num = 3
+      UNION
+      SELECT DISTINCT mco.character_id
+      FROM ca_change_log AS ccl
+      LEFT JOIN character_states AS cs ON
+        cs.state_id = ccl.logged_row_id
+      LEFT JOIN matrix_character_order AS mco ON
+        mco.character_id = cs.character_id
+      WHERE
+        mco.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.log_datetime > ? AND
+        ccl.logged_table_num = 4
+      UNION
+      SELECT DISTINCT mco.character_id
+      FROM character_change_log AS ccl
+      LEFT JOIN matrix_character_order AS mco ON
+        mco.character_id = ccl.character_id
+      WHERE
+        mco.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.changed_on > ?`,
+      {
+        replacements: [
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+        ],
+      }
+    )
+    const changedCharacterIds = new Set()
+    for (const row of characterRows) {
+      changedCharacterIds.add(parseInt(row.character_id))
+    }
+
+    const characters = changedCharacterIds.size
+      ? this.getCharacters(Array.from(changedCharacterIds))
+      : []
+
+    // The first query gets the changed taxon, the second gets reodered taxa,
+    // the third gets taxa whose media was updated.
+    const [taxaRows] = await sequelizeConn.query(
+      `
+      SELECT DISTINCT mto.taxon_id
+			FROM matrix_taxa_order AS mto
+			LEFT JOIN ca_change_log AS ccl ON
+        ccl.logged_row_id = mto.taxon_id
+			WHERE
+        mto.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.log_datetime > ? AND
+        ccl.logged_table_num = 10
+      UNION
+      SELECT DISTINCT mto.taxon_id
+			FROM matrix_taxa_order AS mto
+			LEFT JOIN ca_change_log AS ccl ON
+        ccl.logged_row_id = mto.order_id
+			WHERE
+        mto.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.log_datetime > ? AND
+        ccl.logged_table_num = 24
+      UNION
+      SELECT DISTINCT mto.taxon_id
+			FROM matrix_taxa_order AS mto
+			LEFT JOIN ca_change_log AS ccl ON
+        mto.matrix_id = ccl.logged_row_id
+			WHERE
+        mto.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.log_datetime > ? AND
+        ccl.logged_table_num = 5
+      UNION
+      SELECT DISTINCT txm.taxon_id
+			FROM taxa_x_media AS txm
+			INNER JOIN matrix_taxa_order AS mto ON
+        mto.taxon_id = txm.taxon_id
+			LEFT JOIN ca_change_log AS ccl ON
+        ccl.logged_row_id = txm.link_id
+			WHERE
+        mto.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.log_datetime > ? AND
+        ccl.logged_table_num = 53`,
+      {
+        replacements: [
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+        ],
+      }
+    )
+    const changedTaxaIds = new Set()
+    for (const row of taxaRows) {
+      changedTaxaIds.add(parseInt(row.taxon_id))
+    }
+
+    const taxa = changedTaxaIds.size
+      ? this.getTaxa(Array.from(changedTaxaIds))
+      : []
+
+    const [changedRows] = await sequelizeConn.query(
+      `
+      SELECT 1 AS changed
+			FROM ca_change_log
+			WHERE
+        logged_table_num = 5 AND
+        logged_row_id = ? AND
+        user_id != ? AND
+        log_datetime > ?`,
+      { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
+    )
+    const order = {}
+    if (changedRows.length) {
+      const [characterRows] = await sequelizeConn.query(
+        `
+        SELECT character_id
+        FROM matrix_character_order
+        WHERE matrix_id = ?
+        ORDER BY position`,
+        { replacements: [this.matrix.matrix_id] }
+      )
+
+      order.characters = characterRows.map((row) => parseInt(row.character_id))
+      const [taxaRows] = await sequelizeConn.query(
+        `
+        SELECT taxon_id
+        FROM matrix_taxa_order
+        WHERE matrix_id = ?
+        ORDER BY position`,
+        { replacements: [this.matrix.matrix_id] }
+      )
+      order.taxa = taxaRows.map((row) => parseInt(row.taxon_id))
+    }
+
+    // The first query is for partition IDs of new partitions, the second query
+    // is for the partition IDs of partitions that have had characters added to
+    // them, the third query is for the partition IDs of partitions that have
+    // had taxa added to them.
+    const [partitionRows] = await sequelizeConn.query(
+      `
+      SELECT DISTINCT p.partition_id
+			FROM partitions p
+      INNER JOIN ca_change_log AS ccl ON
+        ccl.logged_row_id = p.partition_id
+      INNER JOIN matrices AS m ON
+        m.project_id = p.project_id
+			WHERE
+        m.matrix_id = ? AND
+        ccl.log_datetime > ? AND
+        ccl.user_id != ? AND
+        ccl.logged_table_num = 59
+      UNION
+      SELECT DISTINCT cxp.partition_id
+			FROM characters_x_partitions AS cxp
+      INNER JOIN ca_change_log AS ccl ON
+        ccl.logged_row_id = cxp.link_id
+      INNER JOIN partitions AS p ON
+        p.partition_id = cxp.partition_id
+      INNER JOIN matrices AS m ON
+        m.project_id = p.project_id
+      WHERE
+        m.matrix_id = ? AND
+        ccl.log_datetime > ? AND
+        ccl.user_id != ? AND
+        ccl.logged_table_num = 60
+      UNION
+      SELECT DISTINCT txp.partition_id
+      FROM taxa_x_partitions AS txp
+      INNER JOIN ca_change_log AS ccl ON
+        ccl.logged_row_id = txp.link_id
+      INNER JOIN partitions AS p ON
+        p.partition_id = txp.partition_id
+      INNER JOIN matrices AS m ON
+        m.project_id = p.project_id
+      WHERE
+        m.matrix_id = ? AND
+        ccl.log_datetime > ? AND
+        ccl.user_id != ? AND
+        ccl.logged_table_num = 61`,
+      {
+        replacements: [
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+        ],
+      }
+    )
+    const partitionIds = new Set()
+    for (const row of partitionRows) {
+      partitionIds.add(parseInt(row.partition_id))
+    }
+
+    const partitions = []
+    if (partitionIds.size) {
+      partitions.push(...(await this.getPartitions(Array.from(partitionIds))))
+    }
+
+    return {
+      cells: cells,
+      media: media,
+      notes: notes,
+      citations: citations,
+      characters: characters,
+      order: order,
+      taxa: taxa,
+      character_ids: Array.from(modifiedCharacterIds),
+      taxa_ids: Array.from(modifiedTaxaIds),
+      partitions: partitions,
+    }
   }
 
   // TODO(alvaro): Implement this.
@@ -2622,8 +3502,8 @@ class MatrixEditorService {
     const replacements = []
     if (partitionId) {
       taxaPartitionClause = `
-        INNER JOIN taxa_x_partitions AS txp ON 
-          txp.taxon_id = mto.taxon_id AND 
+        INNER JOIN taxa_x_partitions AS txp ON
+          txp.taxon_id = mto.taxon_id AND
           txp.partition_id = ?`
       characterPartitionClause = `
         INNER JOIN characters_x_partitions AS cxp ON
@@ -2658,10 +3538,10 @@ class MatrixEditorService {
         FROM matrix_taxa_order mto
         ${taxaPartitionClause}
         INNER JOIN cells AS c ON
-          c.taxon_id = mto.taxon_id AND 
+          c.taxon_id = mto.taxon_id AND
           c.matrix_id = mto.matrix_id
         INNER JOIN matrix_character_order AS mco ON
-          mco.character_id = c.character_id AND 
+          mco.character_id = c.character_id AND
           mco.matrix_id = c.matrix_id
         ${characterPartitionClause}
         WHERE c.is_npa = 1 AND mto.matrix_id = ${this.matrix.matrix_id}
@@ -2701,8 +3581,8 @@ class MatrixEditorService {
     const replacements = []
     if (partitionId) {
       taxaPartitionClause = `
-        INNER JOIN taxa_x_partitions AS txp ON 
-          txp.taxon_id = mto.taxon_id AND 
+        INNER JOIN taxa_x_partitions AS txp ON
+          txp.taxon_id = mto.taxon_id AND
           txp.partition_id = ${partitionId}`
       characterPartitionClause = `
         INNER JOIN characters_x_partitions AS cxp ON
@@ -2726,31 +3606,31 @@ class MatrixEditorService {
       sql = `
         SELECT c.character_id, c.taxon_id
         FROM cells c
-        INNER JOIN matrix_taxa_order AS mto ON 
-          mto.taxon_id = c.taxon_id AND 
+        INNER JOIN matrix_taxa_order AS mto ON
+          mto.taxon_id = c.taxon_id AND
           mto.matrix_id = c.matrix_id
         ${taxaPartitionClause}
-        INNER JOIN matrix_character_order AS mco ON 
-          mco.character_id = c.character_id AND 
+        INNER JOIN matrix_character_order AS mco ON
+          mco.character_id = c.character_id AND
           mco.matrix_id = mto.matrix_id
         ${characterPartitionClause}
-        LEFT JOIN cells_x_media AS cxm ON 
-          cxm.taxon_id = mto.taxon_id AND 
-          cxm.character_id = mco.character_id AND 
+        LEFT JOIN cells_x_media AS cxm ON
+          cxm.taxon_id = mto.taxon_id AND
+          cxm.character_id = mco.character_id AND
           cxm.matrix_id = mto.matrix_id
-        LEFT JOIN cell_notes AS cn ON 
-          cn.taxon_id = mto.taxon_id AND 
-          cn.character_id = mco.character_id AND 
+        LEFT JOIN cell_notes AS cn ON
+          cn.taxon_id = mto.taxon_id AND
+          cn.character_id = mco.character_id AND
           cn.matrix_id = mto.matrix_id
         LEFT JOIN cells_x_bibliographic_references AS cxbr ON
-          cxbr.taxon_id = mto.taxon_id AND 
-          cxbr.character_id = mco.character_id AND 
+          cxbr.taxon_id = mto.taxon_id AND
+          cxbr.character_id = mco.character_id AND
           cxbr.matrix_id = mto.matrix_id
         WHERE
           cxm.taxon_id IS NULL AND cxm.character_id IS NULL AND
           ((cn.taxon_id IS NULL AND cn.character_id IS NULL) OR cn.notes = '') AND
           cxbr.taxon_id IS NULL AND cxbr.character_id IS NULL AND
-          c.is_npa = 0 AND 
+          c.is_npa = 0 AND
           c.state_id IS NOT NULL AND
           ${clause}
           c.matrix_id = ${this.matrix.matrix_id}
@@ -2760,25 +3640,25 @@ class MatrixEditorService {
       sql = `
         SELECT mco.character_id, mto.taxon_id
         FROM cells c
-        INNER JOIN matrix_taxa_order AS mto ON 
-          mto.taxon_id = c.taxon_id AND 
+        INNER JOIN matrix_taxa_order AS mto ON
+          mto.taxon_id = c.taxon_id AND
           mto.matrix_id = c.matrix_id
         ${taxaPartitionClause}
-        INNER JOIN matrix_character_order AS mco ON 
-          mco.character_id = c.character_id AND 
+        INNER JOIN matrix_character_order AS mco ON
+          mco.character_id = c.character_id AND
           mco.matrix_id = mto.matrix_id
         ${characterPartitionClause}
-        LEFT JOIN cells_x_media AS cxm ON 
-          cxm.taxon_id = mto.taxon_id AND 
-          cxm.character_id = mco.character_id AND 
+        LEFT JOIN cells_x_media AS cxm ON
+          cxm.taxon_id = mto.taxon_id AND
+          cxm.character_id = mco.character_id AND
           cxm.matrix_id = mto.matrix_id
-        LEFT JOIN cell_notes AS cn ON 
-          cn.taxon_id = mto.taxon_id AND 
-          cn.character_id = mco.character_id AND 
+        LEFT JOIN cell_notes AS cn ON
+          cn.taxon_id = mto.taxon_id AND
+          cn.character_id = mco.character_id AND
           cn.matrix_id = mto.matrix_id
-        LEFT JOIN cells_x_bibliographic_references AS cxbr ON 
-          cxbr.taxon_id = mto.taxon_id AND 
-          cxbr.character_id = mco.character_id AND 
+        LEFT JOIN cells_x_bibliographic_references AS cxbr ON
+          cxbr.taxon_id = mto.taxon_id AND
+          cxbr.character_id = mco.character_id AND
           cxbr.matrix_id = mto.matrix_id
         WHERE
           (cxm.taxon_id IS NULL AND cxm.character_id IS NULL AND cxm.matrix_id IS NULL) AND
@@ -2793,12 +3673,12 @@ class MatrixEditorService {
         SELECT mco.character_id, mto.taxon_id
         FROM matrix_taxa_order mto
         ${taxaPartitionClause}
-        INNER JOIN matrix_character_order AS mco ON 
+        INNER JOIN matrix_character_order AS mco ON
           mco.matrix_id = mto.matrix_id
         ${characterPartitionClause}
-        LEFT JOIN cells AS c ON 
-          c.taxon_id = mto.taxon_id AND 
-          c.character_id = mco.character_id AND 
+        LEFT JOIN cells AS c ON
+          c.taxon_id = mto.taxon_id AND
+          c.character_id = mco.character_id AND
           c.matrix_id = mto.matrix_id
         WHERE
           (c.taxon_id IS NULL AND c.character_id IS NULL AND c.matrix_id IS NULL) AND
@@ -2810,16 +3690,16 @@ class MatrixEditorService {
       sql = `
         SELECT mco.character_id, mto.taxon_id
         FROM cells c
-        INNER JOIN matrix_taxa_order AS mto ON 
-          mto.taxon_id = c.taxon_id AND 
+        INNER JOIN matrix_taxa_order AS mto ON
+          mto.taxon_id = c.taxon_id AND
           mto.matrix_id = c.matrix_id
         ${taxaPartitionClause}
-        INNER JOIN matrix_character_order AS mco ON 
-          mco.character_id = c.character_id AND 
+        INNER JOIN matrix_character_order AS mco ON
+          mco.character_id = c.character_id AND
           mto.matrix_id = c.matrix_id
         ${characterPartitionClause}
-        WHERE 
-          c.is_npa = 1 AND 
+        WHERE
+          c.is_npa = 1 AND
           ${clause}
           mto.matrix_id = ${this.matrix.matrix_id}
         GROUP BY mco.position, mto.position, mco.character_id, mto.taxon_id
@@ -2829,15 +3709,15 @@ class MatrixEditorService {
         SELECT mco.character_id, mto.taxon_id
         FROM matrix_taxa_order mto
         ${taxaPartitionClause}
-        INNER JOIN matrix_character_order AS mco ON 
+        INNER JOIN matrix_character_order AS mco ON
           mco.matrix_id = mto.matrix_id
         ${characterPartitionClause}
-        LEFT JOIN cells_x_media AS cxm ON 
-          cxm.taxon_id = mto.taxon_id AND 
-          cxm.character_id = mco.character_id AND 
+        LEFT JOIN cells_x_media AS cxm ON
+          cxm.taxon_id = mto.taxon_id AND
+          cxm.character_id = mco.character_id AND
           cxm.matrix_id = mto.matrix_id
-        WHERE 
-          cxm.taxon_id IS NULL AND 
+        WHERE
+          cxm.taxon_id IS NULL AND
           cxm.character_id IS NULL AND
           ${clause}
           mto.matrix_id = ${this.matrix.matrix_id}
@@ -2847,15 +3727,15 @@ class MatrixEditorService {
       sql = `
        SELECT c.matrix_id, c.character_id, c.taxon_id
         FROM cells AS c
-        INNER JOIN matrix_taxa_order mto ON 
+        INNER JOIN matrix_taxa_order mto ON
           mto.matrix_id = c.matrix_id AND
           mto.taxon_id = c.taxon_id
         ${taxaPartitionClause}
-        INNER JOIN matrix_character_order AS mco ON 
-          mco.matrix_id = c.matrix_id AND 
+        INNER JOIN matrix_character_order AS mco ON
+          mco.matrix_id = c.matrix_id AND
           mco.character_id = c.character_id
         ${characterPartitionClause}
-        WHERE 
+        WHERE
           ${clause}
           c.matrix_id = ${this.matrix.matrix_id}
         GROUP BY c.matrix_id, c.character_id, c.taxon_id
@@ -2892,8 +3772,8 @@ class MatrixEditorService {
     const replacements = []
     if (partitionId) {
       taxaPartitionClause = `
-        INNER JOIN taxa_x_partitions AS txp ON 
-          txp.taxon_id = mto.taxon_id AND 
+        INNER JOIN taxa_x_partitions AS txp ON
+          txp.taxon_id = mto.taxon_id AND
           txp.partition_id = ${partitionId}`
       characterPartitionClause = `
         INNER JOIN characters_x_partitions AS cxp ON
@@ -2927,33 +3807,33 @@ class MatrixEditorService {
         SELECT mco.character_id
         FROM matrix_character_order mco
         ${characterPartitionClause}
-        INNER JOIN cells AS c ON 
-          c.character_id = mco.character_id AND 
+        INNER JOIN cells AS c ON
+          c.character_id = mco.character_id AND
           c.matrix_id = mco.matrix_id
-        INNER JOIN matrix_taxa_order AS mto ON 
-          mto.taxon_id = c.taxon_id AND 
+        INNER JOIN matrix_taxa_order AS mto ON
+          mto.taxon_id = c.taxon_id AND
           mto.matrix_id = c.matrix_id
         ${taxaPartitionClause}
-        WHERE 
-          c.is_npa = 1 AND 
+        WHERE
+          c.is_npa = 1 AND
           mco.matrix_id = ${this.matrix.matrix_id}
         GROUP BY mco.character_id
         ORDER BY mco.position`
     } else if (limitToUnusedMedia) {
       sql = `
-        SELECT 
-          mco.character_id, 
+        SELECT
+          mco.character_id,
           GROUP_CONCAT(DISTINCT chm.media_id ORDER BY chm.media_id SEPARATOR '; M') AS media_list
         FROM matrix_character_order mco
         ${characterPartitionClause}
-        INNER JOIN characters_x_media AS chm ON 
+        INNER JOIN characters_x_media AS chm ON
           chm.character_id = mco.character_id
-        LEFT JOIN cells_x_media AS cxm ON 
-          cxm.character_id = mco.character_id AND 
-          cxm.matrix_id = mco.matrix_id AND 
+        LEFT JOIN cells_x_media AS cxm ON
+          cxm.character_id = mco.character_id AND
+          cxm.matrix_id = mco.matrix_id AND
           chm.media_id = cxm.media_id
-        WHERE 
-          cxm.character_id IS NULL AND 
+        WHERE
+          cxm.character_id IS NULL AND
           mco.matrix_id = ${this.matrix.matrix_id}
         GROUP BY mco.character_id
         ORDER BY mco.position`
@@ -2972,7 +3852,7 @@ class MatrixEditorService {
         results: results,
       }
     } else {
-      throw new Exception('Invalid search option')
+      throw new UserError('Invalid search option')
     }
 
     const [rows] = await sequelizeConn.query(sql, {

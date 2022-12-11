@@ -11,11 +11,16 @@ router.post('/reorderTaxa', controller.reorderTaxa)
 router.post('/setTaxaNotes', controller.setTaxaNotes)
 router.post('/setTaxaAccess', controller.setTaxaAccess)
 
-// Character-specific-endpoints
+// Character rule endpoints
 router.post('/addCharacterRuleAction', controller.addCharacterRuleAction)
 router.post('/removeCharacterRuleAction', controller.removeCharacterRuleAction)
 
-// Cell-specific endpoints
+// Character rule violation endpoints
+router.post('/fixAllCharacterRuleViolations', controller.fixAllRuleViolations)
+router.post('/fixSelectedCharacterRuleViolations', controller.fixRuleViolations)
+router.post('/getCharacterRuleViolations', controller.getRuleViolations)
+
+// Cell endpoints
 router.post('/addCellCitations', controller.addCellCitations)
 router.post('/addCellMedia', controller.addCellMedia)
 router.post('/fetchCellsData', controller.fetchCellsData)
@@ -31,7 +36,7 @@ router.post('/setCellNotes', controller.setCellNotes)
 router.post('/setCellStates', controller.setCellStates)
 router.post('/upsertCellCitation', controller.upsertCellCitation)
 
-// Partition-specific endpoints
+// Partitions endpoints
 router.post('/addCharactersToPartition', controller.addCharactersToPartition)
 router.post('/addPartition', controller.addPartition)
 router.post('/addTaxaToPartition', controller.addTaxaToPartition)
@@ -52,5 +57,9 @@ router.post('/logError', controller.logError)
 router.post('/searchCells', controller.searchCells)
 router.post('/searchCharacters', controller.searchCharacters)
 router.post('/searchTaxa', controller.searchTaxa)
+
+router.get('/:userId/sync', controller.sync)
+router.post('/sendEvent', controller.sendEvent)
+router.post('/fetchChanges', controller.fetchChanges)
 
 export default router
