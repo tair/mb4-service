@@ -2780,8 +2780,8 @@ class MatrixEditorService {
     const [deletedRows] = await sequelizeConn.query(
       `
       SELECT character_id, taxon_id, table_num, change_type
-			FROM cell_change_log
-			WHERE
+      FROM cell_change_log
+      WHERE
         matrix_id = ? AND
         user_id != ? AND
         changed_on > ? AND
@@ -2838,12 +2838,12 @@ class MatrixEditorService {
       SELECT
         DISTINCT c.cell_id, c.user_id, c.taxon_id, c.character_id, c.created_on,
         c.state_id, c.is_npa, c.is_uncertain, c.start_value, c.end_value
-			FROM cells c
-			INNER JOIN cell_change_log AS ccl ON
+      FROM cells c
+      INNER JOIN cell_change_log AS ccl ON
         ccl.matrix_id = c.matrix_id AND
         ccl.character_id = c.character_id AND
         ccl.taxon_id = c.taxon_id
-			WHERE
+      WHERE
         ccl.table_num = 6 AND
         c.matrix_id = ? AND
         ccl.user_id != ? AND
@@ -2861,12 +2861,12 @@ class MatrixEditorService {
     const [updatedNotesRows] = await sequelizeConn.query(
       `
       SELECT DISTINCT note_id, n.notes, n.status, n.taxon_id, n.character_id
-			FROM cell_notes n
-			INNER JOIN cell_change_log AS ccl ON
+      FROM cell_notes n
+      INNER JOIN cell_change_log AS ccl ON
         ccl.matrix_id = n.matrix_id AND
         ccl.character_id = n.character_id AND
         ccl.taxon_id = n.taxon_id
-			WHERE
+      WHERE
         ccl.table_num = 29 AND
         ccl.matrix_id = ? AND
         ccl.user_id != ? AND
@@ -2892,23 +2892,23 @@ class MatrixEditorService {
     const [labelCountsRows] = await sequelizeConn.query(
       `
       SELECT cxm.character_id, cxm.taxon_id, cxm.media_id, count(*) label_count
-			FROM media_labels ml
-			INNER JOIN cells_x_media AS cxm ON
+      FROM media_labels ml
+      INNER JOIN cells_x_media AS cxm ON
         cxm.link_id = ml.link_id AND
         cxm.media_id = ml.media_id
-			INNER JOIN media_files AS mf ON
+      INNER JOIN media_files AS mf ON
         mf.media_id = cxm.media_id
-			INNER JOIN cell_change_log AS ccl ON
+      INNER JOIN cell_change_log AS ccl ON
         ccl.matrix_id = cxm.matrix_id AND
         ccl.character_id = cxm.character_id AND
         ccl.taxon_id = cxm.taxon_id
-			WHERE
+      WHERE
         ml.table_num = 7 AND
         cxm.matrix_id = ? AND
         ccl.table_num = 7 AND
         ccl.user_id != ? AND
         ccl.changed_on >= ?
-			GROUP BY cxm.character_id, cxm.taxon_id, cxm.media_id`,
+      GROUP BY cxm.character_id, cxm.taxon_id, cxm.media_id`,
       { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
     )
     const labelCounts = new Table()
@@ -2925,14 +2925,14 @@ class MatrixEditorService {
       SELECT
         cxm.media_id, cxm.taxon_id, cxm.character_id, mf.media, mf.notes,
         cxm.link_id
-			FROM cells_x_media cxm
-			INNER JOIN cell_change_log AS ccl ON
+      FROM cells_x_media cxm
+      INNER JOIN cell_change_log AS ccl ON
         ccl.matrix_id = cxm.matrix_id AND
         ccl.character_id = cxm.character_id AND
         ccl.taxon_id = cxm.taxon_id
-			INNER JOIN media_files AS mf ON
+      INNER JOIN media_files AS mf ON
         cxm.media_id = mf.media_id
-			WHERE
+      WHERE
         ccl.table_num = 7 AND
         cxm.matrix_id = ? AND
         ccl.user_id != ? AND
@@ -3022,42 +3022,42 @@ class MatrixEditorService {
     const [taxaRows] = await sequelizeConn.query(
       `
       SELECT DISTINCT mto.taxon_id
-			FROM matrix_taxa_order AS mto
-			LEFT JOIN ca_change_log AS ccl ON
+      FROM matrix_taxa_order AS mto
+      LEFT JOIN ca_change_log AS ccl ON
         ccl.logged_row_id = mto.taxon_id
-			WHERE
+      WHERE
         mto.matrix_id = ? AND
         ccl.user_id != ? AND
         ccl.log_datetime > ? AND
         ccl.logged_table_num = 10
       UNION
       SELECT DISTINCT mto.taxon_id
-			FROM matrix_taxa_order AS mto
-			LEFT JOIN ca_change_log AS ccl ON
+      FROM matrix_taxa_order AS mto
+      LEFT JOIN ca_change_log AS ccl ON
         ccl.logged_row_id = mto.order_id
-			WHERE
+      WHERE
         mto.matrix_id = ? AND
         ccl.user_id != ? AND
         ccl.log_datetime > ? AND
         ccl.logged_table_num = 24
       UNION
       SELECT DISTINCT mto.taxon_id
-			FROM matrix_taxa_order AS mto
-			LEFT JOIN ca_change_log AS ccl ON
+      FROM matrix_taxa_order AS mto
+      LEFT JOIN ca_change_log AS ccl ON
         mto.matrix_id = ccl.logged_row_id
-			WHERE
+      WHERE
         mto.matrix_id = ? AND
         ccl.user_id != ? AND
         ccl.log_datetime > ? AND
         ccl.logged_table_num = 5
       UNION
       SELECT DISTINCT txm.taxon_id
-			FROM taxa_x_media AS txm
-			INNER JOIN matrix_taxa_order AS mto ON
+      FROM taxa_x_media AS txm
+      INNER JOIN matrix_taxa_order AS mto ON
         mto.taxon_id = txm.taxon_id
-			LEFT JOIN ca_change_log AS ccl ON
+      LEFT JOIN ca_change_log AS ccl ON
         ccl.logged_row_id = txm.link_id
-			WHERE
+      WHERE
         mto.matrix_id = ? AND
         ccl.user_id != ? AND
         ccl.log_datetime > ? AND
@@ -3091,8 +3091,8 @@ class MatrixEditorService {
     const [changedRows] = await sequelizeConn.query(
       `
       SELECT 1 AS changed
-			FROM ca_change_log
-			WHERE
+      FROM ca_change_log
+      WHERE
         logged_table_num = 5 AND
         logged_row_id = ? AND
         user_id != ? AND
@@ -3129,19 +3129,19 @@ class MatrixEditorService {
     const [partitionRows] = await sequelizeConn.query(
       `
       SELECT DISTINCT p.partition_id
-			FROM partitions p
+      FROM partitions p
       INNER JOIN ca_change_log AS ccl ON
         ccl.logged_row_id = p.partition_id
       INNER JOIN matrices AS m ON
         m.project_id = p.project_id
-			WHERE
+      WHERE
         m.matrix_id = ? AND
         ccl.log_datetime > ? AND
         ccl.user_id != ? AND
         ccl.logged_table_num = 59
       UNION
       SELECT DISTINCT cxp.partition_id
-			FROM characters_x_partitions AS cxp
+      FROM characters_x_partitions AS cxp
       INNER JOIN ca_change_log AS ccl ON
         ccl.logged_row_id = cxp.link_id
       INNER JOIN partitions AS p ON
