@@ -36,6 +36,22 @@ function authenticateToken(req, res, next) {
   })
 }
 
+async function maybeAuthenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization']
+  const token = authHeader && authHeader.split(' ')[1]
+  if (token == null) {
+    next()
+    return
+  }
+
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
+    if (!err) {
+      req.user = user
+    }
+    next()
+  })
+}
+
 async function login(req, res, next) {
   const errors = validationResult(req.body)
   if (!errors.isEmpty()) {
@@ -88,4 +104,4 @@ function generateAccessToken(user) {
   })
 }
 
-export { authenticateToken, login }
+export { authenticateToken, login, maybeAuthenticateToken }

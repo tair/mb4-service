@@ -1,8 +1,9 @@
 import express from 'express'
 import matrixRouter from './matrix-route.js'
+import { maybeAuthenticateToken } from '../controllers/auth-controller.js'
 
 const projectRouter = express.Router({ mergeParams: true })
 
-projectRouter.use('/:projectId/matrix', matrixRouter)
+projectRouter.use('/:projectId/matrix', maybeAuthenticateToken, matrixRouter)
 
 export default projectRouter

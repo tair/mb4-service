@@ -58,4 +58,8 @@ router.post('/searchCells', controller.searchCells)
 router.post('/searchCharacters', controller.searchCharacters)
 router.post('/searchTaxa', controller.searchTaxa)
 
+router.get('/:userId/sync', controller.sync)
+router.post('/sendEvent', controller.sendEvent)
+router.post('/fetchChanges', controller.fetchChanges)
+
 export default router

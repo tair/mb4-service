@@ -14,6 +14,7 @@ import { models } from '../models/init-models.js'
 import { UserError } from '../lib/user-errors.js'
 import { ForbiddenError } from '../lib/forbidden-error.js'
 import User from '../models/user.js'
+import { TABLE_NUMBERS } from '../lib/table-number.js'
 
 class MatrixEditorService {
   constructor(project, matrix, user, readonly) {
@@ -802,16 +803,27 @@ class MatrixEditorService {
     return characterList
   }
 
-  async getPartitions() {
+  async getPartitions(partitionIds = null) {
+    const replacements = [this.matrix.matrix_id]
+    let clause = ''
+    if (partitionIds) {
+      clause = 'AND p.partition_id IN (?)'
+      replacements.push(partitionIds)
+    }
+
     const [characterRows] = await sequelizeConn.query(
       `
       SELECT cxp.partition_id, cxp.character_id
       FROM characters_x_partitions cxp
-      INNER JOIN matrix_character_order AS mco ON mco.character_id = cxp.character_id
-      INNER JOIN matrices AS m ON mco.matrix_id = m.matrix_id
-      INNER JOIN partitions AS p ON m.project_id = p.project_id AND cxp.partition_id = p.partition_id
-      WHERE m.matrix_id = ?`,
-      { replacements: [this.matrix.matrix_id] }
+      INNER JOIN matrix_character_order AS mco ON
+        mco.character_id = cxp.character_id
+      INNER JOIN matrices AS m ON
+        m.matrix_id = mco.matrix_id
+      INNER JOIN partitions AS p ON
+        p.project_id = m.project_id AND
+        p.partition_id = cxp.partition_id
+      WHERE m.matrix_id = ? ${clause}`,
+      { replacements: replacements }
     )
     const characters = new Map()
     for (const row of characterRows) {
@@ -827,11 +839,15 @@ class MatrixEditorService {
       `
       SELECT txp.partition_id, txp.taxon_id
       FROM taxa_x_partitions txp
-      INNER JOIN matrix_taxa_order AS mto ON mto.taxon_id = txp.taxon_id
-      INNER JOIN matrices AS m ON mto.matrix_id = m.matrix_id
-      INNER JOIN partitions AS p ON m.project_id = p.project_id AND txp.partition_id = p.partition_id
-      WHERE m.matrix_id = ? `,
-      { replacements: [this.matrix.matrix_id] }
+      INNER JOIN matrix_taxa_order AS mto ON
+        mto.taxon_id = txp.taxon_id
+      INNER JOIN matrices AS m ON
+        m.matrix_id = mto.matrix_id
+      INNER JOIN partitions AS p ON
+        p.project_id = m.project_id AND
+        p.partition_id = txp.partition_id
+      WHERE m.matrix_id = ? ${clause}`,
+      { replacements: replacements }
     )
     const taxa = new Map()
     for (const row of taxaRows) {
@@ -848,9 +864,9 @@ class MatrixEditorService {
       SELECT p.*
       FROM partitions p
       INNER JOIN matrices AS m ON p.project_id = m.project_id
-      WHERE m.matrix_id = ?
+      WHERE m.matrix_id = ? ${clause}
       ORDER BY p.name`,
-      { replacements: [this.matrix.matrix_id] }
+      { replacements: replacements }
     )
 
     const partitions = []
@@ -2750,6 +2766,443 @@ class MatrixEditorService {
   // TODO(alvaro): Implement this.
   getNewSyncPoint() {
     return ''
+  }
+
+  async fetchChanges(changedTime) {
+    const modifiedCharacterIds = new Set()
+    const modifiedTaxaIds = new Set()
+    const cells = []
+    const notes = []
+    const citations = []
+    const media = []
+
+    // Query for deleted states, notes, and citations
+    const [deletedRows] = await sequelizeConn.query(
+      `
+      SELECT character_id, taxon_id, table_num, change_type
+      FROM cell_change_log
+      WHERE
+        matrix_id = ? AND
+        user_id != ? AND
+        changed_on > ? AND
+        table_num IN (6, 7, 29, 41)`,
+      { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
+    )
+    for (const row of deletedRows) {
+      const taxonId = parseInt(row.taxon_id)
+      const characterId = parseInt(row.character_id)
+      const tableNum = parseInt(row.table_num)
+
+      modifiedTaxaIds.add(taxonId)
+      modifiedCharacterIds.add(characterId)
+
+      switch (tableNum) {
+        case TABLE_NUMBERS.cells:
+          if (row.change_type == 'D') {
+            cells.push({
+              cell_id: 0,
+              taxon_id: taxonId,
+              character_id: characterId,
+            })
+          }
+          break
+        case TABLE_NUMBERS.cells_x_media:
+          if (row.change_type == 'D') {
+            media.push({
+              taxon_id: taxonId,
+              character_id: characterId,
+            })
+          }
+          break
+        case TABLE_NUMBERS.cell_notes:
+          if (row.change_type == 'D') {
+            notes.push({
+              notes: '',
+              status: 0,
+              taxon_id: taxonId,
+              character_id: characterId,
+            })
+          }
+          break
+        case TABLE_NUMBERS.cells_x_bibliographic_references:
+          citations.push({
+            taxon_id: taxonId,
+            character_id: characterId,
+          })
+          break
+      }
+    }
+
+    const [updatedScoresRows] = await sequelizeConn.query(
+      `
+      SELECT
+        DISTINCT c.cell_id, c.user_id, c.taxon_id, c.character_id, c.created_on,
+        c.state_id, c.is_npa, c.is_uncertain, c.start_value, c.end_value
+      FROM cells c
+      INNER JOIN cell_change_log AS ccl ON
+        ccl.matrix_id = c.matrix_id AND
+        ccl.character_id = c.character_id AND
+        ccl.taxon_id = c.taxon_id
+      WHERE
+        ccl.table_num = 6 AND
+        c.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.changed_on > ?`,
+      { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
+    )
+    for (const row of updatedScoresRows) {
+      const taxonId = parseInt(row.taxon_id)
+      const characterId = parseInt(row.character_id)
+      modifiedTaxaIds.add(taxonId)
+      modifiedCharacterIds.add(characterId)
+      cells.push(row)
+    }
+
+    const [updatedNotesRows] = await sequelizeConn.query(
+      `
+      SELECT DISTINCT note_id, n.notes, n.status, n.taxon_id, n.character_id
+      FROM cell_notes n
+      INNER JOIN cell_change_log AS ccl ON
+        ccl.matrix_id = n.matrix_id AND
+        ccl.character_id = n.character_id AND
+        ccl.taxon_id = n.taxon_id
+      WHERE
+        ccl.table_num = 29 AND
+        ccl.matrix_id = ? AND
+        ccl.user_id != ? AND
+        changed_on >= ?`,
+      { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
+    )
+    for (const row of updatedNotesRows) {
+      const taxonId = parseInt(row.taxon_id)
+      const characterId = parseInt(row.character_id)
+
+      modifiedTaxaIds.add(taxonId)
+      modifiedCharacterIds.add(characterId)
+
+      notes.push({
+        taxon_id: taxonId,
+        character_id: characterId,
+        status: parseInt(row.status),
+        notes: row.notes,
+      })
+    }
+
+    // Label counting for updated media
+    const [labelCountsRows] = await sequelizeConn.query(
+      `
+      SELECT cxm.character_id, cxm.taxon_id, cxm.media_id, count(*) label_count
+      FROM media_labels ml
+      INNER JOIN cells_x_media AS cxm ON
+        cxm.link_id = ml.link_id AND
+        cxm.media_id = ml.media_id
+      INNER JOIN media_files AS mf ON
+        mf.media_id = cxm.media_id
+      INNER JOIN cell_change_log AS ccl ON
+        ccl.matrix_id = cxm.matrix_id AND
+        ccl.character_id = cxm.character_id AND
+        ccl.taxon_id = cxm.taxon_id
+      WHERE
+        ml.table_num = 7 AND
+        cxm.matrix_id = ? AND
+        ccl.table_num = 7 AND
+        ccl.user_id != ? AND
+        ccl.changed_on >= ?
+      GROUP BY cxm.character_id, cxm.taxon_id, cxm.media_id`,
+      { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
+    )
+    const labelCounts = new Table()
+    for (const row of labelCountsRows) {
+      const taxonId = parseInt(row.taxon_id)
+      const characterId = parseInt(row.character_id)
+      const mediaId = parseInt(row.media_id)
+      const count = parseInt(row.label_count)
+      labelCounts.set(taxonId, characterId, mediaId, count)
+    }
+
+    const [mediaRows] = await sequelizeConn.query(
+      `
+      SELECT
+        cxm.media_id, cxm.taxon_id, cxm.character_id, mf.media, mf.notes,
+        cxm.link_id
+      FROM cells_x_media cxm
+      INNER JOIN cell_change_log AS ccl ON
+        ccl.matrix_id = cxm.matrix_id AND
+        ccl.character_id = cxm.character_id AND
+        ccl.taxon_id = cxm.taxon_id
+      INNER JOIN media_files AS mf ON
+        cxm.media_id = mf.media_id
+      WHERE
+        ccl.table_num = 7 AND
+        cxm.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.changed_on >= ?`,
+      { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
+    )
+    for (const row of mediaRows) {
+      const linkId = parseInt(row.link_id)
+      const taxonId = parseInt(row.taxon_id)
+      const characterId = parseInt(row.character_id)
+      const mediaId = parseInt(row.media_id)
+
+      modifiedTaxaIds.add(taxonId)
+      modifiedCharacterIds.add(characterId)
+
+      media.push({
+        link_id: linkId,
+        taxon_id: taxonId,
+        character_id: characterId,
+        media_id: mediaId,
+        icon: getMedia(row.media, 'icon'),
+        tiny: getMedia(row.media, 'tiny'),
+        label_count: labelCounts.get(taxonId, characterId, mediaId) ?? 0,
+      })
+    }
+
+    // The first query returns characters who were changed, the second query
+    // returns the character whose states were changed, the third query returns
+    // all updates to the character.
+    const [characterRows] = await sequelizeConn.query(
+      `
+      SELECT DISTINCT mco.character_id
+      FROM matrix_character_order AS mco
+      LEFT JOIN ca_change_log AS ccl ON
+        ccl.logged_row_id = mco.character_id
+      WHERE
+        mco.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.log_datetime > ? AND
+        ccl.logged_table_num = 3
+      UNION
+      SELECT DISTINCT mco.character_id
+      FROM ca_change_log AS ccl
+      LEFT JOIN character_states AS cs ON
+        cs.state_id = ccl.logged_row_id
+      LEFT JOIN matrix_character_order AS mco ON
+        mco.character_id = cs.character_id
+      WHERE
+        mco.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.log_datetime > ? AND
+        ccl.logged_table_num = 4
+      UNION
+      SELECT DISTINCT mco.character_id
+      FROM character_change_log AS ccl
+      LEFT JOIN matrix_character_order AS mco ON
+        mco.character_id = ccl.character_id
+      WHERE
+        mco.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.changed_on > ?`,
+      {
+        replacements: [
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+        ],
+      }
+    )
+    const changedCharacterIds = new Set()
+    for (const row of characterRows) {
+      changedCharacterIds.add(parseInt(row.character_id))
+    }
+
+    const characters = changedCharacterIds.size
+      ? this.getCharacters(Array.from(changedCharacterIds))
+      : []
+
+    // The first query gets the changed taxon, the second gets reodered taxa,
+    // the third gets taxa whose media was updated.
+    const [taxaRows] = await sequelizeConn.query(
+      `
+      SELECT DISTINCT mto.taxon_id
+      FROM matrix_taxa_order AS mto
+      LEFT JOIN ca_change_log AS ccl ON
+        ccl.logged_row_id = mto.taxon_id
+      WHERE
+        mto.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.log_datetime > ? AND
+        ccl.logged_table_num = 10
+      UNION
+      SELECT DISTINCT mto.taxon_id
+      FROM matrix_taxa_order AS mto
+      LEFT JOIN ca_change_log AS ccl ON
+        ccl.logged_row_id = mto.order_id
+      WHERE
+        mto.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.log_datetime > ? AND
+        ccl.logged_table_num = 24
+      UNION
+      SELECT DISTINCT mto.taxon_id
+      FROM matrix_taxa_order AS mto
+      LEFT JOIN ca_change_log AS ccl ON
+        mto.matrix_id = ccl.logged_row_id
+      WHERE
+        mto.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.log_datetime > ? AND
+        ccl.logged_table_num = 5
+      UNION
+      SELECT DISTINCT txm.taxon_id
+      FROM taxa_x_media AS txm
+      INNER JOIN matrix_taxa_order AS mto ON
+        mto.taxon_id = txm.taxon_id
+      LEFT JOIN ca_change_log AS ccl ON
+        ccl.logged_row_id = txm.link_id
+      WHERE
+        mto.matrix_id = ? AND
+        ccl.user_id != ? AND
+        ccl.log_datetime > ? AND
+        ccl.logged_table_num = 53`,
+      {
+        replacements: [
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+        ],
+      }
+    )
+    const changedTaxaIds = new Set()
+    for (const row of taxaRows) {
+      changedTaxaIds.add(parseInt(row.taxon_id))
+    }
+
+    const taxa = changedTaxaIds.size
+      ? this.getTaxa(Array.from(changedTaxaIds))
+      : []
+
+    const [changedRows] = await sequelizeConn.query(
+      `
+      SELECT 1 AS changed
+      FROM ca_change_log
+      WHERE
+        logged_table_num = 5 AND
+        logged_row_id = ? AND
+        user_id != ? AND
+        log_datetime > ?`,
+      { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
+    )
+    const order = {}
+    if (changedRows.length) {
+      const [characterRows] = await sequelizeConn.query(
+        `
+        SELECT character_id
+        FROM matrix_character_order
+        WHERE matrix_id = ?
+        ORDER BY position`,
+        { replacements: [this.matrix.matrix_id] }
+      )
+
+      order.characters = characterRows.map((row) => parseInt(row.character_id))
+      const [taxaRows] = await sequelizeConn.query(
+        `
+        SELECT taxon_id
+        FROM matrix_taxa_order
+        WHERE matrix_id = ?
+        ORDER BY position`,
+        { replacements: [this.matrix.matrix_id] }
+      )
+      order.taxa = taxaRows.map((row) => parseInt(row.taxon_id))
+    }
+
+    // The first query is for partition IDs of new partitions, the second query
+    // is for the partition IDs of partitions that have had characters added to
+    // them, the third query is for the partition IDs of partitions that have
+    // had taxa added to them.
+    const [partitionRows] = await sequelizeConn.query(
+      `
+      SELECT DISTINCT p.partition_id
+      FROM partitions p
+      INNER JOIN ca_change_log AS ccl ON
+        ccl.logged_row_id = p.partition_id
+      INNER JOIN matrices AS m ON
+        m.project_id = p.project_id
+      WHERE
+        m.matrix_id = ? AND
+        ccl.log_datetime > ? AND
+        ccl.user_id != ? AND
+        ccl.logged_table_num = 59
+      UNION
+      SELECT DISTINCT cxp.partition_id
+      FROM characters_x_partitions AS cxp
+      INNER JOIN ca_change_log AS ccl ON
+        ccl.logged_row_id = cxp.link_id
+      INNER JOIN partitions AS p ON
+        p.partition_id = cxp.partition_id
+      INNER JOIN matrices AS m ON
+        m.project_id = p.project_id
+      WHERE
+        m.matrix_id = ? AND
+        ccl.log_datetime > ? AND
+        ccl.user_id != ? AND
+        ccl.logged_table_num = 60
+      UNION
+      SELECT DISTINCT txp.partition_id
+      FROM taxa_x_partitions AS txp
+      INNER JOIN ca_change_log AS ccl ON
+        ccl.logged_row_id = txp.link_id
+      INNER JOIN partitions AS p ON
+        p.partition_id = txp.partition_id
+      INNER JOIN matrices AS m ON
+        m.project_id = p.project_id
+      WHERE
+        m.matrix_id = ? AND
+        ccl.log_datetime > ? AND
+        ccl.user_id != ? AND
+        ccl.logged_table_num = 61`,
+      {
+        replacements: [
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+          this.matrix.matrix_id,
+          this.user.user_id,
+          changedTime,
+        ],
+      }
+    )
+    const partitionIds = new Set()
+    for (const row of partitionRows) {
+      partitionIds.add(parseInt(row.partition_id))
+    }
+
+    const partitions = []
+    if (partitionIds.size) {
+      partitions.push(...(await this.getPartitions(Array.from(partitionIds))))
+    }
+
+    return {
+      cells: cells,
+      media: media,
+      notes: notes,
+      citations: citations,
+      characters: characters,
+      order: order,
+      taxa: taxa,
+      character_ids: Array.from(modifiedCharacterIds),
+      taxa_ids: Array.from(modifiedTaxaIds),
+      partitions: partitions,
+    }
   }
 
   // TODO(alvaro): Implement this.
