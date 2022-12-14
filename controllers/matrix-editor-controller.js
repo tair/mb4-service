@@ -186,21 +186,6 @@ export async function getRuleViolations(req, res) {
   await applyMatrix(req, res, (service) => service.getRuleViolations())
 }
 
-export async function fixAllRuleViolations(req, res) {
-  await applyMatrix(req, res, (service) => service.fixAllRuleViolations())
-}
-
-export async function fixRuleViolations(req, res) {
-  const violations = req.body.violations
-  await applyMatrix(req, res, (service) =>
-    service.fixRuleViolations(violations)
-  )
-}
-
-export async function getRuleViolations(req, res) {
-  await applyMatrix(req, res, (service) => service.getRuleViolations())
-}
-
 export async function setCellStates(req, res) {
   const taxaIds = parseIntArray(req.body.taxa_ids)
   const characterIds = parseIntArray(req.body.character_ids)
