@@ -2210,6 +2210,128 @@ class MatrixEditorService {
     }
   }
 
+  async setCellContinuousValues(
+    taxaIds,
+    characterIds,
+    startValue,
+    endValue,
+    options
+  ) {
+    if (taxaIds.length == 0) {
+      throw new UserError('Please specify at least one taxon')
+    }
+
+    if (characterIds.length == 0) {
+      throw new UserError('Please specify at least one character')
+    }
+
+    if (isNaN(startValue)) {
+      throw new UserError('Start value is not a number')
+    }
+
+    if (isNaN(endValue)) {
+      throw new UserError('End value is not a number')
+    }
+
+    if (this.matrix.getOption('DISABLE_SCORING')) {
+      throw new UserError(
+        'Scoring has been disabled by the project administrator'
+      )
+    }
+
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to set states in this matrix'
+    )
+    await this.checkCanEditTaxa(taxaIds)
+    await this.checkCanEditCharacters(characterIds)
+    await this.checkCharactersAreNumeric(characterIds)
+
+    const batchMode = options != null && parseInt(options['batchmode'])
+
+    const shouldDelete = startValue === null && endValue === null
+
+    const transaction = await sequelizeConn.transaction()
+
+    let cellBatch
+    if (batchMode) {
+      cellBatch = models.CellBatchLog.build({
+        user_id: this.user.user_id,
+        matrix_id: this.matrix.matrix_id,
+        batch_type: CELL_BATCH_TYPES.MEDIA_BATCH_SET_SCORE,
+        started_on: time(),
+      })
+    }
+
+    const cellChangesResults = []
+    const allCellScores = await this.getCellsStates(taxaIds, characterIds)
+    for (const characterId of characterIds) {
+      for (const taxonId of taxaIds) {
+        const cellScores = allCellScores.get(taxonId, characterId)
+        if (cellScores == null && !shouldDelete) {
+          const cell = await models.Cell.create(
+            {
+              matrix_id: this.matrix.matrix_id,
+              taxon_id: taxonId,
+              character_id: characterId,
+              user_id: this.user.user_id,
+              state_id: null,
+              is_npa: 0,
+              is_uncertain: 0,
+              start_value: startValue,
+              end_value: endValue,
+            },
+            { transaction: transaction }
+          )
+          cellChangesResults.push(cell)
+        } else if (cellScores.size > 1) {
+          throw UserError('Selected Continuous scores have more than one value')
+        } else if (shouldDelete) {
+          const cellScore = cellScores.get(0)
+          await models.Cell.destroy({
+            where: { cell_id: cellScore.cell_id },
+            transaction: transaction,
+          })
+          cellScore.cell_id = 0 // Signal that the cell should be deleted.
+          cellChangesResults.push(cellScore)
+        } else {
+          const cellScore = cellScores.get(0)
+          const cell = await models.Cell.findByPk(cellScore.cell_id)
+          cell.start_value = startValue
+          cell.end_value = endValue
+          cell.user_id = this.user.user_id
+          await cell.save({ transaction: transaction })
+          cellChangesResults.push(cell)
+        }
+      }
+    }
+
+    if (batchMode) {
+      let description
+      if (batchMode == 2) {
+        const character = await models.Character.findByPk(characterIds[0])
+        description = `Batch scoring added to ${taxaIds.length} taxa in ${character.name} column`
+      } else if (batchMode == 1) {
+        const taxon = await models.Taxon.findByPk(taxaIds[0])
+        description = `Batch scoring added to ${
+          characterIds.length
+        } characters in ${getTaxonName(taxon)} row`
+      } else {
+        throw new UserError('Unable batch mode')
+      }
+
+      cellBatch.finished_on = time()
+      cellBatch.description = description
+      await cellBatch.save({ transaction: transaction })
+    }
+
+    await transaction.commit()
+    return {
+      ts: time(),
+      cells: this.convertCellQueryToResults(cellChangesResults),
+    }
+  }
+
   async setCellNotes(taxaIds, characterIds, notes, status, options) {
     if (taxaIds.length == 0) {
       throw new UserError('Please specify at least one taxon')
@@ -4427,6 +4549,20 @@ class MatrixEditorService {
     )
     if (count != characterIds.length) {
       throw new UserError('Continuous characters cannot be have states')
+    }
+  }
+
+  async checkCharactersAreNumeric(characterIds) {
+    const [[{ count }]] = await sequelizeConn.query(
+      `
+      SELECT count(mco.character_id) AS count
+      FROM matrix_character_order mco
+      INNER JOIN characters AS c ON c.character_id = mco.character_id
+      WHERE mco.matrix_id = ? AND mco.character_id IN (?) AND c.type != 0`,
+      { replacements: [this.matrix.matrix_id, characterIds] }
+    )
+    if (count != characterIds.length) {
+      throw new UserError('You must specific continuous or meristic characters')
     }
   }
 
