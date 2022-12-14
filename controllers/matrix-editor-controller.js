@@ -199,6 +199,26 @@ export async function setCellStates(req, res) {
   }
 }
 
+export async function setCellContinuousValues(req, res) {
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  const characterIds = parseIntArray(req.body.character_ids)
+  const startValue = parseNullableFloat(req.body.startValue)
+  const endValue = parseNullableFloat(req.body.endValue)
+  const options = req.body.options
+  const success = await applyMatrix(req, res, (service) =>
+    service.setCellContinuousValues(
+      taxaIds,
+      characterIds,
+      startValue,
+      endValue,
+      options
+    )
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
 export async function getCellCitations(req, res) {
   const taxonId = parseInt(req.body.taxon_id)
   const characterId = parseInt(req.body.character_id)
@@ -585,4 +605,8 @@ function parseIntArray(array) {
 
 function parseNullableInt(value) {
   return value == null ? null : parseInt(value)
+}
+
+function parseNullableFloat(value) {
+  return value == null ? null : parseFloat(value)
 }
