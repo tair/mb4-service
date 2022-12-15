@@ -2540,6 +2540,54 @@ class MatrixEditorService {
     }
   }
 
+  async removeCellsMedia(taxonId, characterIds) {
+    if (characterIds.length == 0) {
+      throw new UserError('Please specify at least one character')
+    }
+
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to set states in this matrix'
+    )
+    await this.checkCanEditTaxa([taxonId])
+    await this.checkCanEditCharacters(characterIds)
+
+    const startedTime = time()
+    const transaction = await sequelizeConn.transaction()
+    await models.CellsXMedium.destroy({
+      where: {
+        taxon_id: taxonId,
+        character_id: characterIds,
+      },
+      individualHooks: true,
+      transaction: transaction,
+    })
+
+    const taxon = await models.Taxon.findByPk(taxonId)
+    const description = `All media deleted from ${
+      characterIds.length
+    } character(s) in ${getTaxonName(taxon)} row`
+    await models.CellBatchLog.create(
+      {
+        user_id: this.user.user_id,
+        matrix_id: this.matrix.matrix_id,
+        batch_type: CELL_BATCH_TYPES.MEDIA_BATCH_DELETE,
+        started_on: startedTime,
+        description: description,
+        finished_on: time(),
+      },
+      {
+        transaction: transaction,
+      }
+    )
+
+    await transaction.commit()
+    return {
+      taxon_id: taxonId,
+      character_ids: characterIds,
+    }
+  }
+
   async addPartition(name, description) {
     await this.checkCanDo(
       'editPartition',
@@ -2820,7 +2868,7 @@ class MatrixEditorService {
     await models.TaxaXPartition.destroy({
       where: {
         partition_id: partitionId,
-        taxon_id: { [Op.in]: taxaIds },
+        taxon_id: taxaIds,
       },
       individualHooks: true,
       transaction: transaction,
@@ -4061,7 +4109,7 @@ class MatrixEditorService {
             parseInt(score.cell_id)
           )
           await models.Cell.destroy({
-            where: { cell_id: { [Op.in]: cellIds } },
+            where: { cell_id: cellIds },
             transaction: transaction,
           })
         }
