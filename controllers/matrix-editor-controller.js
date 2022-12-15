@@ -326,6 +326,17 @@ export async function removeCellMedia(req, res) {
   }
 }
 
+export async function removeCellsMedia(req, res) {
+  const taxonId = parseInt(req.body.taxon_id)
+  const characterIds = parseIntArray(req.body.character_ids)
+  const success = await applyMatrix(req, res, (service) =>
+    service.removeCellsMedia(taxonId, characterIds)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
 export async function addPartition(req, res) {
   const name = req.body.name
   const description = req.body.description
