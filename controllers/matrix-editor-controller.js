@@ -299,7 +299,7 @@ export async function addCellMedia(req, res) {
   const taxonId = parseInt(req.body.taxon_id)
   const characterIds = parseIntArray(req.body.character_ids)
   const mediaIds = parseIntArray(req.body.media_ids)
-  const batchMode = parseInt(req.body.batchmode)
+  const batchMode = req.body.batchmode
   const success = await applyMatrix(req, res, (service) =>
     service.addCellMedia(taxonId, characterIds, mediaIds, batchMode)
   )
@@ -544,6 +544,7 @@ export async function sendEvent(req, res) {
       res.status(500).json({ ok: false, errors: ['Invalid type'] })
       return
   }
+  res.status(200).json({ ok: true })
 }
 
 export async function fetchChanges(req, res) {

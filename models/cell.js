@@ -136,4 +136,21 @@ export default class Cell extends Model {
       }
     )
   }
+
+  generateCellSnapshot() {
+    const snapshot = {}
+    if (this.changed('is_npa')) {
+      snapshot.is_npa = this.is_npa
+    }
+    if (this.changed('is_uncertain')) {
+      snapshot.is_uncertain = this.is_uncertain
+    }
+    if (this.changed('start_value')) {
+      snapshot.start_value = this.start_value
+    }
+    if (this.changed('end_value')) {
+      snapshot.end_value = this.end_value
+    }
+    return snapshot
+  }
 }

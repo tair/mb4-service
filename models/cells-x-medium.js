@@ -124,4 +124,8 @@ export default class CellsXMedium extends Model {
       }
     )
   }
+
+  generateCellSnapshot() {
+    return { notes: this.notes, media_id: this.media_id }
+  }
 }
