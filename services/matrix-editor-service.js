@@ -1,7 +1,6 @@
 import sequelizeConn from '../util/db.js'
 import { CELL_BATCH_TYPES } from '../util/cells.js'
 import { MATRIX_OPTIONS } from '../util/matrix.js'
-import { Op } from 'sequelize'
 import { Table } from '../util/table.js'
 import { array_difference, array_intersect, time } from '../util/util.js'
 import { getTextForBibliographicReference } from './bibliography-service.js'
@@ -594,7 +593,7 @@ class MatrixEditorService {
 
       cellBatch.finished_on = time()
       cellBatch.description = description
-      await cellBatch.save({ transaction: transaction })
+      await cellBatch.save({ user: this.user, transaction: transaction })
     }
 
     await transaction.commit()
@@ -637,6 +636,7 @@ class MatrixEditorService {
           notes: notes,
           source: 'HTML5',
         },
+        user: this.user,
         transaction: transaction,
       }
     )
@@ -650,7 +650,7 @@ class MatrixEditorService {
     }
 
     if (built) {
-      await link.save({ transaction: transaction })
+      await link.save({ user: this.user, transaction: transaction })
     } else {
       if (link.matrix_id != this.matrix.matrix_id) {
         throw new UserError('Citation is not for the specified matrix')
@@ -667,7 +667,7 @@ class MatrixEditorService {
 
       link.pp = pp
       link.notes = notes
-      await link.save({ transaction: transaction })
+      await link.save({ user: this.user, transaction: transaction })
     }
 
     await transaction.commit()
@@ -705,7 +705,7 @@ class MatrixEditorService {
     await this.checkCanEditCharacters([link.character_id])
 
     const transaction = await sequelizeConn.transaction()
-    await link.destroy({ transaction: transaction })
+    await link.destroy({ user: this.user, transaction: transaction })
     await transaction.commit()
 
     return { link_id: linkId }
@@ -1306,8 +1306,10 @@ class MatrixEditorService {
     await models.Taxon.update(
       { notes: notes },
       {
-        where: { taxon_id: { [Op.in]: taxaIds } },
+        where: { taxon_id: taxaIds },
         transaction: transaction,
+        individualHooks: true,
+        user: this.user,
       }
     )
 
@@ -1339,10 +1341,12 @@ class MatrixEditorService {
       },
       {
         where: {
-          taxon_id: { [Op.in]: taxaIds },
+          taxon_id: taxaIds,
           matrix_id: this.matrix.matrix_id,
         },
         transaction: transaction,
+        individualHooks: true,
+        user: this.user,
       }
     )
 
@@ -1510,6 +1514,7 @@ class MatrixEditorService {
         source: 'HTML5',
       },
       transaction: transaction,
+      user: this.user,
     })
 
     const actionIds = []
@@ -1528,11 +1533,12 @@ class MatrixEditorService {
           user_id: this.user.user_id,
         },
         transaction: transaction,
+        user: this.user,
       })
 
       if (!created) {
         rule.state_id = actionStateId
-        await rule.save({ transaction: transaction })
+        await rule.save({ user: this.user, transaction: transaction })
       }
 
       const actionId = parseInt(rule.action_id)
@@ -1573,7 +1579,7 @@ class MatrixEditorService {
       if (rule.character_id != characterId) {
         throw new UserError('This action does not belong to this character')
       }
-      await action.destroy({ transaction: transaction })
+      await action.destroy({ user: this.user, transaction: transaction })
 
       // If there are no other linked actions. Let's also delete the rule.
       const [[{ count }]] = await sequelizeConn.query(
@@ -1581,7 +1587,7 @@ class MatrixEditorService {
         { replacements: [action.rule_id], transaction: transaction }
       )
       if (count == 0) {
-        await rule.destroy({ transaction: transaction })
+        await rule.destroy({ user: this.user, transaction: transaction })
       }
       await transaction.commit()
     }
@@ -1790,8 +1796,9 @@ class MatrixEditorService {
               character_id: characterId,
               taxon_id: taxonId,
             },
-            individualHooks: true,
             transaction: transaction,
+            individualHooks: true,
+            user: this.user,
           })
 
           const stateId = characterRuleAction['state_id']
@@ -1803,7 +1810,7 @@ class MatrixEditorService {
               user_id: this.user.user_id,
               state_id: stateId > 0 ? stateId : null,
             },
-            { transaction: transaction }
+            { user: this.user, transaction: transaction }
           )
           changedCells.push(cell)
           break
@@ -1820,7 +1827,7 @@ class MatrixEditorService {
               user_id: this.user.user_id,
               source: 'HTML5',
             },
-            { transaction: transaction }
+            { user: this.user, transaction: transaction }
           )
 
           changedMedia.push({
@@ -1930,6 +1937,7 @@ class MatrixEditorService {
           taxon_id: taxonId,
         },
         individualHooks: true,
+        user: this.user,
         transaction: transaction,
       })
 
@@ -1942,7 +1950,7 @@ class MatrixEditorService {
           user_id: this.user.user_id,
           state_id: stateId > 0 ? stateId : null,
         },
-        { transaction: transaction }
+        { user: this.user, transaction: transaction }
       )
       changedCells.push(cell)
     }
@@ -1998,7 +2006,7 @@ class MatrixEditorService {
           user_id: this.user.user_id,
           source: 'HTML5',
         },
-        { transaction: transaction }
+        { user: this.user, transaction: transaction }
       )
 
       changedMedia.push({
@@ -2124,6 +2132,8 @@ class MatrixEditorService {
               {
                 where: { cell_id: cellScore.cell_id },
                 transaction: transaction,
+                individualHooks: true,
+                user: this.user,
               }
             )
             // Update the in-memory record so that it matches what's in the
@@ -2138,6 +2148,8 @@ class MatrixEditorService {
           await models.Cell.destroy({
             where: { cell_id: cellScore.cell_id },
             transaction: transaction,
+            individualHooks: true,
+            user: this.user,
           })
           cellScore.cell_id = 0 // Signal that the cell should be deleted.
           cellChangesResults.push(cellScore)
@@ -2156,7 +2168,7 @@ class MatrixEditorService {
               start_value: null,
               end_value: null,
             },
-            { transaction: transaction }
+            { user: this.user, transaction: transaction }
           )
           cellChangesResults.push(cell)
           insertedScores.push(cell)
@@ -2177,8 +2189,10 @@ class MatrixEditorService {
       const linkIds = deletedCellMedia.map((media) => parseInt(media.link_id))
       await models.CellsXMedium.destroy({
         where: {
-          where: { link_id: { [Op.in]: linkIds } },
+          where: { link_id: linkIds },
           transaction: transaction,
+          individualHooks: true,
+          user: this.user,
         },
       })
     }
@@ -2199,7 +2213,7 @@ class MatrixEditorService {
 
       cellBatch.finished_on = time()
       cellBatch.description = description
-      await cellBatch.save({ transaction: transaction })
+      await cellBatch.save({ user: this.user, transaction: transaction })
     }
 
     await transaction.commit()
@@ -2281,8 +2295,9 @@ class MatrixEditorService {
               start_value: startValue,
               end_value: endValue,
             },
-            { transaction: transaction }
+            { user: this.user, transaction: transaction }
           )
+          cell.type = 1 /* numeric */
           cellChangesResults.push(cell)
         } else if (cellScores.size > 1) {
           throw UserError('Selected Continuous scores have more than one value')
@@ -2290,6 +2305,7 @@ class MatrixEditorService {
           const cellScore = cellScores.get(0)
           await models.Cell.destroy({
             where: { cell_id: cellScore.cell_id },
+            user: this.user,
             transaction: transaction,
           })
           cellScore.cell_id = 0 // Signal that the cell should be deleted.
@@ -2300,7 +2316,9 @@ class MatrixEditorService {
           cell.start_value = startValue
           cell.end_value = endValue
           cell.user_id = this.user.user_id
-          await cell.save({ transaction: transaction })
+          await cell.save({ user: this.user, transaction: transaction })
+
+          cell.type = 1 /* numeric */
           cellChangesResults.push(cell)
         }
       }
@@ -2322,7 +2340,7 @@ class MatrixEditorService {
 
       cellBatch.finished_on = time()
       cellBatch.description = description
-      await cellBatch.save({ transaction: transaction })
+      await cellBatch.save({ user: this.user, transaction: transaction })
     }
 
     await transaction.commit()
@@ -2374,21 +2392,22 @@ class MatrixEditorService {
             matrix_id: this.matrix.matrix_id,
             taxon_id: taxonId,
             character_id: characterId,
-            created_on: time(),
-            last_modified_on: time(),
+            user_id: this.user.user_id,
             status: 0,
-            note: '',
+            notes: '',
             source: 'HTML5',
           },
+          user: this.user,
           transaction: transaction,
         })
-        if (notes) {
+        if (notes != null) {
           cellNote.notes = notes.trim()
         }
         if (status) {
           cellNote.status = status
         }
-        await cellNote.save({ transaction: transaction })
+        cellNote.user_id = this.user.user_id
+        await cellNote.save({ user: this.user, transaction: transaction })
       }
     }
 
@@ -2406,7 +2425,7 @@ class MatrixEditorService {
 
       cellBatch.finished_on = time()
       cellBatch.description = description
-      await cellBatch.save({ transaction: transaction })
+      await cellBatch.save({ user: this.user, transaction: transaction })
     }
 
     await transaction.commit()
@@ -2464,9 +2483,11 @@ class MatrixEditorService {
             taxon_id: taxonId,
             character_id: characterId,
             media_id: mediaId,
+            user_id: this.user.user_id,
             created_on: time(),
             source: 'HTML5',
           },
+          user: this.user,
           transaction: transaction,
         })
         if (created) {
@@ -2476,7 +2497,7 @@ class MatrixEditorService {
     }
 
     if (this.matrix.getOption('APPLY_CHARACTERS_WHILE_SCORING') == 1) {
-      const media = await this.applyMediaRules(insertedCellMedia)
+      const media = await this.applyMediaRules(insertedCellMedia, transaction)
       insertedCellMedia.push(...media)
     }
 
@@ -2491,7 +2512,7 @@ class MatrixEditorService {
       cellBatch.description = `${mediaIds.length} media added to ${
         characterIds.length
       } characters (s) in ${getTaxonName(taxon)} row`
-      await cellBatch.save({ transaction: transaction })
+      await cellBatch.save({ user: this.user, transaction: transaction })
     }
 
     const mediaResults = []
@@ -2528,7 +2549,7 @@ class MatrixEditorService {
         await this.copyMediaCitationsToCell(cellMedia, transaction)
       }
 
-      await cellMedia.destroy({ transaction: transaction })
+      await cellMedia.destroy({ user: this.user, transaction: transaction })
     }
 
     await transaction.commit()
@@ -2560,6 +2581,7 @@ class MatrixEditorService {
         character_id: characterIds,
       },
       individualHooks: true,
+      user: this.user,
       transaction: transaction,
     })
 
@@ -2577,6 +2599,7 @@ class MatrixEditorService {
         finished_on: time(),
       },
       {
+        user: this.user,
         transaction: transaction,
       }
     )
@@ -2619,19 +2642,28 @@ class MatrixEditorService {
       'You are not allowed to modify partitions'
     )
 
-    await this.checkPartitionNameExists(name)
-
     const transaction = await sequelizeConn.transaction()
     const partition = await models.Partition.findByPk(partitionId)
     if (!partition || partition.project_id != this.project.project_id) {
       throw new UserError('Invalid Partition id')
     }
 
-    partition.name = name
+    if (partition.name != name) {
+      const [[{ count }]] = await sequelizeConn.query(
+        'SELECT COUNT(*) AS count FROM partitions WHERE partition_id != ? AND name = ?',
+        { replacements: [partitionId, name] }
+      )
+      if (count) {
+        throw new UserError('Partition by the given name already exists')
+      }
+
+      partition.name = name
+    }
+
     partition.description = description
     partition.source = 'HTML5'
 
-    await partition.save({ transaction: transaction })
+    await partition.save({ user: this.user, transaction: transaction })
     await transaction.commit()
     return {
       id: partition.partition_id,
@@ -2679,7 +2711,7 @@ class MatrixEditorService {
         description: description,
         source: 'HTML5',
       },
-      { transaction: transaction }
+      { user: this.user, transaction: transaction }
     )
     for (const taxonId of taxaIds) {
       await models.TaxaXPartition.create(
@@ -2689,6 +2721,7 @@ class MatrixEditorService {
           user_id: this.user.user_id,
         },
         {
+          user: this.user,
           transaction: transaction,
         }
       )
@@ -2702,6 +2735,7 @@ class MatrixEditorService {
           user_id: this.user.user_id,
         },
         {
+          user: this.user,
           transaction: transaction,
         }
       )
@@ -2733,12 +2767,17 @@ class MatrixEditorService {
       'editPartition',
       'You are not allowed to remove partitions'
     )
+    const transaction = await sequelizeConn.transaction()
     await models.Partition.destroy({
       where: {
         partition_id: partitionId,
         project_id: this.project.project_id,
       },
+      individualHooks: true,
+      user: this.user,
+      transaction: transaction,
     })
+    await transaction.commit()
     return {
       id: partitionId,
     }
@@ -2771,6 +2810,7 @@ class MatrixEditorService {
           partition_id: partitionId,
           user_id: this.user.user_id,
         },
+        user: this.user,
         transaction: transaction,
       })
     }
@@ -2800,9 +2840,10 @@ class MatrixEditorService {
     await models.CharactersXPartition.destroy({
       where: {
         partition_id: partitionId,
-        character_id: { [Op.in]: characterIds },
+        character_id: characterIds,
       },
       individualHooks: true,
+      user: this.user,
       transaction: transaction,
     })
     await transaction.commit()
@@ -2839,6 +2880,7 @@ class MatrixEditorService {
           partition_id: partitionId,
           user_id: this.user.user_id,
         },
+        user: this.user,
         transaction: transaction,
       })
     }
@@ -2871,6 +2913,7 @@ class MatrixEditorService {
         taxon_id: taxaIds,
       },
       individualHooks: true,
+      user: this.user,
       transaction: transaction,
     })
     await transaction.commit()
@@ -3007,12 +3050,14 @@ class MatrixEditorService {
       `
       SELECT
         DISTINCT c.cell_id, c.user_id, c.taxon_id, c.character_id, c.created_on,
-        c.state_id, c.is_npa, c.is_uncertain, c.start_value, c.end_value
+        c.state_id, c.is_npa, c.is_uncertain, c.start_value, c.end_value,
+        ch.type
       FROM cells c
       INNER JOIN cell_change_log AS ccl ON
         ccl.matrix_id = c.matrix_id AND
         ccl.character_id = c.character_id AND
         ccl.taxon_id = c.taxon_id
+      INNER JOIN characters AS ch ON ch.character_id = c.character_id
       WHERE
         ccl.table_num = 6 AND
         c.matrix_id = ? AND
@@ -3269,7 +3314,7 @@ class MatrixEditorService {
         log_datetime > ?`,
       { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
     )
-    const order = {}
+    let order = null
     if (changedRows.length) {
       const [characterRows] = await sequelizeConn.query(
         `
@@ -3280,7 +3325,6 @@ class MatrixEditorService {
         { replacements: [this.matrix.matrix_id] }
       )
 
-      order.characters = characterRows.map((row) => parseInt(row.character_id))
       const [taxaRows] = await sequelizeConn.query(
         `
         SELECT taxon_id
@@ -3289,7 +3333,10 @@ class MatrixEditorService {
         ORDER BY position`,
         { replacements: [this.matrix.matrix_id] }
       )
-      order.taxa = taxaRows.map((row) => parseInt(row.taxon_id))
+      order = {
+        taxa: taxaRows.map((row) => parseInt(row.taxon_id)),
+        characters: characterRows.map((row) => parseInt(row.character_id)),
+      }
     }
 
     // The first query is for partition IDs of new partitions, the second query
@@ -3362,7 +3409,7 @@ class MatrixEditorService {
     }
 
     return {
-      cells: cells,
+      cells: this.convertCellQueryToResults(cells),
       media: media,
       notes: notes,
       citations: citations,
@@ -4111,6 +4158,8 @@ class MatrixEditorService {
           await models.Cell.destroy({
             where: { cell_id: cellIds },
             transaction: transaction,
+            individualHooks: true,
+            user: this.user,
           })
         }
 
@@ -4126,7 +4175,7 @@ class MatrixEditorService {
             is_npa: 0,
             is_uncertain: score.is_uncertain,
           },
-          { transaction: transaction }
+          { user: this.user, transaction: transaction }
         )
         ruleBasedChanges.push(cell)
       }
@@ -4173,26 +4222,31 @@ class MatrixEditorService {
       const mediaId = parseInt(cellMedium.media_id)
       const characterId = parseInt(cellMedium.character_id)
       const actionCharacterIds = mediaRules.get(characterId)
+      if (!actionCharacterIds) {
+        continue
+      }
       for (const actionCharacterId of actionCharacterIds) {
-        const [cellMedium, created] = await models.CellsXMedium.findOrCreate({
-          where: {
-            matrix_id: this.matrix.matrix_id,
-            taxon_id: cellMedia.taxon_id,
-            character_id: characterId,
-            media_id: mediaId,
-          },
-          defaults: {
-            matrix_id: this.matrix.matrix_id,
-            taxon_id: cellMedia.taxon_id,
-            character_id: actionCharacterId,
-            media_id: mediaId,
-            created_on: time(),
-            source: 'HTML5',
-          },
-          transaction: transaction,
-        })
+        const [newCellMedium, created] = await models.CellsXMedium.findOrCreate(
+          {
+            where: {
+              matrix_id: this.matrix.matrix_id,
+              taxon_id: cellMedium.taxon_id,
+              character_id: actionCharacterId,
+              media_id: mediaId,
+            },
+            defaults: {
+              matrix_id: this.matrix.matrix_id,
+              taxon_id: cellMedium.taxon_id,
+              character_id: actionCharacterId,
+              media_id: mediaId,
+              source: 'HTML5',
+            },
+            transaction: transaction,
+            user: this.user,
+          }
+        )
         if (created) {
-          insertedCellMedia.push(cellMedium)
+          insertedCellMedia.push(newCellMedium)
         }
       }
     }
@@ -4236,7 +4290,7 @@ class MatrixEditorService {
           user_id: this.user.user_id,
           source: 'HTML5',
         },
-        { transaction: transaction }
+        { user: this.user, transaction: transaction }
       )
     }
   }
@@ -4414,10 +4468,10 @@ class MatrixEditorService {
       const isNumeric = !!row.type
       if (isNumeric) {
         const convertFunction = parseInt(row.type) == 1 ? parseFloat : parseInt
-        if (row.start_value) {
+        if (row.start_value != null) {
           cell['sv'] = convertFunction(row.start_value)
         }
-        if (row.end_value) {
+        if (row.end_value != null) {
           cell['ev'] = convertFunction(row.end_value)
         }
       }

@@ -39,6 +39,10 @@ export default class CellNote extends Model {
             key: 'taxon_id',
           },
         },
+        user_id: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: false,
+        },
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
@@ -113,5 +117,22 @@ export default class CellNote extends Model {
         ],
       }
     )
+  }
+
+  generateCellSnapshot(changeType) {
+    switch (changeType) {
+      case 'I':
+      case 'D':
+        return { notes: this.notes, status: this.status }
+      case 'U': {
+        const snapshot = {}
+        for (const field of Object.keys(this.rawAttributes)) {
+          if (this.changed(field)) {
+            snapshot[field] = this.previous(field)
+          }
+        }
+        return snapshot
+      }
+    }
   }
 }

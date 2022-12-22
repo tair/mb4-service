@@ -56,6 +56,8 @@ import _User from './user.js'
 import _UserRole from './user-role.js'
 import _UsersXRole from './users-x-role.js'
 import sequelizeConn from '../util/db.js'
+import { logCellChange } from './hooks/cell-hooks.js'
+import { logChange } from './hooks/changelog-hook.js'
 
 function initModels(sequelizeConn) {
   const AnnotationEvent = _AnnotationEvent.init(sequelizeConn, DataTypes)
@@ -678,6 +680,34 @@ function initModels(sequelizeConn) {
     as: 'taxa_x_specimens',
     foreignKey: 'taxon_id',
   })
+
+  const cellTables = [
+    Cell,
+    CellNote,
+    CellsXBibliographicReference,
+    CellsXMedium,
+  ]
+  cellTables.forEach((table) => {
+    table.addHook('afterCreate', (model, options) =>
+      logCellChange(model, 'I', options)
+    )
+    table.addHook('afterUpdate', (model, options) =>
+      logCellChange(model, 'U', options)
+    )
+    table.addHook('afterDestroy', (model, options) =>
+      logCellChange(model, 'D', options)
+    )
+  })
+
+  sequelizeConn.addHook('afterCreate', (model, options) =>
+    logChange(model, 'I', options)
+  )
+  sequelizeConn.addHook('afterUpdate', (model, options) =>
+    logChange(model, 'U', options)
+  )
+  sequelizeConn.addHook('afterDestroy', (model, options) =>
+    logChange(model, 'D', options)
+  )
 
   return {
     AnnotationEvent,

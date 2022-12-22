@@ -105,4 +105,25 @@ export default class CellsXBibliographicReference extends Model {
       }
     )
   }
+
+  generateCellSnapshot(changeType) {
+    switch (changeType) {
+      case 'I':
+      case 'D':
+        return {
+          notes: this.notes,
+          pp: this.pp,
+          reference_id: this.reference_id,
+        }
+      case 'U': {
+        const snapshot = { reference_id: this.reference_id }
+        for (const field of Object.keys(this.rawAttributes)) {
+          if (this.changed(field)) {
+            snapshot[field] = this.previous(field)
+          }
+        }
+        return snapshot
+      }
+    }
+  }
 }

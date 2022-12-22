@@ -27,6 +27,7 @@ export default class User extends Model {
         password_hash: {
           type: DataTypes.STRING(60),
           allowNull: true,
+          shouldLog: false,
         },
         fname: {
           type: DataTypes.STRING(255),
@@ -47,10 +48,12 @@ export default class User extends Model {
         vars: {
           type: DataTypes.JSON,
           allowNull: true,
+          shouldLog: false,
         },
         volatile_vars: {
           type: DataTypes.JSON,
           allowNull: true,
+          shouldLog: false,
         },
         active: {
           type: DataTypes.TINYINT.UNSIGNED,
@@ -64,6 +67,7 @@ export default class User extends Model {
           type: DataTypes.CHAR(32),
           allowNull: true,
           unique: 'u_confirmation_key',
+          shouldLog: false,
         },
         approved_on: {
           type: DataTypes.INTEGER.UNSIGNED,
