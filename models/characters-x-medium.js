@@ -33,6 +33,7 @@ export default class CharactersXMedium extends Model {
         notes: {
           type: DataTypes.TEXT,
           allowNull: false,
+          defaultValue: '',
         },
         state_id: {
           type: DataTypes.INTEGER.UNSIGNED,

@@ -501,7 +501,8 @@ class MatrixEditorService {
 
   // TODO(kenzley): We need to implement this when the search engine is done.
   async findCitation(text) {
-    return { text: text, citations: [] }
+    const citations = []
+    return { text: text, citations: citations }
   }
 
   async addCellCitations(
@@ -1463,6 +1464,783 @@ class MatrixEditorService {
 
     return {
       media: media,
+    }
+  }
+
+  async addCharacter(name, type, index) {
+    await this.checkCanDo(
+      'addCharacter',
+      'You are not allowed to add characters to this matrix'
+    )
+
+    if (!name) {
+      const date = new Date().toLocaleString('en-us', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+      })
+      name = `New character (${date})`
+    }
+
+    // This ensures that we only add meristic characters to meristic matrices
+    // and vice-versa.
+    if ((type === 2) != (this.matrix.type == 1)) {
+      const characterType = type === 2 ? 'meristic' : 'categorical'
+      const matrixType = this.matrix.type == 1 ? 'meristic' : 'categorical'
+      throw new UserError(
+        `Unable to add ${characterType} character to ${matrixType}  matrix`
+      )
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    const [[{ maxPosition }]] = await sequelizeConn.query(
+      `
+      SELECT MAX(position) maxPosition
+      FROM matrix_character_order
+      WHERE matrix_id = ?`,
+      { replacements: [this.matrix.matrix_id], transaction: transaction }
+    )
+
+    const position =
+      index == null || index < 0 || index > maxPosition
+        ? maxPosition + 1
+        : index + 1
+
+    const character = await models.Character.create(
+      {
+        name: name,
+        num: position,
+        user_id: this.user.user_id,
+        project_id: this.project.project_id,
+        type: type,
+        source: 'HTML5',
+      },
+      {
+        user: this.user,
+        transaction: transaction,
+      }
+    )
+    await sequelizeConn.query(
+      `
+      UPDATE matrix_character_order
+      SET position = position + 1
+      WHERE  position >= ? AND  matrix_id = ?
+      ORDER BY position DESC`,
+      {
+        replacements: [position, this.matrix.matrix_id],
+        transaction: transaction,
+      }
+    )
+    await sequelizeConn.query(
+      `
+      INSERT INTO matrix_character_order(matrix_id, character_id, position)
+      VALUES(?, ?, ?)`,
+      {
+        replacements: [this.matrix.matrix_id, character.character_id, position],
+        transaction: transaction,
+      }
+    )
+
+    await this.logMatrixChange(transaction)
+    await transaction.commit()
+    return {
+      character: {
+        id: character.character_id,
+        n: name,
+        r: position,
+        t: type,
+        uid: this.user.user_id,
+        last_changed_on: time(),
+      },
+    }
+  }
+
+  async removeCharacters(characterIds) {
+    await this.checkCanDo(
+      'deleteCharacter',
+      'You are not allowed to delete characters'
+    )
+    if (characterIds.length == 0) {
+      throw new UserError('Please specify at least one character')
+    }
+    await this.checkCanEditCharacters(characterIds)
+
+    const transaction = await sequelizeConn.transaction()
+
+    await models.Cell.destroy({
+      where: {
+        character_id: characterIds,
+        matrix_id: this.matrix.matrix_id,
+      },
+      transaction: transaction,
+      individualHooks: true,
+      user: this.user,
+    })
+
+    await models.MatrixCharacterOrder.destroy({
+      where: {
+        character_id: characterIds,
+        matrix_id: this.matrix.matrix_id,
+      },
+      transaction: transaction,
+      individualHooks: true,
+      user: this.user,
+    })
+
+    await sequelizeConn.query(
+      `
+      UPDATE matrix_character_order
+      SET position=@tmp_position:=@tmp_position+1
+      WHERE matrix_id = ? AND (@tmp_position:=0)+1
+      ORDER BY position`,
+      { replacements: [this.matrix.matrix_id], transaction: transaction }
+    )
+
+    const [rows] = await sequelizeConn.query(
+      `
+        SELECT DISTINCT character_id
+        FROM matrix_character_order
+        WHERE character_id IN (?) AND matrix_id != ?`,
+      {
+        replacements: [characterIds, this.matrix.matrix_id],
+        transaction: transaction,
+      }
+    )
+    const referencedCharacterIds = rows.map((row) => parseInt(row.character_id))
+    const unusedCharacterIds = array_difference(
+      characterIds,
+      referencedCharacterIds
+    )
+    if (unusedCharacterIds.length) {
+      await models.Character.destroy({
+        where: {
+          character_id: characterIds,
+        },
+        transaction: transaction,
+        individualHooks: true,
+        user: this.user,
+      })
+    }
+
+    await this.logMatrixChange(transaction)
+    await transaction.commit()
+    return {
+      character_ids: characterIds,
+    }
+  }
+
+  async reorderCharacters(characterIds, index) {
+    await this.checkCanDo(
+      'reorderCharacters',
+      'You are not allowed to reorder characters in this matrix'
+    )
+    if (characterIds.length == 0) {
+      throw new UserError('Please specify at least one character')
+    }
+    await this.checkCanEditCharacters(characterIds)
+
+    const transaction = await sequelizeConn.transaction()
+
+    await sequelizeConn.query(
+      `
+      UPDATE matrix_character_order
+      SET position = position + ?
+      WHERE matrix_id = ? AND position > ?
+      ORDER BY position DESC`,
+      {
+        replacements: [characterIds.length, this.matrix.matrix_id, index],
+        transaction: transaction,
+      }
+    )
+
+    await sequelizeConn.query(
+      `
+      UPDATE matrix_character_order
+      SET position=@tmp_position:=@tmp_position+1
+      WHERE (@tmp_position:=?)+1 AND matrix_id = ? AND character_id IN (?)
+      ORDER BY position`,
+      {
+        replacements: [index, this.matrix.matrix_id, characterIds],
+        transaction: transaction,
+      }
+    )
+
+    await sequelizeConn.query(
+      `
+      UPDATE matrix_character_order
+      SET position=@tmp_position:=@tmp_position+1
+      WHERE matrix_id = ? AND (@tmp_position:=0)+1
+      ORDER BY position`,
+      { replacements: [this.matrix.matrix_id], transaction: transaction }
+    )
+
+    await this.logMatrixChange(transaction)
+    await transaction.commit()
+    return {
+      success: true,
+    }
+  }
+
+  async updateCharacter(
+    characterId,
+    name,
+    description,
+    isMinorEdit,
+    ordering,
+    states
+  ) {
+    await this.checkCanDo(
+      'editCharacter',
+      'You are not allowed to edit this character in this matrix'
+    )
+
+    await this.checkCanEditCharacters([characterId])
+
+    const character = await models.Character.findByPk(characterId)
+    const transaction = await sequelizeConn.transaction()
+    character.name = name
+    character.description = description
+    character.ordering = ordering
+    character.source = 'HTML5'
+    await character.save({
+      user: this.user,
+      is_minor_edit: isMinorEdit,
+      transaction: transaction,
+    })
+
+    for (const state of states) {
+      let characterState
+      if (state.id > 0) {
+        characterState = await models.CharacterState.findByPk(state.id)
+        if (characterState.character_id != characterId) {
+          throw new UserError('State is not part of this character')
+        }
+      } else {
+        characterState = await models.CharacterState.build({
+          character_id: characterId,
+          user_id: this.user.user_id,
+        })
+      }
+      characterState.num = state.r
+      characterState.name = state.n
+      await characterState.save({
+        user: this.user,
+        is_minor_edit: isMinorEdit,
+        transaction: transaction,
+      })
+
+      // Add the state id to the response so that the client can identify them.
+      state.id = parseInt(characterState.state_id)
+    }
+
+    // Remove states that exist in database but are not in request.
+    const stateIds = states.map((state) => state.id)
+    const [rows] = await sequelizeConn.query(
+      `
+        SELECT DISTINCT state_id
+        FROM character_states
+        WHERE character_id = ? AND state_id NOT IN (?)`,
+      {
+        replacements: [characterId, stateIds],
+        transaction: transaction,
+      }
+    )
+    const deletedStateIds = rows.map((row) => parseInt(row.state_id))
+    if (deletedStateIds.length > 0) {
+      // TODO(kenzley): Consider moving this into a deletion hook which finds
+      //                all referenced tables and deletes them.
+      await sequelizeConn.query(
+        `
+        DELETE FROM media_labels
+        WHERE table_num = 16 AND link_id IN
+        (
+          SELECT link_id
+          FROM characters_x_media
+          WHERE state_id IN (?)
+        )`,
+        {
+          replacements: [deletedStateIds],
+          transaction: transaction,
+        }
+      )
+      await models.CharacterState.destroy({
+        where: {
+          state_id: deletedStateIds,
+        },
+        transaction: transaction,
+        individualHooks: true,
+        user: this.user,
+        is_minor_edit: isMinorEdit,
+      })
+    }
+
+    await transaction.commit()
+    return {
+      ts: isMinorEdit ? 0 : time(),
+      character_id: characterId,
+      name: name,
+      description: description,
+      is_minor_edit: isMinorEdit,
+      deleted_state_ids: deletedStateIds,
+      states: states,
+    }
+  }
+
+  async updateCharactersOrdering(characterIds, ordering) {
+    await this.checkCanDo(
+      'editCharacter',
+      'You are not allowed to edit this character in this matrix'
+    )
+
+    await this.checkCanEditCharacters(characterIds)
+    await this.checkCharactersAreDiscrete(characterIds)
+
+    const transaction = await sequelizeConn.transaction()
+    await models.Character.update(
+      { ordering: ordering },
+      {
+        where: { character_id: characterIds },
+        transaction: transaction,
+        individualHooks: true,
+        user: this.user,
+      }
+    )
+
+    await transaction.commit()
+    return {
+      character_ids: characterIds,
+    }
+  }
+
+  async getCharacterCitations(characterId) {
+    const [rows] = await sequelizeConn.query(
+      `
+      SELECT *
+      FROM bibliographic_references br
+      INNER JOIN characters_x_bibliographic_references AS txbr ON
+        txbr.reference_id = br.reference_id
+      WHERE txbr.character_id = ?`,
+      {
+        replacements: [characterId],
+      }
+    )
+    const citations = []
+    for (const row of rows) {
+      citations.push({
+        link_id: row.link_id,
+        citation_id: row.reference_id,
+        name: getCitationText(row),
+        notes: row.notes,
+        pp: row.pp,
+      })
+    }
+    return { citations: citations }
+  }
+
+  async removeCharacterCitation(linkId) {
+    const link = await models.CharactersXBibliographicReference.findByPk(linkId)
+    if (link == null) {
+      throw new UserError('Citation does not exist')
+    }
+
+    await this.checkCanEditCharacters([link.character_id])
+
+    const transaction = await sequelizeConn.transaction()
+    await link.destroy({
+      transaction: transaction,
+      individualHooks: true,
+      user: this.user,
+    })
+
+    await transaction.commit()
+    return {
+      link_id: linkId,
+    }
+  }
+
+  async upsertCharacterCitation(linkId, characterId, citationId, pp, notes) {
+    await this.checkCanEditCharacters([characterId])
+
+    const transaction = await sequelizeConn.transaction()
+    const [link, built] =
+      await models.CharactersXBibliographicReference.findOrBuild({
+        where: {
+          link_id: linkId,
+        },
+        defaults: {
+          character_id: characterId,
+          reference_id: citationId,
+          user_id: this.user.user_id,
+          pp: pp,
+          notes: notes,
+          source: 'HTML5',
+        },
+        user: this.user,
+        transaction: transaction,
+      })
+
+    let name = null
+    if (built) {
+      const existingLink =
+        await models.CharactersXBibliographicReference.findOne({
+          where: {
+            character_id: characterId,
+            reference_id: citationId,
+            pp: pp,
+          },
+          transaction: transaction,
+        })
+      if (existingLink != null) {
+        throw new UserError(`
+          You have already added this citation to this character.
+          You can only add a citation to a character once`)
+      }
+      const citation = await models.BibliographicReference.findByPk(citationId)
+      if (citation == null) {
+        throw new UserError('Citation is not found')
+      }
+      name = getCitationText(citation)
+    } else {
+      // Ensure that the user provided the correct link to the character.
+      if (link.character_id != characterId) {
+        throw new UserError('Citation does not match the given character')
+      }
+
+      link.pp = pp
+      link.notes = notes
+    }
+
+    await link.save({ user: this.user, transaction: transaction })
+    await transaction.commit()
+    return {
+      citation: {
+        link_id: link.link_id,
+        citation_id: citationId,
+        pp: pp,
+        notes: notes,
+        name: name,
+      },
+    }
+  }
+
+  // TODO(kenzley): We need to implement this when the search engine is done.
+  async findCharacterMedia(search) {
+    if (!search) {
+      throw new UserError('Character media text cannot be empty')
+    }
+    const media = []
+    return {
+      search: search,
+      media: media,
+    }
+  }
+
+  async addCharacterMedia(characterId, stateId, mediaIds) {
+    await this.checkCanDo(
+      'addCharacterMedia',
+      'You are not allowed to add media to this character'
+    )
+
+    const isCellMediaAutomationEnabled = this.matrix.getOption(
+      'ENABLE_CELL_MEDIA_AUTOMATION'
+    )
+    const character = await models.Character.findByPk(characterId)
+    if (character == null || character.project_id != this.project.project_id) {
+      throw new UserError('Character ID was invalid')
+    }
+
+    if (stateId != null) {
+      const state = await models.CharacterState.findByPk(stateId)
+      if (state.character_id != characterId) {
+        throw new UserError('State ID was invalid')
+      }
+    }
+
+    const [rows] = await sequelizeConn.query(
+      `
+      SELECT cm.media_id
+      FROM characters_x_media cm
+      INNER JOIN media_files AS m ON m.media_id = cm.media_id
+      WHERE cm.character_id = ?`,
+      { replacements: [characterId] }
+    )
+    const existingMediaIds = rows.map((row) => parseInt(row.media_id))
+
+    const newMediaIds = array_difference(mediaIds, existingMediaIds)
+    const media = await models.MediaFile.findAll({
+      where: { media_id: newMediaIds },
+    })
+
+    const transaction = await sequelizeConn.transaction()
+    const characterMedia = []
+    for (const medium of media) {
+      if (medium.project_id != this.project.project_id) {
+        throw new UserError('Media does not belong to this project')
+      }
+      if (isCellMediaAutomationEnabled == 1 && medium.view_id == null) {
+        throw new UserError('Character media must have a Media View')
+      }
+
+      const characterMedium = await models.CharactersXMedium.create(
+        {
+          character_id: characterId,
+          media_id: medium.media_id,
+          state_id: stateId,
+          user_id: this.user.user_id,
+          source: 'HTML5',
+        },
+        {
+          user: this.user,
+          transaction: transaction,
+        }
+      )
+
+      characterMedia.push({
+        link_id: characterMedium.link_id,
+        character_id: characterId,
+        media_id: medium.media_id,
+        state_id: stateId,
+        icon: getMedia(medium.media, 'icon'),
+        tiny: getMedia(medium.media, 'tiny'),
+      })
+    }
+
+    await transaction.commit()
+    return {
+      media: characterMedia,
+    }
+  }
+
+  async removeCharacterMedia(linkId, characterId, mediaId) {
+    await this.checkCanDo(
+      'deleteCharacterMedia',
+      'You are not allowed to remove media in this character'
+    )
+
+    const characterMedium = await models.CharactersXMedium.findByPk(linkId)
+
+    if (characterMedium) {
+      await this.checkCanEditCharacters([characterId])
+      if (characterMedium.character_id != characterId) {
+        throw new UserError(`Character does not match media`)
+      }
+
+      if (characterMedium.media_id != mediaId) {
+        throw new UserError(`Media is not in character`)
+      }
+
+      const transaction = await sequelizeConn.transaction()
+      await characterMedium.destroy({
+        user: this.user,
+        transaction: transaction,
+      })
+      await transaction.commit()
+    }
+
+    return {
+      link_id: linkId,
+    }
+  }
+
+  async moveCharacterMedia(linkId, characterId, stateId, mediaId) {
+    await this.checkCanDo(
+      'addCharacterMedia',
+      'You are not allowed to move media in this character'
+    )
+
+    await this.checkCanEditCharacters([characterId])
+    const characterMedium = await models.CharactersXMedium.findByPk(linkId)
+    if (characterMedium == null) {
+      throw new UserError('Character media does not exist')
+    }
+    if (characterMedium.media_id != mediaId) {
+      throw new UserError('Media is invalid')
+    }
+
+    if (stateId) {
+      const state = await models.CharacterState.findByPk(stateId)
+      if (state.character_id != characterId) {
+        throw new UserError('Character state is invalid')
+      }
+    }
+
+    const oldStateId = characterMedium.state_id
+    const transaction = await sequelizeConn.transaction()
+
+    characterMedium.state_id = stateId
+    characterMedium.source = 'HTML5'
+    await characterMedium.save({
+      user: this.user,
+      transaction: transaction,
+    })
+
+    await transaction.commit()
+    return {
+      link_id: characterMedium.link_id,
+      media_id: mediaId,
+      character_id: characterId,
+      state_id: stateId,
+      old_state_id: oldStateId,
+    }
+  }
+
+  async addCharacterComment(characterId, stateId, text) {
+    if (!text) {
+      throw new UserError('Comment must not be empty')
+    }
+
+    await this.checkCanDo(
+      'addCharacterComment',
+      'You are not allowed to add commments to this character'
+    )
+
+    await this.checkCanEditCharacters([characterId])
+
+    const annotation = models.Annotation.build({
+      typecode: 'C',
+      annotation: text,
+      user_id: this.user.user_id,
+    })
+    if (stateId) {
+      const state = await models.CharacterState.findByPk(stateId)
+      if (!state) {
+        throw new UserError('State does not exist')
+      }
+      if (state.character_id != characterId) {
+        throw new UserError('State is not associated with this character')
+      }
+      annotation.table_num = TABLE_NUMBERS.character_states
+      annotation.row_id = stateId
+    } else {
+      annotation.table_num = TABLE_NUMBERS.characters
+      annotation.row_id = characterId
+    }
+
+    const transaction = await sequelizeConn.transaction()
+    await annotation.save({
+      user: this.user,
+      transaction: transaction,
+    })
+    await transaction.commit()
+
+    return {
+      character_id: characterId,
+      state_id: stateId,
+      comment_text: text,
+    }
+  }
+
+  async getCharacterComments(characterId) {
+    const [characterCommentRows] = await sequelizeConn.query(
+      `
+      SELECT
+        a.annotation_id, a.annotation, a.created_on,
+        wu.user_id, wu.fname, wu.lname, wu.email
+      FROM annotations a
+      INNER JOIN ca_users AS wu ON wu.user_id = a.user_id
+      WHERE
+        table_num = ? AND row_id = ? AND typecode = 'C'
+      ORDER BY
+        a.created_on ASC`,
+      { replacements: [TABLE_NUMBERS.characters, characterId] }
+    )
+
+    const [stateCommentsRows] = await sequelizeConn.query(
+      `
+      SELECT
+        a.annotation_id, a.annotation, a.created_on,
+        wu.user_id, wu.fname, wu.lname, wu.email,
+        c.character_id, c.name character_name, c.num character_num,
+        cs.state_id, cs.name state_name, cs.num state_num
+      FROM characters c
+      INNER JOIN character_states AS cs ON c.character_id = cs.character_id
+      INNER JOIN annotations AS a ON a.row_id = cs.state_id
+      INNER JOIN ca_users AS wu ON wu.user_id = a.user_id
+      WHERE a.table_num = ? AND c.character_id = ?`,
+      { replacements: [TABLE_NUMBERS.character_states, characterId] }
+    )
+
+    const rows = [...characterCommentRows, ...stateCommentsRows]
+
+    const createdTime = time()
+    const comments = []
+    const annotationEvents = []
+    for (const row of rows) {
+      const annotationId = parseInt(row.annotation_id)
+      const statename = row.state_id
+        ? `[${row.state_num}] ${row.state_name}`
+        : 'character'
+      const user = `${row.fname} ${row.lname} (${row.email})`
+      comments.push({
+        id: annotationId,
+        created_on: row.created_on,
+        user: user,
+        statename: statename,
+        comment: row.annotation,
+      })
+      annotationEvents.push({
+        annotation_id: annotationId,
+        typecode: 0,
+        date_time: createdTime,
+        user_id: this.user.user_id,
+      })
+    }
+    comments.sort((a, b) => a.created_on - b.created_on)
+
+    // Add an event to indicate that we read the comments.
+    const transaction = await sequelizeConn.transaction()
+    await models.AnnotationEvent.bulkCreate(annotationEvents, {
+      user: this.user,
+      transaction: transaction,
+      updateOnDuplicate: ['date_time'],
+    })
+    await transaction.commit()
+
+    return {
+      comments: comments,
+    }
+  }
+
+  async setCharacterCommentsAsUnread(characterId) {
+    const [rows] = await sequelizeConn.query(
+      `
+      SELECT annotation_id
+      FROM annotations
+      WHERE table_num = ? AND row_id = ? AND typecode = 'C'
+      UNION
+      SELECT annotation_id
+      FROM annotations AS a
+      INNER JOIN character_states AS cs ON cs.state_id = a.row_id
+      INNER JOIN characters AS c ON c.character_id = cs.character_id
+      WHERE a.table_num = ? AND c.character_id = ? AND typecode = 'C'`,
+      {
+        replacements: [
+          TABLE_NUMBERS.characters,
+          characterId,
+          TABLE_NUMBERS.character_states,
+          characterId,
+        ],
+      }
+    )
+    const annotationIds = rows.map((row) => parseInt(row.annotation_id))
+    const transaction = await sequelizeConn.transaction()
+    await models.AnnotationEvent.destroy({
+      where: {
+        user_id: this.user.user_id,
+        annotation_id: annotationIds,
+      },
+      transaction: transaction,
+      individualHooks: true,
+      user: this.user,
+    })
+    await transaction.commit()
+    return {
+      character_id: characterId,
     }
   }
 
@@ -2568,7 +3346,7 @@ class MatrixEditorService {
 
     await this.checkCanDo(
       'editCellData',
-      'You are not allowed to set states in this matrix'
+      'You are not allowed to remove media in this matrix'
     )
     await this.checkCanEditTaxa([taxonId])
     await this.checkCanEditCharacters(characterIds)
@@ -2608,6 +3386,59 @@ class MatrixEditorService {
     return {
       taxon_id: taxonId,
       character_ids: characterIds,
+    }
+  }
+
+  async logCellCheck(taxaIds, characterIds) {
+    if (taxaIds.length == 0) {
+      throw new UserError('Please specify at least one taxon')
+    }
+    if (characterIds.length == 0) {
+      throw new UserError('Please specify at least one character')
+    }
+    if (this.matrix.getOption('DISABLE_SCORING')) {
+      throw new UserError(
+        'Scoring has been disabled by the project administrator'
+      )
+    }
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to modify cells in this matrix'
+    )
+    await this.checkCanEditTaxa(taxaIds)
+    await this.checkCanEditCharacters(characterIds)
+
+    const startedTime = time()
+    const replacements = []
+    for (const taxonId of taxaIds) {
+      for (const characterId of characterIds) {
+        replacements.push([
+          'C',
+          TABLE_NUMBERS.cell,
+          this.user.user_id,
+          startedTime,
+          this.matrix.matrix_id,
+          characterId,
+          taxonId,
+        ])
+      }
+    }
+
+    const transaction = await sequelizeConn.transaction()
+    await sequelizeConn.query(
+      `
+      INSERT INTO cell_change_log(
+        change_type, table_num, user_id, changed_on, matrix_id, character_id,
+        taxon_id)
+      VALUES ?`,
+      {
+        replacements: [replacements],
+        transaction: transaction,
+      }
+    )
+    transaction.commit()
+    return {
+      ts: startedTime,
     }
   }
 

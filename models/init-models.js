@@ -58,6 +58,7 @@ import _UsersXRole from './users-x-role.js'
 import sequelizeConn from '../util/db.js'
 import { logCellChange } from './hooks/cell-hooks.js'
 import { logChange } from './hooks/changelog-hook.js'
+import { logCharacterChange } from './hooks/character-hooks.js'
 
 function initModels(sequelizeConn) {
   const AnnotationEvent = _AnnotationEvent.init(sequelizeConn, DataTypes)
@@ -696,6 +697,20 @@ function initModels(sequelizeConn) {
     )
     table.addHook('afterDestroy', (model, options) =>
       logCellChange(model, 'D', options)
+    )
+  })
+
+  const characterTables = [Character, CharacterState, CharactersXMedium]
+  characterTables.forEach((table) => {
+    const isCharacterTable = table == Character
+    table.addHook('afterCreate', (model, options) =>
+      logCharacterChange(model, isCharacterTable ? 'I' : 'U', options)
+    )
+    table.addHook('afterUpdate', (model, options) =>
+      logCharacterChange(model, 'U', options)
+    )
+    table.addHook('afterDestroy', (model, options) =>
+      logCharacterChange(model, isCharacterTable ? 'D' : 'I', options)
     )
   })
 
