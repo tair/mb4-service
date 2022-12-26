@@ -2805,6 +2805,19 @@ class MatrixEditorService {
     }
   }
 
+  async getCharacterChanges(characterId) {
+    const character = await models.Character.findByPk(characterId)
+    if (character == null || character.project_id != this.project.project_id) {
+      throw new UserError('Character is not associated with this project')
+    }
+
+    const logs = []
+
+    // TODO: Implement this when the datamodel is completed.
+
+    return { logs }
+  }
+
   async setCellStates(taxaIds, characterIds, stateIds, options) {
     if (taxaIds.length == 0) {
       throw new UserError('Please specify at least one taxon')
