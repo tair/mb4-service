@@ -455,9 +455,9 @@ export async function setCellNotes(req, res) {
   const characterIds = parseIntArray(req.body.character_ids)
   const notes = req.body.notes
   const status = parseNullableInt(req.body.status)
-  const options = req.body.options
+  const batchMode = req.body.batchmode
   const success = await applyMatrix(req, res, (service) =>
-    service.setCellNotes(taxaIds, characterIds, notes, status, options)
+    service.setCellNotes(taxaIds, characterIds, notes, status, batchMode)
   )
   if (success) {
     sentSyncEventToClients(req.params.matrixId, req.user)

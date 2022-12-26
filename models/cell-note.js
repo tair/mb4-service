@@ -47,11 +47,13 @@ export default class CellNote extends Model {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           defaultValue: time,
+          shouldLog: false,
         },
         last_modified_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           defaultValue: time,
+          shouldLog: false,
         },
         notes: {
           type: DataTypes.TEXT,

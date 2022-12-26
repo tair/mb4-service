@@ -130,11 +130,13 @@ export default class MediaFile extends Model {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           defaultValue: time,
+          shouldLog: false,
         },
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           defaultValue: time,
+          shouldLog: false,
         },
         url: {
           type: DataTypes.TEXT,

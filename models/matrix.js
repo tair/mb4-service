@@ -107,11 +107,13 @@ export default class Matrix extends Model {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           defaultValue: time,
+          shouldLog: false,
         },
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           defaultValue: time,
+          shouldLog: false,
         },
         other_options: {
           type: DataTypes.JSON,

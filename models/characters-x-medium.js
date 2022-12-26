@@ -51,6 +51,7 @@ export default class CharactersXMedium extends Model {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           defaultValue: time,
+          shouldLog: false,
         },
         source: {
           type: DataTypes.STRING(40),

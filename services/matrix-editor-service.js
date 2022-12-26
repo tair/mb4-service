@@ -3140,7 +3140,7 @@ class MatrixEditorService {
     }
   }
 
-  async setCellNotes(taxaIds, characterIds, notes, status, options) {
+  async setCellNotes(taxaIds, characterIds, notes, status, batchMode) {
     if (taxaIds.length == 0) {
       throw new UserError('Please specify at least one taxon')
     }
@@ -3155,8 +3155,6 @@ class MatrixEditorService {
     )
     await this.checkCanEditTaxa(taxaIds)
     await this.checkCanEditCharacters(characterIds)
-
-    const batchMode = options != null && parseInt(options['batchmode'])
 
     const transaction = await sequelizeConn.transaction()
 
@@ -3238,7 +3236,9 @@ class MatrixEditorService {
 
     const mediaList = await this.getMediaByIds(mediaIds)
     if (mediaList.size != mediaIds.length) {
-      throw new UserError('One or more of the media do not belong to the project')
+      throw new UserError(
+        'One or more of the media do not belong to the project'
+      )
     }
 
     let cellBatch
@@ -3817,7 +3817,8 @@ class MatrixEditorService {
         matrix_id = ? AND
         user_id = ? AND
         changed_on >= ? AND
-        changed_on <= ?`,
+        changed_on <= ?
+      ORDER BY change_id DESC`,
       {
         replacements: [
           cellBatch.matrix_id,
@@ -3839,7 +3840,7 @@ class MatrixEditorService {
       added_scores: [],
     }
     for (const row of rows) {
-      const snapshot = row.snapshot
+      const snapshot = row.snapshot || {}
       const cell = {
         matrix_id: row.matrix_id,
         taxon_id: row.taxon_id,
@@ -3952,11 +3953,11 @@ class MatrixEditorService {
             ...cell,
             media_id: mediaId,
           }
-          const cellMedia = await models.CellsXMedium.findAll({
-            where: { ...mediaSnapshot },
-          })
           switch (row.change_type) {
             case 'I': {
+              const cellMedia = await models.CellsXMedium.findAll({
+                where: { ...mediaSnapshot },
+              })
               for (const cellMedium of cellMedia) {
                 mediaSnapshot.link_id = cellMedium.link_id
                 await cellMedium.destroy({
@@ -3969,27 +3970,27 @@ class MatrixEditorService {
             }
             case 'D': {
               const mediaFile = await models.MediaFile.findByPk(mediaId)
-              for (const cellMedium of cellMedia) {
-                cellMedium.set({
+              await models.CellsXMedium.create(
+                {
                   ...mediaSnapshot,
                   user_id: this.user.user_id,
-                })
-                await cellMedium.save({
+                },
+                {
                   user: this.user,
                   transaction: transaction,
-                })
+                }
+              )
 
-                updates.added_media.push({
-                  ...mediaSnapshot,
-                  icon: getMedia(mediaFile.media, 'icon'),
-                  tiny: getMedia(mediaFile.media, 'tiny'),
-                })
-              }
+              updates.added_media.push({
+                ...mediaSnapshot,
+                icon: getMedia(mediaFile.media, 'icon'),
+                tiny: getMedia(mediaFile.media, 'tiny'),
+              })
               break
             }
             default:
             case 'U':
-              throw new 'We should never get an update for a cell'()
+              throw 'We should never get an update for a cell media'
           }
           break
         }
@@ -4012,12 +4013,12 @@ class MatrixEditorService {
               updates.deleted_scores.push(cellSnapshot)
               break
             case 'D':
-              await models.Cell.create(
+              const cell = await models.Cell.create(
                 {
                   ...cellSnapshot,
                   user_id: this.user.user_id,
-                  is_npa: !!snapshot.is_npa,
-                  is_uncertain: !!snapshot.is_uncertain,
+                  is_npa: snapshot.is_npa,
+                  is_uncertain: snapshot.is_uncertain,
                   start_value: snapshot.start_value ?? null,
                   end_value: snapshot.end_value ?? null,
                 },
@@ -4026,11 +4027,24 @@ class MatrixEditorService {
                   transaction: transaction,
                 }
               )
-              updates.added_scores.push(cellSnapshot)
+              updates.added_scores.push(cell)
               break
             default:
-            case 'U':
-              throw new 'We should never get an update for a cell'()
+            case 'U': {
+              const cells = await models.Cell.findAll({
+                where: { ...cellSnapshot },
+              })
+              for (const cell of cells) {
+                cell.set(snapshot)
+                await cell.save({
+                  user: this.user,
+                  transaction: transaction,
+                })
+                updates.deleted_scores.push(cellSnapshot)
+                updates.added_scores.push(cell)
+              }
+              break
+            }
           }
           break
         }
