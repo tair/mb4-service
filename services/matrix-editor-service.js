@@ -7,12 +7,14 @@ import { getTextForBibliographicReference } from './bibliography-service.js'
 import { getCitationText } from '../util/citation.js'
 import { getMedia } from '../util/media.js'
 import { getRoles } from '../services/user-roles-service.js'
-import { getStatesIdsForCharacter } from '../services/character-service.js'
+import {
+  getStatesIdsForCharacter,
+  getTypesForCharacterIds,
+} from '../services/character-service.js'
 import { getTaxonName, TAXA_FIELD_NAMES } from '../util/taxa.js'
 import { models } from '../models/init-models.js'
 import { UserError } from '../lib/user-errors.js'
 import { ForbiddenError } from '../lib/forbidden-error.js'
-import User from '../models/user.js'
 import { TABLE_NUMBERS } from '../lib/table-number.js'
 
 class MatrixEditorService {
@@ -62,7 +64,7 @@ class MatrixEditorService {
     )
 
     return {
-      cells: this.convertCellQueryToResults(rows),
+      cells: await this.convertCellQueryToResults(rows),
     }
   }
 
@@ -177,7 +179,7 @@ class MatrixEditorService {
     const cells = {
       taxa_ids: taxaIds,
       character_ids: characterIds,
-      cells: this.convertCellQueryToResults(cellRows),
+      cells: await this.convertCellQueryToResults(cellRows),
       notes: cellNotes,
       media: cellMedia,
     }
@@ -2627,7 +2629,7 @@ class MatrixEditorService {
     await transaction.commit()
     return {
       ts: time(),
-      cells: this.convertCellQueryToResults(changedCells),
+      cells: await this.convertCellQueryToResults(changedCells),
       media: changedMedia,
     }
   }
@@ -2800,7 +2802,7 @@ class MatrixEditorService {
     await transaction.commit()
     return {
       ts: time(),
-      cells: this.convertCellQueryToResults(changedCells),
+      cells: await this.convertCellQueryToResults(changedCells),
       media: changedMedia,
     }
   }
@@ -2997,7 +2999,7 @@ class MatrixEditorService {
     await transaction.commit()
     return {
       ts: time(),
-      cells: this.convertCellQueryToResults(cellChangesResults),
+      cells: await this.convertCellQueryToResults(cellChangesResults),
       deleted_cell_media: deletedCellMedia,
     }
   }
@@ -3075,7 +3077,6 @@ class MatrixEditorService {
             },
             { user: this.user, transaction: transaction }
           )
-          cell.type = 1 /* numeric */
           cellChangesResults.push(cell)
         } else if (cellScores.size > 1) {
           throw UserError('Selected Continuous scores have more than one value')
@@ -3095,8 +3096,6 @@ class MatrixEditorService {
           cell.end_value = endValue
           cell.user_id = this.user.user_id
           await cell.save({ user: this.user, transaction: transaction })
-
-          cell.type = 1 /* numeric */
           cellChangesResults.push(cell)
         }
       }
@@ -3124,7 +3123,7 @@ class MatrixEditorService {
     await transaction.commit()
     return {
       ts: time(),
-      cells: this.convertCellQueryToResults(cellChangesResults),
+      cells: await this.convertCellQueryToResults(cellChangesResults),
     }
   }
 
@@ -3226,7 +3225,7 @@ class MatrixEditorService {
 
     const mediaList = await this.getMediaByIds(mediaIds)
     if (mediaList.size != mediaIds.length) {
-      throw new User('One or more of the media do not belong to the project')
+      throw new UserError('One or more of the media do not belong to the project')
     }
 
     let cellBatch
@@ -3389,6 +3388,652 @@ class MatrixEditorService {
     }
   }
 
+  async getCellChanges(taxonId, characterId) {
+    const [rows] = await sequelizeConn.query(
+      `
+      SELECT cgl.*, wu.fname, wu.lname, wu.email
+      FROM cell_change_log cgl
+      LEFT JOIN ca_users AS wu ON cgl.user_id = wu.user_id
+      WHERE
+        cgl.matrix_id = ? AND cgl.taxon_id = ? AND cgl.character_id = ?
+      ORDER BY
+        cgl.changed_on DESC`,
+      { replacements: [this.matrix.matrix_id, taxonId, characterId] }
+    )
+
+    const logs = []
+    for (const row of rows) {
+      const changeType = row.change_type
+      const tableNumber = parseInt(row.table_num)
+      const snapshot = row.snapshot ? row.snapshot : {}
+
+      let change = 'Unknown Change'
+      switch (tableNumber) {
+        case TABLE_NUMBERS.cells: {
+          const stateId = row.state_id
+          let scoreName = ''
+          if (stateId) {
+            const state = await models.CharacterState.findByPk(stateId)
+            scoreName = `[${state.num}] ${state.name}`
+          } else if (snapshot.is_npa) {
+            scoreName = 'NPA'
+          } else if (snapshot.start_value || snapshot.end_value) {
+            if (snapshot.start_value) {
+              scoreName = `Start: ${snapshot.start_value}`
+            }
+            if (snapshot.end_value) {
+              scoreName += ` End: ${snapshot.end_value}`
+            }
+          }
+
+          switch (changeType) {
+            case 'I':
+              change = `Set score to ${scoreName}`
+              break
+            case 'C':
+            case 'U':
+              change = `Set score to ${scoreName}`
+              break
+            case 'D':
+              change = `Removed score ${scoreName}`
+              break
+          }
+          break
+        }
+        case TABLE_NUMBERS.cells_x_media: {
+          const mediaId = snapshot.media_id
+          switch (changeType) {
+            case 'I':
+              change = `Added media M${mediaId}`
+              break
+            case 'C':
+            case 'U':
+              change = `Changed media to M${mediaId}`
+              break
+            case 'D':
+              change = `Remove media M${mediaId}`
+              break
+          }
+          break
+        }
+        case TABLE_NUMBERS.cell_notes: {
+          let status
+          switch (snapshot.status) {
+            case 0:
+              status = 'New'
+              break
+            case 50:
+              status = 'In progress'
+              break
+            case 100:
+              status = 'Complete'
+              break
+            default:
+              status = '?'
+              break
+          }
+
+          const notes = snapshot.notes
+          switch (changeType) {
+            case 'I':
+              change = `Set cell notes to: '${notes}'<br/>Set status to: ${status}`
+              break
+            case 'C':
+            case 'U':
+              change = `Set cell notes to: '${notes}'<br/>Set status to: ${status}`
+              break
+            case 'D':
+              change = `Removed cell notes and status; final notes were: '${notes}'<br/>Final status was: ${status}`
+              break
+          }
+          break
+        }
+        case TABLE_NUMBERS.cells_x_bibliographic_references: {
+          switch (changeType) {
+            case 'I':
+              change = 'Insert cell citation'
+              break
+            case 'C':
+            case 'U':
+              change = 'Update cell citation'
+              break
+            case 'D':
+              change = 'Removed cell citation'
+              break
+          }
+        }
+      }
+      logs.push({
+        date: row.changed_on,
+        user: `${row.fname} ${row.lname} (${row.email})`,
+        log: change,
+      })
+    }
+    logs.sort((a, b) => b.date - a.date)
+    return { logs }
+  }
+
+  async getCellBatchLogs() {
+    const [rows] = await sequelizeConn.query(
+      `
+      SELECT
+        cl.*,
+        CONCAT(cu.fname, ' ', cu.lname) as user,
+        CONCAT(cu2.fname, ' ', cu2.lname) as reverted_user
+      FROM cell_batch_log cl
+      INNER JOIN ca_users AS cu ON cu.user_id = cl.user_id
+      LEFT JOIN ca_users AS cu2 ON cu2.user_id = cl.reverted_user_id
+      WHERE cl.matrix_id = ?`,
+      { replacements: [this.matrix.matrix_id] }
+    )
+
+    const logs = []
+    for (const row of rows) {
+      let description = `${row.description} by ${row.user}`
+      if (row.batch_type == 1) {
+        description += ' using the cell media automation feature'
+      }
+      description += '.'
+      if (row.reverted) {
+        description += ` This was action was reverted by ${row.reverted_user}.`
+      }
+
+      logs.push({
+        id: parseInt(row.log_id),
+        r: row.reverted,
+        t: parseInt(row.started_on),
+        d: description,
+      })
+    }
+    logs.sort((a, b) => b.t - a.t)
+    return { batch_log: logs }
+  }
+
+  async copyCellScores(sourceTaxonId, destTaxonId, characterIds, options) {
+    if (this.matrix.getOption('DISABLE_SCORING')) {
+      throw new UserError(
+        'Scoring has been disabled by the project administrator'
+      )
+    }
+
+    if (characterIds.length == 0) {
+      throw new UserError('Please specify at least one character')
+    }
+
+    await this.checkCanDo(
+      'editCellData',
+      'You are not allowed to modify cells in this matrix'
+    )
+    await this.checkCanEditTaxa([destTaxonId])
+    await this.checkCanEditCharacters(characterIds)
+
+    const transaction = await sequelizeConn.transaction()
+
+    const batchMode = options != null && parseInt(options['batchmode'])
+    let cellBatch
+    if (batchMode) {
+      cellBatch = models.CellBatchLog.build({
+        user_id: this.user.user_id,
+        matrix_id: this.matrix.matrix_id,
+        batch_type: CELL_BATCH_TYPES.COPY_SCORES,
+        started_on: time(),
+      })
+    }
+
+    const notesChangesResults = []
+    const copyNotes = options != null && parseInt(options['copyNotes'])
+    if (copyNotes) {
+      const notes = await models.CellNote.findAll({
+        where: {
+          matrix_id: this.matrix.matrix_id,
+          taxon_id: [sourceTaxonId, destTaxonId],
+          character_id: characterIds,
+        },
+      })
+      const notesMap = new Table()
+      for (const note of notes) {
+        notesMap.set(note.character_id, note.taxon_id, note)
+      }
+
+      for (const characterId of characterIds) {
+        const sourceNotes = notesMap.get(characterId, sourceTaxonId)
+        const destNotes = notesMap.get(characterId, destTaxonId)
+        if (sourceNotes) {
+          if (destNotes) {
+            destNotes.notes = sourceNotes.notes
+            destNotes.status = sourceNotes.status
+            destNotes.source = 'HTML5'
+            await destNotes.save({ user: this.user, transaction: transaction })
+          } else {
+            await models.CellNote.create(
+              {
+                matrix_id: this.matrix.matrix_id,
+                taxon_id: destTaxonId,
+                character_id: characterId,
+                user_id: this.user.user_id,
+                notes: sourceNotes.notes,
+                status: sourceNotes.status,
+                source: 'HTML5',
+              },
+              {
+                user: this.user,
+                transaction: transaction,
+              }
+            )
+          }
+          notesChangesResults.push({
+            taxon_id: destTaxonId,
+            character_id: characterId,
+            notes: sourceNotes.notes,
+            status: sourceNotes.status,
+          })
+        } else {
+          if (destNotes) {
+            await destNotes.destroy({
+              user: this.user,
+              transaction: transaction,
+            })
+          }
+          notesChangesResults.push({
+            taxon_id: destTaxonId,
+            character_id: characterId,
+            notes: '',
+            status: 0,
+          })
+        }
+      }
+    }
+
+    const insertedScores = []
+    const cellChangesResults = []
+    const allCellScores = await this.getCellsStates(
+      [sourceTaxonId, destTaxonId],
+      characterIds
+    )
+    for (const characterId of characterIds) {
+      let sourceScores = allCellScores.get(sourceTaxonId, characterId)
+      if (sourceScores == null) {
+        sourceScores = new Map()
+      }
+
+      let destScores = allCellScores.get(destTaxonId, characterId)
+      if (destScores == null) {
+        destScores = new Map()
+      }
+
+      const sourceScoresIds = Array.from(sourceScores.keys())
+      const destScoresIds = Array.from(destScores.keys())
+
+      const scoresIdsToDelete = array_difference(destScoresIds, sourceScoresIds)
+      const scoresIdsToInsert = array_difference(sourceScoresIds, destScoresIds)
+      const unchangedScoreIds = array_intersect(destScoresIds, sourceScoresIds)
+
+      for (const unchangedScoreId of unchangedScoreIds) {
+        const sourceSource = sourceScores.get(unchangedScoreId)
+        const destSource = destScores.get(unchangedScoreId)
+
+        // Ensure that uncertain scores and continuous values are updated
+        // properly.
+        const isUncertainChanged =
+          destSource.is_uncertain != sourceSource.is_uncertain
+        const continuousChanged =
+          destSource.start_value != sourceSource.start_value ||
+          destSource.end_value != sourceSource.end_value
+        if (isUncertainChanged || continuousChanged) {
+          const cell = await models.Cell.findByPk(destScores.cell_id)
+
+          if (isUncertainChanged) {
+            cell.is_uncertain = sourceSource.is_uncertain
+            destSource.is_uncertain = sourceSource.is_uncertain
+          }
+
+          if (continuousChanged) {
+            cell.start_value = sourceSource.start_value
+            cell.end_value = sourceSource.end_value
+            destSource.start_value = sourceSource.start_value
+            destSource.end_value = sourceSource.end_value
+          }
+
+          await cell.save({
+            user: this.user,
+            transaction: transaction,
+          })
+        }
+        cellChangesResults.push(destSource)
+      }
+
+      for (const scoreId of scoresIdsToDelete) {
+        const cellScore = destScores.get(scoreId)
+        await models.Cell.destroy({
+          where: { cell_id: cellScore.cell_id },
+          transaction: transaction,
+          user: this.user,
+        })
+        cellScore.cell_id = 0 // Signal that the cell should be deleted.
+        cellChangesResults.push(cellScore)
+      }
+
+      for (const scoreId of scoresIdsToInsert) {
+        const cellScore = sourceScores.get(scoreId)
+        const cell = await models.Cell.create(
+          {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: destTaxonId,
+            character_id: characterId,
+            user_id: this.user.user_id,
+            state_id: scoreId > 0 ? scoreId : null,
+            is_npa: scoreId == -1 ? 1 : 0,
+            is_uncertain: cellScore.is_uncertain,
+            start_value: cellScore.start_value,
+            end_value: cellScore.end_value,
+          },
+          { user: this.user, transaction: transaction }
+        )
+        cellChangesResults.push(cell)
+        insertedScores.push(cell)
+      }
+    }
+
+    if (this.matrix.getOption('APPLY_CHARACTERS_WHILE_SCORING') == 1) {
+      const scores = await this.applyStateRules(insertedScores)
+      cellChangesResults.push(...scores)
+    }
+
+    const deletedCellMedia =
+      this.matrix.getOption('ENABLE_CELL_MEDIA_AUTOMATION') == 1
+        ? await this.cellMediaToDeleteFromCharacterView(
+            [destTaxonId],
+            characterIds
+          )
+        : []
+    if (deletedCellMedia.length > 0) {
+      const linkIds = deletedCellMedia.map((media) => parseInt(media.link_id))
+      await models.CellsXMedium.destroy({
+        where: {
+          where: { link_id: linkIds },
+          transaction: transaction,
+          individualHooks: true,
+          user: this.user,
+        },
+      })
+    }
+
+    if (
+      batchMode &&
+      (cellChangesResults.length ||
+        notesChangesResults.length ||
+        deletedCellMedia.length)
+    ) {
+      const sourceTaxon = await models.Taxon.findByPk(sourceTaxonId)
+      const destTaxon = await models.Taxon.findByPk(destTaxonId)
+      const sourceTaxonName = getTaxonName(sourceTaxon)
+      const destTaxonName = getTaxonName(destTaxon)
+      cellBatch.finished_on = time()
+      cellBatch.description = `Copy from ${sourceTaxonName} taxon row to ${destTaxonName} taxon row`
+      await cellBatch.save({ user: this.user, transaction: transaction })
+    }
+
+    await transaction.commit()
+    return {
+      src_taxon_id: sourceTaxonId,
+      dst_taxon_id: destTaxonId,
+      character_ids: characterIds,
+      cells: await this.convertCellQueryToResults(cellChangesResults),
+      cell_notes: notesChangesResults,
+      deleted_cell_media: deletedCellMedia,
+    }
+  }
+
+  async undoCellBatch(logId) {
+    const cellBatch = await models.CellBatchLog.findByPk(logId)
+    if (!cellBatch) {
+      throw new UserError('Batch does not exist')
+    }
+
+    if (cellBatch.matrix_id != this.matrix.matrix_id) {
+      throw new UserError('Matrix id is not related to Batch')
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    const [rows] = await sequelizeConn.query(
+      `
+      SELECT *
+      FROM cell_change_log
+      WHERE
+        matrix_id = ? AND
+        user_id = ? AND
+        changed_on >= ? AND
+        changed_on <= ?`,
+      {
+        replacements: [
+          cellBatch.matrix_id,
+          cellBatch.user_id,
+          cellBatch.started_on,
+          cellBatch.finished_on,
+        ],
+      }
+    )
+
+    const updates = {
+      updated_cell_notes: [],
+      deleted_citations: [],
+      added_citations: [],
+      updated_citations: [],
+      deleted_media: [],
+      added_media: [],
+      deleted_scores: [],
+      added_scores: [],
+    }
+    for (const row of rows) {
+      const snapshot = row.snapshot
+      const cell = {
+        matrix_id: row.matrix_id,
+        taxon_id: row.taxon_id,
+        character_id: row.character_id,
+      }
+
+      switch (row.table_num) {
+        case TABLE_NUMBERS.cell_notes: {
+          const cellNotes = await models.CellNote.findAll({
+            where: { ...cell },
+          })
+          switch (row.change_type) {
+            case 'I': {
+              for (const cellNote of cellNotes) {
+                cellNote.note = ''
+                cellNote.status = 0
+                await cellNote.save({
+                  user: this.user,
+                  transaction: transaction,
+                })
+                updates.updated_cell_notes.push({
+                  ...cell,
+                  notes: '',
+                  status: 0,
+                })
+              }
+              break
+            }
+            case 'U': {
+              for (const cellNote of cellNotes) {
+                if (snapshot.notes) {
+                  cellNote.notes = snapshot.notes
+                }
+                if (snapshot.status) {
+                  cellNote.status = snapshot.status
+                }
+                await cellNote.save({
+                  user: this.user,
+                  transaction: transaction,
+                })
+                updates.updated_cell_notes.push({
+                  ...cell,
+                  notes: cellNote.notes,
+                  status: cellNote.status,
+                })
+              }
+              break
+            }
+          }
+          break
+        }
+        case TABLE_NUMBERS.cells_x_bibliographic_references: {
+          const linkId = snapshot.link_id
+          const citationSnapshot = {
+            ...cell,
+            reference_id: snapshot.reference_id,
+            notes: snapshot.notes,
+            pp: snapshot.pp,
+          }
+          switch (row.change_type) {
+            case 'I': {
+              const citation =
+                await models.CellsXBibliographicReference.findByPk(linkId)
+              if (
+                citation &&
+                citation.reference_id == citationSnapshot.reference_id &&
+                citation.character_id == citationSnapshot.character_id &&
+                citation.taxon_id == citationSnapshot.taxon_id
+              ) {
+                citation.destroy({
+                  user: this.user,
+                  transaction: transaction,
+                })
+                updates.deleted_citations.push(citationSnapshot)
+              }
+              break
+            }
+            case 'D': {
+              await models.CellsXBibliographicReference.create(
+                {
+                  ...citationSnapshot,
+                  user_id: this.user.user_id,
+                },
+                {
+                  user: this.user,
+                  transaction: transaction,
+                }
+              )
+              updates.added_citations.push(citationSnapshot)
+              break
+            }
+            case 'U': {
+              const citation =
+                await models.CellsXBibliographicReference.findByPk(linkId)
+              if (citation) {
+                citation.set(citationSnapshot)
+                await citation.save({
+                  user: this.user,
+                  transaction: transaction,
+                })
+              }
+              break
+            }
+          }
+          break
+        }
+        case TABLE_NUMBERS.cells_x_media: {
+          const mediaId = parseInt(snapshot.media_id)
+          const mediaSnapshot = {
+            ...cell,
+            media_id: mediaId,
+          }
+          const cellMedia = await models.CellsXMedium.findAll({
+            where: { ...mediaSnapshot },
+          })
+          switch (row.change_type) {
+            case 'I': {
+              for (const cellMedium of cellMedia) {
+                mediaSnapshot.link_id = cellMedium.link_id
+                await cellMedium.destroy({
+                  user: this.user,
+                  transaction: transaction,
+                })
+                updates.deleted_media.push(mediaSnapshot)
+              }
+              break
+            }
+            case 'D': {
+              const mediaFile = await models.MediaFile.findByPk(mediaId)
+              for (const cellMedium of cellMedia) {
+                cellMedium.set({
+                  ...mediaSnapshot,
+                  user_id: this.user.user_id,
+                })
+                await cellMedium.save({
+                  user: this.user,
+                  transaction: transaction,
+                })
+
+                updates.added_media.push({
+                  ...mediaSnapshot,
+                  icon: getMedia(mediaFile.media, 'icon'),
+                  tiny: getMedia(mediaFile.media, 'tiny'),
+                })
+              }
+              break
+            }
+            default:
+            case 'U':
+              throw new 'We should never get an update for a cell'()
+          }
+          break
+        }
+        case TABLE_NUMBERS.cells: {
+          const cellSnapshot = {
+            ...cell,
+            state_id: row.state_id,
+          }
+          switch (row.change_type) {
+            case 'I':
+              await models.Cell.destroy({
+                where: {
+                  ...cellSnapshot,
+                  user_id: row.user_id,
+                },
+                individualHooks: true,
+                user: this.user,
+                transaction: transaction,
+              })
+              updates.deleted_scores.push(cellSnapshot)
+              break
+            case 'D':
+              await models.Cell.create(
+                {
+                  ...cellSnapshot,
+                  user_id: this.user.user_id,
+                  is_npa: !!snapshot.is_npa,
+                  is_uncertain: !!snapshot.is_uncertain,
+                  start_value: snapshot.start_value ?? null,
+                  end_value: snapshot.end_value ?? null,
+                },
+                {
+                  user: this.user,
+                  transaction: transaction,
+                }
+              )
+              updates.added_scores.push(cellSnapshot)
+              break
+            default:
+            case 'U':
+              throw new 'We should never get an update for a cell'()
+          }
+          break
+        }
+      }
+    }
+
+    cellBatch.reverted = 1
+    cellBatch.reverted_user_id = this.user.user_id
+    await cellBatch.save({
+      user: this.user,
+      transaction: transaction,
+    })
+    await transaction.commit()
+    return updates
+  }
+
   async logCellCheck(taxaIds, characterIds) {
     if (taxaIds.length == 0) {
       throw new UserError('Please specify at least one taxon')
@@ -3450,13 +4095,17 @@ class MatrixEditorService {
 
     await this.checkPartitionNameExists(name)
 
-    const partition = await models.Partition.create({
-      project_id: this.project.project_id,
-      user_id: this.user.user_id,
-      name: name,
-      description: description,
-      source: 'HTML5',
-    })
+    const transaction = await sequelizeConn.transaction()
+    const partition = await models.Partition.create(
+      {
+        project_id: this.project.project_id,
+        user_id: this.user.user_id,
+        name: name,
+        description: description,
+        source: 'HTML5',
+      },
+      { user: this.user, transaction: transaction }
+    )
 
     return {
       id: partition.partition_id,
@@ -3544,6 +4193,7 @@ class MatrixEditorService {
       },
       { user: this.user, transaction: transaction }
     )
+    await transaction.commit()
     for (const taxonId of taxaIds) {
       await models.TaxaXPartition.create(
         {
@@ -4240,7 +4890,7 @@ class MatrixEditorService {
     }
 
     return {
-      cells: this.convertCellQueryToResults(cells),
+      cells: await this.convertCellQueryToResults(cells),
       media: media,
       notes: notes,
       citations: citations,
@@ -4514,7 +5164,9 @@ class MatrixEditorService {
 
     const [rows] = await sequelizeConn.query(
       `
-        SELECT cell_id, taxon_id, character_id, state_id, is_npa, is_uncertain, start_value, end_value, created_on
+        SELECT
+          cell_id, taxon_id, character_id, state_id, is_npa, is_uncertain,
+          start_value, end_value, created_on, user_id
         FROM cells
         WHERE matrix_id = ? AND character_id IN (?) AND taxon_id IN (?)`,
       { replacements: [this.matrix.matrix_id, characterIds, taxaIds] }
@@ -5260,14 +5912,17 @@ class MatrixEditorService {
     return deletedCellMedia
   }
 
-  convertCellQueryToResults(rows) {
+  async convertCellQueryToResults(rows) {
     const cells = []
+    const characterIds = rows.map((row) => row.character_id)
+    const characterTypeMap = await getTypesForCharacterIds(characterIds)
     for (const row of rows) {
       const taxonId = parseInt(row.taxon_id)
       const characterId = parseInt(row.character_id)
       const cellId = parseInt(row.cell_id)
 
-      // This represents a deleted scores so that the client can remove it from its model.
+      // This represents a deleted scores so that the client can remove it from
+      // its model.
       if (cellId == 0) {
         cells.push({
           id: cellId,
@@ -5294,11 +5949,11 @@ class MatrixEditorService {
       if (row.is_uncertain) {
         cell['uct'] = 1
       }
-      // This is a shortcut to evaluate discrete characters to false and continuous and mestric
-      // characters to true since they are numeric.
-      const isNumeric = !!row.type
-      if (isNumeric) {
-        const convertFunction = parseInt(row.type) == 1 ? parseFloat : parseInt
+      // This is a shortcut to evaluate discrete characters to false and
+      // continuous and mestric characters to true since they are numeric.
+      const type = characterTypeMap.get(characterId)
+      if (type) {
+        const convertFunction = parseInt(type) == 1 ? parseFloat : parseInt
         if (row.start_value != null) {
           cell['sv'] = convertFunction(row.start_value)
         }
@@ -5350,7 +6005,9 @@ class MatrixEditorService {
     const time = parseInt(Date.now() / 1000)
     await sequelizeConn.query(
       `
-      INSERT INTO ca_change_log(log_datetime, user_id, unit_id, changetype, rolledback, logged_table_num, logged_row_id)
+      INSERT INTO ca_change_log(
+        log_datetime, user_id, unit_id, changetype, rolledback,
+        logged_table_num, logged_row_id)
       VALUES(?, ?, ?, ?, 0, 5, ?)`,
       {
         replacements: [

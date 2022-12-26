@@ -498,6 +498,40 @@ export async function removeCellsMedia(req, res) {
     sentSyncEventToClients(req.params.matrixId, req.user)
   }
 }
+export async function getCellChanges(req, res) {
+  const taxonId = parseInt(req.body.taxon_id)
+  const characterId = parseInt(req.body.character_id)
+  await applyMatrix(req, res, (service) =>
+    service.getCellChanges(taxonId, characterId)
+  )
+}
+
+export async function getCellBatchLogs(req, res) {
+  await applyMatrix(req, res, (service) => service.getCellBatchLogs())
+}
+
+export async function copyCellScores(req, res) {
+  const sourceTaxonId = parseInt(req.body.src_taxon_id)
+  const destTaxonId = parseInt(req.body.dst_taxon_id)
+  const characterIds = parseIntArray(req.body.character_ids)
+  const options = req.body.options
+  const success = await applyMatrix(req, res, (service) =>
+    service.copyCellScores(sourceTaxonId, destTaxonId, characterIds, options)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function undoCellBatch(req, res) {
+  const logId = parseInt(req.body.log_id)
+  const success = await applyMatrix(req, res, (service) =>
+    service.undoCellBatch(logId)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
 
 export async function logCellCheck(req, res) {
   const taxaIds = parseIntArray(req.body.taxa_ids)

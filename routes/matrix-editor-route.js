@@ -34,32 +34,40 @@ router.post(
   '/setCharacterCommentsAsUnread',
   controller.setCharacterCommentsAsUnread
 )
-// Character rule endpoints
+// Character rule
 router.post('/addCharacterRuleAction', controller.addCharacterRuleAction)
 router.post('/removeCharacterRuleAction', controller.removeCharacterRuleAction)
-// Character rule violation endpoints
+// Character rule violation
 router.post('/fixAllCharacterRuleViolations', controller.fixAllRuleViolations)
 router.post('/fixSelectedCharacterRuleViolations', controller.fixRuleViolations)
 router.post('/getCharacterRuleViolations', controller.getRuleViolations)
 
 // Cell endpoints
-router.post('/addCellCitations', controller.addCellCitations)
-router.post('/addCellMedia', controller.addCellMedia)
+router.post('/copyCellScores', controller.copyCellScores)
 router.post('/fetchCellsData', controller.fetchCellsData)
-router.post('/findCitation', controller.findCitation)
-router.post('/getAllCellNotes', controller.getAllCellNotes)
-router.post('/getCellCitations', controller.getCellCitations)
 router.post('/getCellCounts', controller.getCellCounts)
 router.post('/getCellData', controller.getCellData)
+router.post('/setCellContinuousValues', controller.setCellContinuousValues)
+router.post('/setCellStates', controller.setCellStates)
+// Cell Media
+router.post('/addCellMedia', controller.addCellMedia)
 router.post('/getCellMedia', controller.getCellMedia)
-router.post('/logCellCheck', controller.logCellCheck)
-router.post('/removeCellCitation', controller.removeCellCitation)
 router.post('/removeCellMedia', controller.removeCellMedia)
 router.post('/removeCellsMedia', controller.removeCellsMedia)
-router.post('/setCellContinuousValues', controller.setCellContinuousValues)
-router.post('/setCellNotes', controller.setCellNotes)
-router.post('/setCellStates', controller.setCellStates)
 router.post('/upsertCellCitation', controller.upsertCellCitation)
+// Cell Citation
+router.post('/addCellCitations', controller.addCellCitations)
+router.post('/findCitation', controller.findCitation)
+router.post('/getCellCitations', controller.getCellCitations)
+router.post('/removeCellCitation', controller.removeCellCitation)
+// Cell Notes
+router.post('/getAllCellNotes', controller.getAllCellNotes)
+router.post('/setCellNotes', controller.setCellNotes)
+// Cell Changes
+router.post('/getCellBatchLogs', controller.getCellBatchLogs)
+router.post('/getCellChanges', controller.getCellChanges)
+router.post('/logCellCheck', controller.logCellCheck)
+router.post('/undoCellBatch', controller.undoCellBatch)
 
 // Partitions endpoints
 router.post('/addCharactersToPartition', controller.addCharactersToPartition)
