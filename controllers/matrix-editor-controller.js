@@ -348,6 +348,13 @@ export async function getRuleViolations(req, res) {
   await applyMatrix(req, res, (service) => service.getRuleViolations())
 }
 
+export async function getCharacterChanges(req, res) {
+  const characterId = parseInt(req.body.character_id)
+  await applyMatrix(req, res, (service) =>
+    service.getCharacterChanges(characterId)
+  )
+}
+
 export async function setCellStates(req, res) {
   const taxaIds = parseIntArray(req.body.taxa_ids)
   const characterIds = parseIntArray(req.body.character_ids)

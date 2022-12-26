@@ -41,6 +41,8 @@ router.post('/removeCharacterRuleAction', controller.removeCharacterRuleAction)
 router.post('/fixAllCharacterRuleViolations', controller.fixAllRuleViolations)
 router.post('/fixSelectedCharacterRuleViolations', controller.fixRuleViolations)
 router.post('/getCharacterRuleViolations', controller.getRuleViolations)
+// Character Changes
+router.post('/getCharacterChanges', controller.getCharacterChanges)
 
 // Cell endpoints
 router.post('/copyCellScores', controller.copyCellScores)
