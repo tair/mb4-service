@@ -61,6 +61,7 @@ export default class CellsXMedium extends Model {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           defaultValue: time,
+          shouldLog: false,
         },
         ancestor_link_id: {
           type: DataTypes.INTEGER.UNSIGNED,

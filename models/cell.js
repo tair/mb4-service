@@ -61,11 +61,13 @@ export default class Cell extends Model {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           defaultValue: time,
+          shouldLog: false,
         },
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           defaultValue: time,
+          shouldLog: false,
         },
         is_npa: {
           type: DataTypes.TINYINT,
@@ -137,20 +139,34 @@ export default class Cell extends Model {
     )
   }
 
-  generateCellSnapshot() {
-    const snapshot = {}
-    if (this.changed('is_npa')) {
-      snapshot.is_npa = this.is_npa
+  generateCellSnapshot(changeType) {
+    switch (changeType) {
+      case 'I':
+      case 'D': {
+        const snapshot = {}
+        if (this.is_npa) {
+          snapshot.is_npa = this.is_npa
+        }
+        if (this.is_uncertain) {
+          snapshot.is_uncertain = this.is_uncertain
+        }
+        if (this.start_value) {
+          snapshot.start_value = this.start_value
+        }
+        if (this.end_value) {
+          snapshot.end_value = this.end_value
+        }
+        return snapshot
+      }
+      case 'U': {
+        const snapshot = {}
+        for (const field of Object.keys(this.rawAttributes)) {
+          if (this.changed(field)) {
+            snapshot[field] = this.previous(field)
+          }
+        }
+        return snapshot
+      }
     }
-    if (this.changed('is_uncertain')) {
-      snapshot.is_uncertain = this.is_uncertain
-    }
-    if (this.changed('start_value')) {
-      snapshot.start_value = this.start_value
-    }
-    if (this.changed('end_value')) {
-      snapshot.end_value = this.end_value
-    }
-    return snapshot
   }
 }

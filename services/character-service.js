@@ -29,3 +29,22 @@ export async function getStatesIdsForCharacter(characterId) {
   )
   return rows.map((row) => parseInt(row.state_id))
 }
+
+export async function getTypesForCharacterIds(characterIds) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT character_id, type
+      FROM characters
+      WHERE character_id IN  (?)
+      ORDER BY num, name`,
+    { replacements: [characterIds] }
+  )
+
+  const types = new Map()
+  for (const row of rows) {
+    const characterId = parseInt(row.character_id)
+    const type = parseInt(row.type)
+    types.set(characterId, type)
+  }
+  return types
+}

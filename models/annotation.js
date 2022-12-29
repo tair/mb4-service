@@ -43,6 +43,7 @@ export default class Annotation extends Model {
           type: DataTypes.INTEGER,
           allowNull: false,
           defaultValue: time,
+          shouldLog: false,
         },
         user_id: {
           type: DataTypes.INTEGER.UNSIGNED,

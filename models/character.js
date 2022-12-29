@@ -96,11 +96,13 @@ export default class Character extends Model {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           defaultValue: time,
+          shouldLog: false,
         },
         created_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
           defaultValue: time,
+          shouldLog: false,
         },
         ancestor_character_id: {
           type: DataTypes.INTEGER.UNSIGNED,
