@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class AnnotationEvent extends Model {
@@ -26,6 +27,7 @@ export default class AnnotationEvent extends Model {
         date_time: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
+          defaultValue: time,
         },
         typecode: {
           type: DataTypes.TINYINT.UNSIGNED,
@@ -34,6 +36,8 @@ export default class AnnotationEvent extends Model {
           isIn: [[0]], // Opened.
         },
       },
+      // TODO(kenzley): Consider adding a constraint on the annotation_id and
+      //    user_id columns since duplicates are unnecessary.
       {
         sequelize,
         tableName: 'annotation_events',

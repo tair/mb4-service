@@ -132,6 +132,168 @@ export async function loadTaxaMedia(req, res) {
   )
 }
 
+export async function addCharacter(req, res) {
+  const name = req.body.name
+  const type = parseCharacterType(req.body.charType)
+  const index = parseNullableInt(req.body.index)
+  const success = await applyMatrix(req, res, (service) =>
+    service.addCharacter(name, type, index)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function removeCharacters(req, res) {
+  const characterIds = parseIntArray(req.body.character_ids)
+  const success = await applyMatrix(req, res, (service) =>
+    service.removeCharacters(characterIds)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function reorderCharacters(req, res) {
+  const characterIds = parseIntArray(req.body.character_ids)
+  const index = parseNullableInt(req.body.index)
+  const success = await applyMatrix(req, res, (service) =>
+    service.reorderCharacters(characterIds, index)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function updateCharacter(req, res) {
+  const characterId = parseInt(req.body.character_id)
+  const name = req.body.name
+  const description = req.body.description
+  const isMinorEdit = req.body.is_minor_edit
+  const ordering = req.body.ordering
+  const states = req.body.states
+  const success = await applyMatrix(req, res, (service) =>
+    service.updateCharacter(
+      characterId,
+      name,
+      description,
+      isMinorEdit,
+      ordering,
+      states
+    )
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function updateCharactersOrdering(req, res) {
+  const characterIds = parseIntArray(req.body.character_ids)
+  const ordering = parseInt(req.body.ordering)
+  const success = await applyMatrix(req, res, (service) =>
+    service.updateCharactersOrdering(characterIds, ordering)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function getCharacterCitations(req, res) {
+  const characterId = parseInt(req.body.character_id)
+  await applyMatrix(req, res, (service) =>
+    service.getCharacterCitations(characterId)
+  )
+}
+
+export async function removeCharacterCitation(req, res) {
+  const linkId = parseNullableInt(req.body.link_id)
+  const success = await applyMatrix(req, res, (service) =>
+    service.removeCharacterCitation(linkId)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function upsertCharacterCitation(req, res) {
+  const linkId = parseNullableInt(req.body.link_id)
+  const characterId = parseInt(req.body.character_id)
+  const citationId = parseInt(req.body.citation_id)
+  const pp = req.body.pp
+  const notes = req.body.notes
+  const success = await applyMatrix(req, res, (service) =>
+    service.upsertCharacterCitation(linkId, characterId, citationId, pp, notes)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function addCharacterMedia(req, res) {
+  const characterId = parseInt(req.body.character_id)
+  const stateId = parseNullableInt(req.body.state_id)
+  const mediaIds = parseIntArray(req.body.media_ids)
+  const success = await applyMatrix(req, res, (service) =>
+    service.addCharacterMedia(characterId, stateId, mediaIds)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function findCharacterMedia(req, res) {
+  const search = req.body.search
+  await applyMatrix(req, res, (service) => service.findCharacterMedia(search))
+}
+
+export async function moveCharacterMedia(req, res) {
+  const linkId = parseInt(req.body.link_id)
+  const characterId = parseInt(req.body.character_id)
+  const stateId = parseNullableInt(req.body.state_id)
+  const mediaId = parseInt(req.body.media_id)
+  const success = await applyMatrix(req, res, (service) =>
+    service.moveCharacterMedia(linkId, characterId, stateId, mediaId)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function removeCharacterMedia(req, res) {
+  const linkId = parseInt(req.body.link_id)
+  const characterId = parseInt(req.body.character_id)
+  const mediaId = parseInt(req.body.media_id)
+  const success = await applyMatrix(req, res, (service) =>
+    service.removeCharacterMedia(linkId, characterId, mediaId)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function addCharacterComment(req, res) {
+  const characterId = parseInt(req.body.character_id)
+  const stateId = parseNullableInt(req.body.state_id)
+  const text = req.body.text
+  await applyMatrix(req, res, (service) =>
+    service.addCharacterComment(characterId, stateId, text)
+  )
+}
+
+export async function getCharacterComments(req, res) {
+  const characterId = parseInt(req.body.character_id)
+  await applyMatrix(req, res, (service) =>
+    service.getCharacterComments(characterId)
+  )
+}
+
+export async function setCharacterCommentsAsUnread(req, res) {
+  const characterId = parseInt(req.body.character_id)
+  await applyMatrix(req, res, (service) =>
+    service.setCharacterCommentsAsUnread(characterId)
+  )
+}
+
 export async function addCharacterRuleAction(req, res) {
   const characterId = parseInt(req.body.character_id)
   const stateId = parseNullableInt(req.body.state_id)
@@ -184,6 +346,13 @@ export async function fixRuleViolations(req, res) {
 
 export async function getRuleViolations(req, res) {
   await applyMatrix(req, res, (service) => service.getRuleViolations())
+}
+
+export async function getCharacterChanges(req, res) {
+  const characterId = parseInt(req.body.character_id)
+  await applyMatrix(req, res, (service) =>
+    service.getCharacterChanges(characterId)
+  )
 }
 
 export async function setCellStates(req, res) {
@@ -335,6 +504,14 @@ export async function removeCellsMedia(req, res) {
   if (success) {
     sentSyncEventToClients(req.params.matrixId, req.user)
   }
+}
+
+export async function logCellCheck(req, res) {
+  const taxaIds = parseIntArray(req.body.taxa_ids)
+  const characterIds = parseIntArray(req.body.character_ids)
+  await applyMatrix(req, res, (service) =>
+    service.logCellCheck(taxaIds, characterIds)
+  )
 }
 
 export async function addPartition(req, res) {
@@ -621,4 +798,15 @@ function parseNullableInt(value) {
 
 function parseNullableFloat(value) {
   return value == null ? null : parseFloat(value)
+}
+
+function parseCharacterType(characterType) {
+  switch (characterType) {
+    case 'C':
+      return 1
+    case 'M':
+      return 2
+    default:
+      return 0
+  }
 }

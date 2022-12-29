@@ -77,6 +77,7 @@ export default class Character extends Model {
         description: {
           type: DataTypes.TEXT,
           allowNull: false,
+          defaultValue: '',
         },
         access: {
           type: DataTypes.TINYINT.UNSIGNED,

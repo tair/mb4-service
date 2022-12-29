@@ -3,6 +3,7 @@ import * as controller from '../controllers/matrix-editor-controller.js'
 
 const router = express.Router({ mergeParams: true })
 
+// Taxa endpoints
 router.post('/getAvailableTaxa', controller.getAvailableTaxa)
 router.post('/addTaxaToMatrix', controller.addTaxaToMatrix)
 router.post('/loadTaxaMedia', controller.loadTaxaMedia)
@@ -11,14 +12,37 @@ router.post('/reorderTaxa', controller.reorderTaxa)
 router.post('/setTaxaNotes', controller.setTaxaNotes)
 router.post('/setTaxaAccess', controller.setTaxaAccess)
 
+// Character endpoints
+router.post('/addCharacter', controller.addCharacter)
+router.post('/removeCharacters', controller.removeCharacters)
+router.post('/reorderCharacters', controller.reorderCharacters)
+router.post('/updateCharacter', controller.updateCharacter)
+router.post('/updateCharactersOrdering', controller.updateCharactersOrdering)
+// Character Citations
+router.post('/getCharacterCitations', controller.getCharacterCitations)
+router.post('/removeCharacterCitation', controller.removeCharacterCitation)
+router.post('/upsertCharacterCitation', controller.upsertCharacterCitation)
+// Character Media
+router.post('/addCharacterMedia', controller.addCharacterMedia)
+router.post('/findCharacterMedia', controller.findCharacterMedia)
+router.post('/moveCharacterMedia', controller.moveCharacterMedia)
+router.post('/removeCharacterMedia', controller.removeCharacterMedia)
+// Character Comments
+router.post('/addCharacterComment', controller.addCharacterComment)
+router.post('/getCharacterComments', controller.getCharacterComments)
+router.post(
+  '/setCharacterCommentsAsUnread',
+  controller.setCharacterCommentsAsUnread
+)
 // Character rule endpoints
 router.post('/addCharacterRuleAction', controller.addCharacterRuleAction)
 router.post('/removeCharacterRuleAction', controller.removeCharacterRuleAction)
-
 // Character rule violation endpoints
 router.post('/fixAllCharacterRuleViolations', controller.fixAllRuleViolations)
 router.post('/fixSelectedCharacterRuleViolations', controller.fixRuleViolations)
 router.post('/getCharacterRuleViolations', controller.getRuleViolations)
+// Character Changes
+router.post('/getCharacterChanges', controller.getCharacterChanges)
 
 // Cell endpoints
 router.post('/addCellCitations', controller.addCellCitations)
@@ -30,6 +54,7 @@ router.post('/getCellCitations', controller.getCellCitations)
 router.post('/getCellCounts', controller.getCellCounts)
 router.post('/getCellData', controller.getCellData)
 router.post('/getCellMedia', controller.getCellMedia)
+router.post('/logCellCheck', controller.logCellCheck)
 router.post('/removeCellCitation', controller.removeCellCitation)
 router.post('/removeCellMedia', controller.removeCellMedia)
 router.post('/removeCellsMedia', controller.removeCellsMedia)
