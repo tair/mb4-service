@@ -122,7 +122,7 @@ async function getCounts(matrixIds) {
     taxa: convert(taxaCount),
     character: convert(characterCount),
     continuous_character: convert(continuousCharacterCount),
-    character_rules: convert(characterRulesCount),
+    character_rule: convert(characterRulesCount),
     cell_media: convert(cellMediaCount),
     character_media: convert(characterMediaCount),
     media_label: convert(mediaLabelCount),
