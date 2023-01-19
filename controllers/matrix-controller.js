@@ -6,12 +6,22 @@ async function getMatrices(req, res) {
   try {
     const matrices = await matrixService.getMatrices(projectId)
     const partitions = await partitionService.getPartitions(projectId)
+
     const matrixIds = matrices.map((matrix) => matrix.matrix_id)
     const counts = await matrixService.getCounts(matrixIds)
+    for (const matrix of matrices) {
+      matrix.counts = {}
+      for (const key in counts) {
+        const count = counts[key]
+        if (matrix.matrix_id in count) {
+          matrix.counts[key] = count[matrix.matrix_id]
+        }
+      }
+    }
+
     const data = {
-      matrix: matrices,
-      partition: partitions,
-      count: counts,
+      matrices,
+      partitions,
     }
     res.status(200).json(data)
   } catch (e) {

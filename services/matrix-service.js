@@ -3,7 +3,7 @@ import sequelizeConn from '../util/db.js'
 async function getMatrices(projectId) {
   const [rows] = await sequelizeConn.query(
     `
-      SELECT matrix_id, title, user_id
+      SELECT matrix_id, user_id, title
       FROM matrices
       WHERE project_id = ?`,
     { replacements: [projectId] }
@@ -64,7 +64,7 @@ async function getCounts(matrixIds) {
     { replacements: [matrixIds] }
   )
 
-  const cellMediaCount = await sequelizeConn.query(
+  const [cellMediaCount] = await sequelizeConn.query(
     `
         SELECT cxm.matrix_id, count(*) c
         FROM cells_x_media cxm
@@ -118,15 +118,15 @@ async function getCounts(matrixIds) {
   }
 
   return {
-    cell_count: convert(cellCount),
-    taxa_count: convert(taxaCount),
-    character_count: convert(characterCount),
-    continuous_character_count: convert(continuousCharacterCount),
-    character_rules_count: convert(characterRulesCount),
-    cell_media_count: convert(cellMediaCount),
-    character_media_count: convert(characterMediaCount),
-    media_label_count: convert(mediaLabelCount),
-    polymorphoric_cell_count: convert(polymorphoricCellCount),
+    cell: convert(cellCount),
+    taxa: convert(taxaCount),
+    character: convert(characterCount),
+    continuous_character: convert(continuousCharacterCount),
+    character_rule: convert(characterRulesCount),
+    cell_media: convert(cellMediaCount),
+    character_media: convert(characterMediaCount),
+    media_label: convert(mediaLabelCount),
+    polymorphoric_cell: convert(polymorphoricCellCount),
   }
 }
 
