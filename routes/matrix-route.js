@@ -7,5 +7,6 @@ const matrixRouter = express.Router({ mergeParams: true })
 matrixRouter.use('/:matrixId/edit', matrixEditorRouter)
 
 matrixRouter.get('/', matrixController.getMatrices)
+matrixRouter.get('/:matrixId/download', matrixController.download)
 
 export default matrixRouter

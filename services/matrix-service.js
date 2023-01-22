@@ -3,7 +3,7 @@ import sequelizeConn from '../util/db.js'
 async function getMatrices(projectId) {
   const [rows] = await sequelizeConn.query(
     `
-      SELECT matrix_id, user_id, title
+      SELECT matrix_id, user_id, title, type
       FROM matrices
       WHERE project_id = ?`,
     { replacements: [projectId] }
