@@ -75,4 +75,16 @@ export class Table {
   [Symbol.iterator]() {
     return this.map[Symbol.iterator]()
   }
+
+  entries() {
+    return this.map.entries()
+  }
+
+  keys() {
+    return this.map.keys()
+  }
+
+  values() {
+    return this.map.values()
+  }
 }

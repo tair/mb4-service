@@ -26,7 +26,8 @@
     "https": "^1.0.0",
     "jsonwebtoken": "^8.5.1",
     "mysql2": "^2.3.3",
-    "sequelize": "^6.23.1"
+    "sequelize": "^6.23.1",
+    "xml-writer": "^1.7.0"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^5.41.0",
