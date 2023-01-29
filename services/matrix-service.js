@@ -221,13 +221,43 @@ export async function getCharactersInMatrix(matrixId, partitionId = undefined) {
   return characterRows
 }
 
+export async function getCharacterRulesInMatrix(matrixId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT
+        cr.rule_id, c.name character_name, mco.position character_num,
+        cs.name state_name, cs.num state_num, cra.action,
+        crac.name action_character_name,
+        cramco.position action_position,
+        cracs.name action_state_name, cracs.num action_state_num
+      FROM character_rules cr
+      INNER JOIN matrix_character_order AS mco
+        ON mco.character_id = cr.character_id
+      INNER JOIN characters AS c
+        ON c.character_id = mco.character_id
+      LEFT JOIN character_states AS cs
+        ON cr.state_id = cs.state_id
+      INNER JOIN character_rule_actions AS cra
+        ON cra.rule_id = cr.rule_id
+      INNER JOIN characters AS crac
+        ON crac.character_id = cra.character_id
+      INNER JOIN matrix_character_order AS cramco
+        ON cramco.character_id = cra.character_id
+      LEFT JOIN character_states AS cracs
+        ON cracs.state_id = cra.state_id
+      WHERE mco.matrix_id = ?
+      ORDER BY mco.position, cr.rule_id, cramco.position`,
+    { replacements: [matrixId] }
+  )
+  return rows
+}
+
 export async function getCells(matrixId, partitionId = undefined) {
   const replacements = [matrixId]
   let join = ''
   let clause = ''
   if (partitionId) {
-    join =
-      `
+    join = `
       INNER JOIN characters_x_partitions AS cxp
         ON cxp.character_id = c.character_id AND cxp.partition_id = ?
       INNER JOIN taxa_x_partitions AS txp
@@ -271,8 +301,7 @@ export async function getCellNotes(matrixId, partitionId = undefined) {
   let join = ''
   let clause = ''
   if (partitionId) {
-    join =
-      `
+    join = `
       INNER JOIN characters_x_partitions AS cxp
         ON cxp.character_id = c.character_id AND cxp.partition_id = ?
       INNER JOIN taxa_x_partitions AS txp

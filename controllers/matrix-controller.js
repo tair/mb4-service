@@ -1,3 +1,5 @@
+import { CharacterRulesTextExporter } from '../lib/matrix-export/character-rules-text-exporter.js'
+import { CharacterTextExporter } from '../lib/matrix-export/character-text-exporter.js'
 import { ExportOptions } from '../lib/matrix-export/exporter.js'
 import { NexusExporter } from '../lib/matrix-export/nexus-exporter.js'
 import { NeXMLExporter } from '../lib/matrix-export/nexml-exporter.js'
@@ -38,7 +40,9 @@ export async function getMatrices(req, res) {
 export async function download(req, res) {
   const matrixId = parseInt(req.params.matrixId)
   if (!matrixId) {
-    res.status(400).json({ message: 'The request must be contain a matrix ID.' })
+    res
+      .status(400)
+      .json({ message: 'The request must be contain a matrix ID.' })
     return
   }
 
@@ -62,18 +66,13 @@ export async function download(req, res) {
       break
   }
 
-  const date = new Date()
-  const filename = `mbank_X${matrixId}_${date.getFullYear()}-${
-    date.getMonth() + 1
-  }-${date.getDate()}-${('0' + date.getUTCHours()).slice(-2)}${(
-    '0' + date.getUTCMinutes()
-  ).slice(-2)}.${fileExtension}`
+  const filename = `mbank_X${matrixId}_${getFilenameDate()}.${fileExtension}`
   res.set({
     'Content-Type': 'text/plain; charset=utf-8',
     'Content-Disposition': 'attachment; filename=' + filename,
     'Cache-Control': 'private',
     'Last-Modified': new Date(),
-    'Pragma': 'no-store',
+    Pragma: 'no-store',
   })
   res.status(200)
 
@@ -87,4 +86,72 @@ export async function download(req, res) {
     : null
   exporter.export(options)
   res.end()
+}
+
+export async function downloadCharacters(req, res) {
+  const matrixId = parseInt(req.params.matrixId)
+  if (!matrixId) {
+    res
+      .status(400)
+      .json({ message: 'The request must be contain a matrix ID.' })
+    return
+  }
+
+  const filename = `mbank_X${matrixId}_${getFilenameDate()}_character_list.txt`
+  res.set({
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Content-Disposition': 'attachment; filename=' + filename,
+    'Cache-Control': 'private',
+    'Last-Modified': new Date(),
+    Pragma: 'no-store',
+  })
+  res.status(200)
+
+  const exporter = new CharacterTextExporter((txt) => res.write(txt))
+  const options = new ExportOptions()
+  options.includeNotes = !!req.query.notes
+  options.matrix = await matrixService.getMatrix(matrixId)
+  options.characters = await matrixService.getCharactersInMatrix(matrixId)
+
+  exporter.export(options)
+  res.end()
+}
+
+export async function downloadCharacterRules(req, res) {
+  const matrixId = parseInt(req.params.matrixId)
+  if (!matrixId) {
+    res
+      .status(400)
+      .json({ message: 'The request must be contain a matrix ID.' })
+    return
+  }
+
+  const filename = `mbank_X${matrixId}_${getFilenameDate()}_ontology.txt`
+  res.set({
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Content-Disposition': 'attachment; filename=' + filename,
+    'Cache-Control': 'private',
+    'Last-Modified': new Date(),
+    Pragma: 'no-store',
+  })
+  res.status(200)
+
+  const exporter = new CharacterRulesTextExporter((txt) => res.write(txt))
+  const options = new ExportOptions()
+  options.matrix = await matrixService.getMatrix(matrixId)
+  options.characters = await matrixService.getCharactersInMatrix(matrixId)
+  options.rules = await matrixService.getCharacterRulesInMatrix(matrixId)
+
+  exporter.export(options)
+  res.end()
+}
+
+function getFilenameDate() {
+  const date = new Date()
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  const hours = ('0' + date.getUTCHours()).slice(-2)
+  const minutes = ('0' + date.getUTCMinutes()).slice(-2)
+  return `${year}-${month}-${day}-${hours}${minutes}`
 }
