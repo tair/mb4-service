@@ -96,4 +96,35 @@ export default class ProjectsXUser extends Model {
       }
     )
   }
+
+  getVar(key) {
+    return this.vars[key]
+  }
+
+  setVar(key, value) {
+    if (this.vars == null) {
+      this.vars = {}
+    }
+    this.vars[key] = value
+    this.changed('vars', true)
+  }
+
+  getPreferences(preference) {
+    preference = preference.toLowerCase()
+    const preferences = this.getVar('_project_preferences')
+    if (preferences.hasOwnProperty(preference)) {
+      return preferences[preference]
+    }
+    return null
+  }
+
+  setPreferences(preference, value) {
+    preference = preference.toLowerCase()
+    let preferences = this.getVar('_project_preferences')
+    if (preferences == null) {
+      preferences = {}
+    }
+    preferences[preference] = value
+    this.setVar('_project_preferences', preferences)
+  }
 }

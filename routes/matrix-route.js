@@ -8,5 +8,14 @@ matrixRouter.use('/:matrixId/edit', matrixEditorRouter)
 
 matrixRouter.get('/', matrixController.getMatrices)
 matrixRouter.get('/:matrixId/download', matrixController.download)
+matrixRouter.get(
+  '/:matrixId/download/characters',
+  matrixController.downloadCharacters
+)
+matrixRouter.get(
+  '/:matrixId/download/ontology',
+  matrixController.downloadCharacterRules
+)
+matrixRouter.post('/:matrixId/setPreference', matrixController.setPreference)
 
 export default matrixRouter
