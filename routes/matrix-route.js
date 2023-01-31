@@ -16,5 +16,6 @@ matrixRouter.get(
   '/:matrixId/download/ontology',
   matrixController.downloadCharacterRules
 )
+matrixRouter.post('/:matrixId/setPreference', matrixController.setPreference)
 
 export default matrixRouter

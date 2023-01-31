@@ -4,6 +4,8 @@ import { ExportOptions } from '../lib/matrix-export/exporter.js'
 import { NexusExporter } from '../lib/matrix-export/nexus-exporter.js'
 import { NeXMLExporter } from '../lib/matrix-export/nexml-exporter.js'
 import { TNTExporter } from '../lib/matrix-export/tnt-exporter.js'
+import { models } from '../models/init-models.js'
+import sequelizeConn from '../util/db.js'
 import * as matrixService from '../services/matrix-service.js'
 import * as partitionService from '../services/partition-service.js'
 
@@ -15,6 +17,23 @@ export async function getMatrices(req, res) {
 
     const matrixIds = matrices.map((matrix) => matrix.matrix_id)
     const counts = await matrixService.getCounts(matrixIds)
+
+    const userId = req.user?.userId || 0
+    const projectUser = await models.ProjectsXUser.findOne({
+      where: {
+        user_id: userId,
+        project_id: projectId,
+      },
+    })
+    if (projectUser) {
+      const matrixPreferences = projectUser.getPreferences('matrix')
+      for (const matrix of matrices) {
+        if (matrixPreferences?.hasOwnProperty(matrix.matrix_id)) {
+          matrix.preferences = matrixPreferences[matrix.matrix_id]
+        }
+      }
+    }
+
     for (const matrix of matrices) {
       matrix.counts = {}
       for (const key in counts) {
@@ -35,6 +54,61 @@ export async function getMatrices(req, res) {
     console.error('Error while getting matrix list.', e)
     res.status(500).json({ message: 'Error while fetching matrix list.' })
   }
+}
+
+export async function setPreference(req, res) {
+  const name = req.body.name
+  const value = req.body.value
+  if (!name) {
+    res.status(400).json({ message: 'Name is not defined!' })
+    return
+  }
+
+  const matrixId = parseInt(req.params.matrixId)
+  if (!matrixId) {
+    res.status(400).json({ message: 'Matrix id is not defined' })
+    return
+  }
+
+  const projectId = req.params.projectId
+  const userId = req.user?.userId
+  if (!userId) {
+    res.status(400).json({ message: 'User id is not defined' })
+    return
+  }
+
+  const projectUser = await models.ProjectsXUser.findOne({
+    where: {
+      user_id: userId,
+      project_id: projectId,
+    },
+  })
+  if (projectUser == null) {
+    res.status(400).json({ message: 'User is not in Project' })
+    return
+  }
+
+  const matrixPreferences = projectUser.getPreferences('matrix')
+  if (value) {
+    if (!matrixPreferences) {
+      matrixPreferences = {}
+    }
+    if (!matrixPreferences[matrixId]) {
+      matrixPreferences[matrixId] = {}
+    }
+    matrixPreferences[matrixId][name] = value
+  } else if (matrixPreferences) {
+    delete matrixPreferences[matrixId][name]
+    if (Object.keys(matrixPreferences[matrixId]).length == 0) {
+      delete matrixPreferences[matrixId]
+    }
+  }
+
+  projectUser.setPreferences('matrix', matrixPreferences)
+  const transaction = await sequelizeConn.transaction()
+  await projectUser.save({ user: req.user, transaction: transaction })
+  await transaction.commit()
+  res.status(200).json({ status: true })
 }
 
 export async function download(req, res) {
