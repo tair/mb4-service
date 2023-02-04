@@ -1,5 +1,43 @@
 import sequelizeConn from '../util/db.js'
 
+export async function getCharactersInProject(projectId) {
+  const [characterRows] = await sequelizeConn.query(
+    `
+    SELECT character_id, name, description, type 
+    FROM characters
+    WHERE project_id = ?`,
+    { replacements: [projectId] }
+  )
+  const characters = new Map()
+  for (const row of characterRows) {
+    const characterId = parseInt(row.character_id)
+    row.states = []
+    characters.set(characterId, row)
+  }
+
+  const [stateRows] = await sequelizeConn.query(
+    `
+      SELECT c.character_id, cs.state_id, cs.num, cs.name
+      FROM characters AS c
+      INNER JOIN character_states AS cs ON cs.character_id = c.character_id
+      WHERE c.project_id = ?
+      ORDER BY c.character_id, cs.num
+    `,
+    { replacements: [projectId] }
+  )
+  for (const row of stateRows) {
+    const characterId = parseInt(row.character_id)
+    const character = characters.get(characterId)
+    character.states.push({
+      state_id: row.state_id,
+      num: row.num,
+      name: row.name,
+    })
+  }
+
+  return characters
+}
+
 export async function getStatesForCharacter(characterId) {
   const [rows] = await sequelizeConn.query(
     `
