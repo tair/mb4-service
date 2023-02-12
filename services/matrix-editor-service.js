@@ -5941,6 +5941,10 @@ class MatrixEditorService {
 
   async convertCellQueryToResults(rows) {
     const cells = []
+    if (rows.length == 0) {
+      return cells
+    }
+
     const characterIds = rows.map((row) => row.character_id)
     const characterTypeMap = await getTypesForCharacterIds(characterIds)
     for (const row of rows) {
