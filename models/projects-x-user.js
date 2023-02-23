@@ -112,7 +112,7 @@ export default class ProjectsXUser extends Model {
   getPreferences(preference) {
     preference = preference.toLowerCase()
     const preferences = this.getVar('_project_preferences')
-    if (preferences.hasOwnProperty(preference)) {
+    if (preference in preferences) {
       return preferences[preference]
     }
     return null

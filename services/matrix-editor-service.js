@@ -4012,7 +4012,7 @@ class MatrixEditorService {
               })
               updates.deleted_scores.push(cellSnapshot)
               break
-            case 'D':
+            case 'D': {
               const cell = await models.Cell.create(
                 {
                   ...cellSnapshot,
@@ -4029,6 +4029,7 @@ class MatrixEditorService {
               )
               updates.added_scores.push(cell)
               break
+            }
             default:
             case 'U': {
               const cells = await models.Cell.findAll({
