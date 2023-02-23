@@ -25,11 +25,13 @@ export default class Character extends Model {
           type: DataTypes.STRING(1024),
           allowNull: false,
         },
+        // TODO(kenzley): Drop this column since it is no longer used.
         num: {
           type: DataTypes.INTEGER,
           allowNull: false,
           defaultValue: 0,
         },
+        // TODO(kenzley): Drop this column since this is no longer used.
         color: {
           type: DataTypes.STRING(6),
           allowNull: false,

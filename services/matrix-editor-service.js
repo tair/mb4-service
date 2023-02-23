@@ -2157,7 +2157,7 @@ class MatrixEditorService {
       SELECT
         a.annotation_id, a.annotation, a.created_on,
         wu.user_id, wu.fname, wu.lname, wu.email,
-        c.character_id, c.name character_name, c.num character_num,
+        c.character_id, c.name character_name,
         cs.state_id, cs.name state_name, cs.num state_num
       FROM characters c
       INNER JOIN character_states AS cs ON c.character_id = cs.character_id

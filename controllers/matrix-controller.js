@@ -4,6 +4,10 @@ import { ExportOptions } from '../lib/matrix-export/exporter.js'
 import { NexusExporter } from '../lib/matrix-export/nexus-exporter.js'
 import { NeXMLExporter } from '../lib/matrix-export/nexml-exporter.js'
 import { TNTExporter } from '../lib/matrix-export/tnt-exporter.js'
+import {
+  importMatrix,
+  mergeMatrix,
+} from '../lib/matrix-import/matrix-importer.js'
 import { models } from '../models/init-models.js'
 import sequelizeConn from '../util/db.js'
 import * as matrixService from '../services/matrix-service.js'
@@ -53,6 +57,79 @@ export async function getMatrices(req, res) {
   } catch (e) {
     console.error('Error while getting matrix list.', e)
     res.status(500).json({ message: 'Error while fetching matrix list.' })
+  }
+}
+
+export async function createMatrix(req, res) {
+  const title = req.body.title
+  if (!title) {
+    res.status(400).json({ message: 'Title was not defined' })
+    return
+  }
+
+  try {
+    const projectId = req.params.projectId
+    await createMatrix(
+      title,
+      req.body.notes,
+      req.body.otu,
+      req.body.published,
+      req.user,
+      projectId
+    )
+    res.status(200).json({ status: true })
+  } catch (e) {
+    console.log('Matrix not imported correctly', e)
+    res.status(400).json({ message: 'Matrix not imported correctly' })
+  }
+}
+
+export async function uploadMatrix(req, res) {
+  const title = req.body.title
+  if (!title) {
+    res.status(400).json({ message: 'Title was not defined' })
+    return
+  }
+  const file = req.file
+  if (!file) {
+    res.status(400).json({ message: 'File must be included' })
+    return
+  }
+  const serializedMatrix = req.body.matrix
+  if (!serializedMatrix) {
+    res.status(400).json({ message: 'File was not properly parsed' })
+    return
+  }
+
+  try {
+    const matrixId = req.body.matrixId
+    const projectId = req.params.projectId
+    const matrix = JSON.parse(serializedMatrix)
+    const results = matrixId
+      ? await mergeMatrix(
+          matrixId,
+          req.body.notes,
+          req.body.itemNotes,
+          req.user,
+          projectId,
+          matrix,
+          file
+        )
+      : await importMatrix(
+          title,
+          req.body.notes,
+          req.body.itemNotes,
+          req.body.otu,
+          req.body.published,
+          req.user,
+          projectId,
+          matrix,
+          file
+        )
+    res.status(200).json({ status: true, results })
+  } catch (e) {
+    console.log('Matrix not imported correctly', e)
+    res.status(400).json({ message: 'Matrix not imported correctly' })
   }
 }
 

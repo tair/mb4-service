@@ -1,7 +1,16 @@
 import _sequelize from 'sequelize'
-import { time } from '../util/util.js'
 const { Model } = _sequelize
+import crypto from 'crypto'
 
+import { TAXA_FIELD_NAMES } from '../util/taxa.js'
+import { time } from '../util/util.js'
+
+// TODO(kenzley): Update this table when V4 is launched so that:
+//     * The taxonomy ranks are ordered by their relative order and update their
+//       columns so that they can be null;
+//     * The notes columns can be null;
+//     * Move the tmp, idigbio, and eol columns into a separate table which
+//       indicate pulled data from external sources.
 export default class Taxon extends Model {
   static init(sequelize, DataTypes) {
     return super.init(
@@ -36,9 +45,11 @@ export default class Taxon extends Model {
             key: 'project_id',
           },
         },
+        // TODO(kenzley); Update this to allow NULL notes for empty notes.
         notes: {
           type: DataTypes.TEXT,
           allowNull: false,
+          defaultValue: '',
         },
         specific_epithet: {
           type: DataTypes.STRING(255),
@@ -160,26 +171,32 @@ export default class Taxon extends Model {
         higher_taxon_suborder: {
           type: DataTypes.STRING(255),
           allowNull: false,
+          defaultValue: '',
         },
         source_info: {
           type: DataTypes.TEXT,
           allowNull: false,
+          defaultValue: '',
         },
         tmp_media_url: {
           type: DataTypes.STRING(255),
           allowNull: false,
+          defaultValue: '',
         },
         tmp_media_copyright_license: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          defaultValue: 0,
         },
         tmp_media_copyright_permission: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          defaultValue: 0,
         },
         tmp_media_copyright_info: {
           type: DataTypes.STRING(255),
           allowNull: false,
+          defaultValue: '',
         },
         eol_pulled_on: {
           type: DataTypes.INTEGER.UNSIGNED,
@@ -192,6 +209,7 @@ export default class Taxon extends Model {
         tmp_more_info_link: {
           type: DataTypes.STRING(255),
           allowNull: false,
+          defaultValue: '',
         },
         higher_taxon_subtribe: {
           type: DataTypes.STRING(255),
@@ -321,7 +339,28 @@ export default class Taxon extends Model {
             fields: [{ name: 'created_on' }],
           },
         ],
+        hooks: {
+          beforeCreate: (record) => {
+            record.dataValues.taxon_hash = getColumnHash(record)
+          },
+          beforeUpdate: (record) => {
+            record.dataValues.taxon_hash = getColumnHash(record)
+          },
+        },
       }
     )
   }
+}
+
+function getColumnHash(record) {
+  const columns = []
+  for (const fieldName of TAXA_FIELD_NAMES) {
+    if (record[fieldName]) {
+      columns.push(record[fieldName])
+    }
+  }
+  if (record.scientific_name_author) {
+    columns.push(record.scientific_name_author)
+  }
+  return crypto.createHash('md5').update(columns.join('/')).digest('hex')
 }

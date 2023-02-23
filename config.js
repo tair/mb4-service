@@ -5,10 +5,14 @@ import process from 'node:process'
 dotenv.config()
 
 const config = {
+  app: {
+    name: process.env.APP_NAME,
+  },
   media: {
     scheme: process.env.MEDIA_SCHEME,
     domain: process.env.MEDIA_DOMAIN,
     port: process.env.MEDIA_PORT,
+    directory: process.env.MEDIA_DIRECTORY,
   },
   db: {
     host: process.env.DB_HOST,
