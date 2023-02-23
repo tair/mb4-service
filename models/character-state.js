@@ -38,7 +38,6 @@ export default class CharacterState extends Model {
         user_id: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: null,
         },
         description: {
           type: DataTypes.TEXT,
