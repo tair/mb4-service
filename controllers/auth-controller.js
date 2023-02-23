@@ -91,7 +91,7 @@ async function login(req, res, next) {
 
   const userResponse = {
     email: user.email,
-    userId: user.user_id,
+    user_id: user.user_id,
     name: user.name,
   }
   const accessToken = generateAccessToken(userResponse)

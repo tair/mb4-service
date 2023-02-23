@@ -714,7 +714,7 @@ export async function sync(req, res) {
 export async function sendEvent(req, res) {
   const matrixId = parseInt(req.params.matrixId)
   const clientId = req.body.client_id
-  const userId = req.user ? req.user.userId : 0
+  const userId = req.user ? req.user.user_id : 0
   const client = clients.getClient(matrixId, clientId)
   if (client == null || client.userId != userId) {
     res.status(401).json({ ok: false, errors: ['User invalid'] })
@@ -761,7 +761,7 @@ export async function sendEvent(req, res) {
 export async function fetchChanges(req, res) {
   const matrixId = parseInt(req.params.matrixId)
   const clientId = req.body.client_id
-  const userId = req.user ? req.user.userId : 0
+  const userId = req.user ? req.user.user_id : 0
   const client = clients.getClient(matrixId, clientId)
   if (client == null || client.userId != userId) {
     res.status(401).json({ ok: false, errors: ['User invalid'] })
@@ -777,7 +777,7 @@ export async function fetchChanges(req, res) {
 }
 
 function sentSyncEventToClients(matrixId, user) {
-  const userId = user ? user.userId : 0
+  const userId = user ? user.user_id : 0
   const data = { user_id: userId }
   const response = `event: sync\ndata: ${JSON.stringify(data)}\n\n`
   clients
@@ -793,7 +793,7 @@ export async function logError(req) {
 export async function applyMatrix(req, res, func) {
   const projectId = parseInt(req.params.projectId)
   const matrixId = parseInt(req.params.matrixId)
-  const userId = req.user ? req.user.userId : 0
+  const userId = req.user ? req.user.user_id : 0
   const readonly = req.body.ro
 
   try {

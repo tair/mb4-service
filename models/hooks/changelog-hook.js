@@ -9,7 +9,7 @@ export async function logChange(model, type, options) {
     throw 'User is not defined so cannot generate logs'
   }
 
-  const userId = user.user_id || user.userId
+  const userId = user.user_id
   if (!userId) {
     throw 'User ID is not defined and cannot be logged'
   }
