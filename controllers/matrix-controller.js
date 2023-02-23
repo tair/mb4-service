@@ -18,7 +18,7 @@ export async function getMatrices(req, res) {
     const matrixIds = matrices.map((matrix) => matrix.matrix_id)
     const counts = await matrixService.getCounts(matrixIds)
 
-    const userId = req.user?.userId || 0
+    const userId = req.user?.user_id || 0
     const projectUser = await models.ProjectsXUser.findOne({
       where: {
         user_id: userId,
@@ -71,7 +71,7 @@ export async function setPreference(req, res) {
   }
 
   const projectId = req.params.projectId
-  const userId = req.user?.userId
+  const userId = req.user?.user_id
   if (!userId) {
     res.status(400).json({ message: 'User id is not defined' })
     return
