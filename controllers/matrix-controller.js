@@ -28,7 +28,7 @@ export async function getMatrices(req, res) {
     if (projectUser) {
       const matrixPreferences = projectUser.getPreferences('matrix')
       for (const matrix of matrices) {
-        if (matrixPreferences?.hasOwnProperty(matrix.matrix_id)) {
+        if (matrix.matrix_id in matrixPreferences) {
           matrix.preferences = matrixPreferences[matrix.matrix_id]
         }
       }
@@ -88,7 +88,7 @@ export async function setPreference(req, res) {
     return
   }
 
-  const matrixPreferences = projectUser.getPreferences('matrix')
+  let matrixPreferences = projectUser.getPreferences('matrix')
   if (value) {
     if (!matrixPreferences) {
       matrixPreferences = {}
