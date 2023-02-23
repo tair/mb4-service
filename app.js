@@ -1,4 +1,6 @@
+import cors from 'cors'
 import express from 'express'
+import config from './config.js'
 import projectsRouter from './routes/projects-route.js'
 import publicProjectsRouter from './routes/public/projects-route.js'
 import publicStatsRouter from './routes/public/stats-route.js'
@@ -19,6 +21,7 @@ app.use((req, res, next) => {
   next()
 })
 
+app.use(cors())
 app.use(express.json())
 app.use(
   express.urlencoded({
@@ -29,6 +32,8 @@ app.use(
 app.get('/', (req, res) => {
   res.json({ message: 'The API service is alive!' })
 })
+
+app.use('/media', express.static(config.media.directory))
 
 app.use('/auth', authRouter)
 app.use('/projects', projectsRouter)

@@ -29,7 +29,7 @@ export async function getCharactersInProject(projectId) {
     const characterId = parseInt(row.character_id)
     const character = characters.get(characterId)
     character.states.push({
-      state_id: row.state_id,
+      state_id: parseInt(row.state_id),
       num: row.num,
       name: row.name,
     })

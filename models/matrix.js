@@ -1,5 +1,6 @@
 import _sequelize from 'sequelize'
 import { time } from '../util/util.js'
+import { MATRIX_OPTIONS } from '../util/matrix.js'
 const { Model } = _sequelize
 
 export default class Matrix extends Model {
@@ -17,9 +18,11 @@ export default class Matrix extends Model {
           allowNull: false,
           defaultValue: '',
         },
+        // TODO(kenzley): Delete this. This no longer used.
         title_extended: {
           type: DataTypes.TEXT,
           allowNull: false,
+          defaultValue: '',
         },
         user_id: {
           type: DataTypes.INTEGER.UNSIGNED,
@@ -162,5 +165,12 @@ export default class Matrix extends Model {
 
   getOption(key) {
     return this.other_options[key]
+  }
+
+  setOption(key, value) {
+    if (MATRIX_OPTIONS.includes(key)) {
+      this.other_options[key] = value
+      this.changed('other_options', true)
+    }
   }
 }

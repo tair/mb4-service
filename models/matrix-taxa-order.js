@@ -33,6 +33,7 @@ export default class MatrixTaxaOrder extends Model {
           type: DataTypes.SMALLINT.UNSIGNED,
           allowNull: true,
         },
+        // TODO(kenzley): Delete this column.
         notes: {
           type: DataTypes.TEXT,
           allowNull: true,

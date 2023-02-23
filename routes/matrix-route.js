@@ -1,21 +1,24 @@
 import express from 'express'
 import matrixEditorRouter from './matrix-editor-route.js'
-import * as matrixController from '../controllers/matrix-controller.js'
+import * as controller from '../controllers/matrix-controller.js'
+import { upload } from './upload.js'
 
 const matrixRouter = express.Router({ mergeParams: true })
 
 matrixRouter.use('/:matrixId/edit', matrixEditorRouter)
 
-matrixRouter.get('/', matrixController.getMatrices)
-matrixRouter.get('/:matrixId/download', matrixController.download)
+matrixRouter.get('/', controller.getMatrices)
+matrixRouter.get('/:matrixId/download', controller.download)
 matrixRouter.get(
   '/:matrixId/download/characters',
-  matrixController.downloadCharacters
+  controller.downloadCharacters
 )
 matrixRouter.get(
   '/:matrixId/download/ontology',
-  matrixController.downloadCharacterRules
+  controller.downloadCharacterRules
 )
-matrixRouter.post('/:matrixId/setPreference', matrixController.setPreference)
+
+matrixRouter.post('/upload', upload.single('file'), controller.uploadMatrix)
+matrixRouter.post('/:matrixId/setPreference', controller.setPreference)
 
 export default matrixRouter

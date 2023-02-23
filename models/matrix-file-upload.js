@@ -1,4 +1,5 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class MatrixFileUpload extends Model {
@@ -15,10 +16,13 @@ export default class MatrixFileUpload extends Model {
           type: DataTypes.JSON,
           allowNull: true,
           file: true,
+          volume: 'matrices',
         },
+        // TODO(kenzley): Drop this column since this is no longer used.
         comments: {
           type: DataTypes.TEXT,
           allowNull: false,
+          defaultValue: '',
         },
         item_note: {
           type: DataTypes.TEXT,
@@ -41,7 +45,7 @@ export default class MatrixFileUpload extends Model {
         uploaded_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: time,
         },
         matrix_note: {
           type: DataTypes.TEXT,
