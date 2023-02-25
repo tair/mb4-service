@@ -31,9 +31,11 @@ export async function getMatrices(req, res) {
     })
     if (projectUser) {
       const matrixPreferences = projectUser.getPreferences('matrix')
-      for (const matrix of matrices) {
-        if (matrix.matrix_id in matrixPreferences) {
-          matrix.preferences = matrixPreferences[matrix.matrix_id]
+      if (matrixPreferences) {
+        for (const matrix of matrices) {
+          if (matrix.matrix_id in matrixPreferences) {
+            matrix.preferences = matrixPreferences[matrix.matrix_id]
+          }
         }
       }
     }
