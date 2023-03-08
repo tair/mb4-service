@@ -22,14 +22,28 @@ The service container is accessible on **http://localhost:8080/**
 The database container is accessible on **http://127.0.0.1:3306/**
 
 ```sh
-docker compose -f docker-compose.dev.yml up --build
+docker-compose -f docker-compose.dev.yml up
 ```
+
+### Force rebuild, compile and hot-Reload for Development With Container
+
+**Conduct this operation when the package.json file gets updated.**
+
+The service container is accessible on **http://localhost:8080/**
+The database container is accessible on **http://127.0.0.1:3306/**
+
+```sh
+docker-compose -f docker-compose.dev.yml build --no-cache
+docker-compose -f docker-compose.dev.yml up
+```
+
 
 ### Load Sample Data to the Development Database Container
 ```sh
 mysql -h 127.0.0.1 -u morphobank -p morphobank < {database_dump_file}
 ```
 Then enter the password you defined in the db-dev/.env file
+
 
 ### Connect to the Development Database
 ```sh
