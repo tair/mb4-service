@@ -6,4 +6,7 @@ services:
         image: mb4-service:1.0
         container_name: mb4-service-container
         ports:
-            - "4001:80"
+            - "4001:8080"
+        restart: always
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
