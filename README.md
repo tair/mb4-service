@@ -33,6 +33,8 @@ The service container is accessible on **http://localhost:8080/**
 The database container is accessible on **http://127.0.0.1:3306/**
 
 ```sh
+docker stop mb4-service-container-dev
+docker rm mb4-service-container-dev
 docker-compose -f docker-compose.dev.yml build --no-cache
 docker-compose -f docker-compose.dev.yml up
 ```
