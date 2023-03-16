@@ -102,6 +102,14 @@ export default class ProjectDocument extends Model {
             fields: [{ name: 'project_id' }],
           },
         ],
+        hooks: {
+          beforeCreate: (record) => {
+            record.dataValues.taxon_hash = getColumnHash(record)
+          },
+          beforeUpdate: (record) => {
+            record.dataValues.taxon_hash = getColumnHash(record)
+          },
+        },
       }
     )
   }
