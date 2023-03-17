@@ -4,7 +4,9 @@ import * as statsService from './stats-service.js'
 
 async function getProjects() {
   let [rows] = await sequelizeConn.query(`
-      SELECT p.project_id, journal_year, article_authors, article_title, published_on
+      SELECT p.project_id, 
+      REPLACE(LOWER(TRIM(journal_title)), ' ', '_') AS journal_image_name, 
+      journal_year, article_authors, article_title, published_on
       FROM projects p
       WHERE p.published = 1 AND p.deleted = 0
       ORDER BY p.published_on desc`)
