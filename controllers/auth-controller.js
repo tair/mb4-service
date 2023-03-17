@@ -7,13 +7,17 @@ import { models } from '../models/init-models.js'
 import { validationResult } from 'express-validator'
 
 function isTokenExpired(token) {
+  return Math.floor(new Date().getTime() / 1000) >= getTokenExpiry(token)
+}
+
+function getTokenExpiry(token) {
   const payload = Buffer.from(token.split('.')[1], 'base64')
-  const expiry = JSON.parse(payload).exp
-  return Math.floor(new Date().getTime() / 1000) >= expiry
+  const expiry = JSON.parse(payload).exp // expiry in seconds
+  return expiry
 }
 
 function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization']
+  const authHeader = req.cookies['authorization']
   const token = authHeader && authHeader.split(' ')[1]
 
   // Return 401 when token is not present in the header.
@@ -37,7 +41,7 @@ function authenticateToken(req, res, next) {
 }
 
 async function maybeAuthenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization']
+  const authHeader =  req.cookies['authorization']
   const token = authHeader && authHeader.split(' ')[1]
   if (token == null) {
     next()
@@ -95,6 +99,11 @@ async function login(req, res, next) {
     name: user.name,
   }
   const accessToken = generateAccessToken(userResponse)
+  const expiry = getTokenExpiry(accessToken)
+  res.cookie('authorization', `Bearer ${accessToken}`, {
+    expires: new Date(expiry * 1000),
+    httpOnly: true
+  })
   res.status(200).json({ accessToken: accessToken, user: userResponse })
 }
 

@@ -36,15 +36,42 @@ async function getProjectTitles() {
 }
 
 async function getInstitutionsWithProjects() {
-  let [rows] =
-    await sequelizeConn.query(`select i.name as name, count(*) as count from 
+  let [rows] = await sequelizeConn.query(`select i.name as iname, 
+    p.project_id, 
+    p.name as pname from 
     institutions_x_projects ip, projects p, institutions i 
     where ip.project_id=p.project_id and p.published=1 and p.deleted=0
     and ip.institution_id=i.institution_id
-    group by i.name
-    order by name asc`)
+    order by i.name, p.project_id asc`)
 
-  return rows
+  let institutionsDict = {}
+
+  for (let i = 0; i < rows.length; i++) {
+    let iname = rows[i].iname
+
+    let project = {
+      id: rows[i].project_id,
+      name: rows[i].pname,
+    }
+
+    if (!institutionsDict[iname]) {
+      institutionsDict[iname] = {"count": 1, "projects": [project]}
+    } else {
+      institutionsDict[iname]["count"] += 1
+      institutionsDict[iname]["projects"].push(project)
+    }
+  }
+
+  let institutions = []
+  for (var iname in institutionsDict) {
+    let institution = {
+      name: iname,
+      count: institutionsDict[iname]["count"],
+      projects: institutionsDict[iname]["projects"]
+    }
+    institutions.push(institution)
+  }
+  return institutions
 }
 
 async function getAuthorsWithProjects() {
