@@ -11,16 +11,24 @@ async function getProjects() {
       journal_cover, 
       journal_year, 
       journal_in_press,
-      article_authors, article_title, published_on
+      article_authors, article_title, published_on,
+      0 as has_continuous_char
       FROM projects p
       WHERE p.published = 1 AND p.deleted = 0
       ORDER BY p.published_on desc`)
 
+  let charDict = await getContinuousCharDict()
+
   for (let i = 0; i < rows.length; i++) {
-    const prj_stats = await statsService.getProjectStats(rows[i].project_id)
+    let projectId = rows[i].project_id
+
+    if (charDict[projectId]) {
+      rows[i].has_continuous_char = 1
+    }
+    const prj_stats = await statsService.getProjectStats(projectId)
 
     const image_props = await mediaService.getImageProps(
-      rows[i].project_id,
+      projectId,
       'preview'
     )
 
@@ -37,6 +45,19 @@ async function getProjects() {
   console.log("Spent " + (end - start) / 1000 + 's to complete')
 
   return rows
+}
+
+async function getContinuousCharDict() {
+  let [continuousChars] = await sequelizeConn.query(`
+      SELECT distinct p.project_id
+      FROM characters c JOIN projects p ON c.project_id = p.project_id
+      WHERE c.type = 1 and
+      p.published = 1`)
+  let charDict = {}
+  for (let i = 0; i < continuousChars.length; i++) {
+    charDict[continuousChars[i].project_id] = 1
+  }
+  return charDict
 }
 
 async function setJournalCoverUrl(project) {
