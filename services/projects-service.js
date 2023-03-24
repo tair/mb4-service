@@ -1,21 +1,39 @@
 import sequelizeConn from '../util/db.js'
+import axios from 'axios'
 import * as mediaService from './media-service.js'
 import * as statsService from './stats-service.js'
 
 async function getProjects() {
+  let start = new Date().getTime()
   let [rows] = await sequelizeConn.query(`
-      SELECT p.project_id, journal_year, article_authors, article_title, published_on
+      SELECT p.project_id, 
+      TRIM(journal_title) as journal_title,
+      journal_cover, 
+      journal_year, 
+      journal_in_press,
+      article_authors, article_title, published_on,
+      0 as has_continuous_char
       FROM projects p
       WHERE p.published = 1 AND p.deleted = 0
       ORDER BY p.published_on desc`)
 
+  let charDict = await getContinuousCharDict()
+
   for (let i = 0; i < rows.length; i++) {
-    const prj_stats = await statsService.getProjectStats(rows[i].project_id)
+    let projectId = rows[i].project_id
+
+    if (charDict[projectId]) {
+      rows[i].has_continuous_char = 1
+    }
+    const prj_stats = await statsService.getProjectStats(projectId)
 
     const image_props = await mediaService.getImageProps(
-      rows[i].project_id,
+      projectId,
       'preview'
     )
+
+    await setJournalCoverUrl(rows[i])
+
     rows[i] = {
       image_props: image_props,
       project_stats: prj_stats,
@@ -23,7 +41,72 @@ async function getProjects() {
     }
   }
 
+  let end = new Date().getTime()
+  console.log("Spent " + (end - start) / 1000 + 's to complete')
+
   return rows
+}
+
+async function getContinuousCharDict() {
+  let [continuousChars] = await sequelizeConn.query(`
+      SELECT distinct p.project_id
+      FROM characters c JOIN projects p ON c.project_id = p.project_id
+      WHERE c.type = 1 and
+      p.published = 1`)
+  let charDict = {}
+  for (let i = 0; i < continuousChars.length; i++) {
+    charDict[continuousChars[i].project_id] = 1
+  }
+  return charDict
+}
+
+async function setJournalCoverUrl(project) {
+  project.journal_cover_url = ''
+  let urlByTitle = getCoverUrlByJournalTitle(project.journal_title)
+  delete project.journal_title
+  let urlByCover = getCoverUrlByJournalCover(project.journal_cover)
+  delete project.journal_cover
+  
+  if (urlByTitle) {
+    try{
+      let response = await axios.get(urlByTitle);
+      project.journal_cover_url = urlByTitle
+      return
+    } catch(e) {
+      // do nothing 
+    }
+  }
+
+  if (urlByCover) {
+    try{
+      let response = await axios.get(urlByCover);
+      project.journal_cover_url = urlByCover
+      return
+    } catch(e) {
+      // do nothing 
+    }
+  }
+
+  console.log('No cover info for project ' + project.project_id)
+}
+
+function getCoverUrlByJournalCover(journal_cover) {
+  if (journal_cover) {
+    let preview = journal_cover.preview
+    let urlByCover = `https://morphobank.org/media/morphobank3/images/${preview.HASH}/${preview.MAGIC}_${preview.FILENAME}`
+    return urlByCover
+  }
+  return ''
+}
+
+function getCoverUrlByJournalTitle(journal_title) {
+  if (journal_title) {
+    let cleanTitle = journal_title.replace(/\s/g, "_").replace(/:/g, "")
+      .replace(/\./g, "").replace(/\&/g, "and").toLowerCase()
+    let urlByTitle = `https://morphobank.org/themes/default/graphics/journalIcons/${cleanTitle}.jpg`
+    return urlByTitle
+  }
+  return ''
 }
 
 async function getProjectTitles() {

@@ -21,16 +21,19 @@ Then fill in all the variable values. Note the database DB_USER and DB_PASSWORD 
 The service container is accessible on **http://localhost:8080/**
 The database container is accessible on **http://127.0.0.1:3306/**
 
+#### Start the container
+
 ```sh
 docker-compose -f docker-compose.dev.yml up
 ```
 
-### Force rebuild, compile and hot-Reload for Development With Container
+#### Rebuild when .env file gets updated
 
-**Conduct this operation when the package.json file gets updated.**
+```sh
+docker-compose -f docker-compose.dev.yml up --build
+```
 
-The service container is accessible on **http://localhost:8080/**
-The database container is accessible on **http://127.0.0.1:3306/**
+#### Force rebuild when package.json or package-lock.json file gets updated
 
 ```sh
 docker stop mb4-service-container-dev

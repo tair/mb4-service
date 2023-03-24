@@ -35,9 +35,11 @@ sample request
 curl -d "email=xingguo.chen@arabidopsis.org&password=techteam123" -X POST http://localhost:8080/auth/login
 
 ###
-GET http://localhost:8080/projects/data_dump
+#### Need to connect to production db otherwise no project stats available
+#### Add `AND published_on <= 1650648267` to project query to match dev db
+GET http://localhost:8080/public/projects/data_dump
 sample request
-curl http://localhost:8080/projects/data_dump
+curl http://localhost:8080/public/projects/data_dump
 
 ###
 GET http://localhost:8080/home/project/:projectId/matrix
