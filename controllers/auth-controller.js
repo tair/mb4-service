@@ -2,57 +2,10 @@ import bcrypt from 'bcrypt'
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import process from 'node:process'
-import { Buffer } from 'node:buffer'
 import { models } from '../models/init-models.js'
 import { validationResult } from 'express-validator'
 
-function isTokenExpired(token) {
-  const payload = Buffer.from(token.split('.')[1], 'base64')
-  const expiry = JSON.parse(payload).exp
-  return Math.floor(new Date().getTime() / 1000) >= expiry
-}
-
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization']
-  const token = authHeader && authHeader.split(' ')[1]
-
-  // Return 401 when token is not present in the header.
-  if (token == null) {
-    return res.status(401).json({ message: 'Auth token not found.' })
-  }
-
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
-    // Return 403 when the token is present but invalid.
-    if (err) {
-      return res.status(403).json({ message: 'Auth token is invalid.' })
-    }
-
-    if (isTokenExpired(token)) {
-      return res.status(403).json({ message: 'Auth token expired.' })
-    }
-
-    req.user = user
-    next()
-  })
-}
-
-async function maybeAuthenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization']
-  const token = authHeader && authHeader.split(' ')[1]
-  if (token == null) {
-    next()
-    return
-  }
-
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
-    if (!err) {
-      req.user = user
-    }
-    next()
-  })
-}
-
-async function login(req, res, next) {
+export async function login(req, res, next) {
   const errors = validationResult(req.body)
   if (!errors.isEmpty()) {
     const error = new Error('Validation failed.')
@@ -103,5 +56,3 @@ function generateAccessToken(user) {
     expiresIn: process.env.JWT_TOKEN_EXPIRES_IN,
   })
 }
-
-export { authenticateToken, login, maybeAuthenticateToken }

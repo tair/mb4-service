@@ -6,7 +6,6 @@ import { normalizeJson } from '../util/json.js'
 export async function getDocument(req, res) {
   const projectId = req.params.projectId
   const documentId = req.params.documentId
-
   const document = await models.ProjectDocument.findByPk(documentId)
   if (document == null || document.project_id != projectId) {
     res.status(404).json({ message: 'Document is not found' })
@@ -17,7 +16,6 @@ export async function getDocument(req, res) {
   const originalFileName = json['original_filename']
   const mimeType = json['mimetype'] || json['properties']['mimetype']
   const filesize = json['properties']['filesize']
-
   const data = {
     document_id: document.document_id,
     folder_id: document.folder_id,
@@ -161,13 +159,12 @@ export async function downloadDocument(req, res) {
   if (!volume || !hash || !magic || !filename) {
     res
       .status(404)
-      .json({ message: 'Document does not exist' + JSON.stringify(json) })
+      .json({ message: 'Document does not exist' })
     return
   }
 
   const basePath = `${config.media.directory}/${config.app.name}/${volume}`
   const path = `${basePath}/${hash}/${magic}_${filename}`
-
   const originalFileName = json['original_filename'] ?? filename
   res.status(200).download(path, originalFileName)
 }
