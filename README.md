@@ -21,15 +21,34 @@ Then fill in all the variable values. Note the database DB_USER and DB_PASSWORD 
 The service container is accessible on **http://localhost:8080/**
 The database container is accessible on **http://127.0.0.1:3306/**
 
+#### Start the container
+
 ```sh
-docker compose -f docker-compose.dev.yml up --build
+docker-compose -f docker-compose.dev.yml up
 ```
+
+#### Rebuild when .env file gets updated
+
+```sh
+docker-compose -f docker-compose.dev.yml up --build
+```
+
+#### Force rebuild when package.json or package-lock.json file gets updated
+
+```sh
+docker stop mb4-service-container-dev
+docker rm mb4-service-container-dev
+docker-compose -f docker-compose.dev.yml build --no-cache
+docker-compose -f docker-compose.dev.yml up
+```
+
 
 ### Load Sample Data to the Development Database Container
 ```sh
 mysql -h 127.0.0.1 -u morphobank -p morphobank < {database_dump_file}
 ```
 Then enter the password you defined in the db-dev/.env file
+
 
 ### Connect to the Development Database
 ```sh
