@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt'
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import process from 'node:process'
+import { Buffer } from 'node:buffer'
 import { models } from '../models/init-models.js'
 import { validationResult } from 'express-validator'
 
@@ -111,3 +112,5 @@ function generateAccessToken(user) {
     expiresIn: process.env.JWT_TOKEN_EXPIRES_IN,
   })
 }
+
+export { authenticateToken, login, maybeAuthenticateToken }
