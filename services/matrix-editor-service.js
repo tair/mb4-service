@@ -17,7 +17,7 @@ import { UserError } from '../lib/user-errors.js'
 import { ForbiddenError } from '../lib/forbidden-error.js'
 import { TABLE_NUMBERS } from '../lib/table-number.js'
 
-class MatrixEditorService {
+export default class MatrixEditorService {
   constructor(project, matrix, user, readonly) {
     this.project = project
     this.matrix = matrix
@@ -32,6 +32,16 @@ class MatrixEditorService {
     return new MatrixEditorService(project, matrix, user, readonly)
   }
 
+  async getCharacterData() {
+    return {
+      characters: await this.getCharacters(),
+      character_rules: await this.getCharacterRules(),
+      matrices: await this.getMatrices(),
+      matrix_options: this.getOptions(),
+      user: await this.getUserAccessInfo(),
+    }
+  }
+
   async getMatrixData() {
     return {
       characters: await this.getCharacters(),
@@ -41,7 +51,6 @@ class MatrixEditorService {
       matrix: this.getMatrixInfo(),
       matrix_options: this.getOptions(),
       user: await this.getUserAccessInfo(),
-      sync_point: await this.getNewSyncPoint(),
     }
   }
 
@@ -441,6 +450,32 @@ class MatrixEditorService {
     return { media: mediaList }
   }
 
+  async getLabelCount(linkId) {
+    const cellMedium = await models.CellsXMedium.findByPk(linkId)
+    if (!cellMedium) {
+      return {}
+    }
+    return {
+      taxon_id: cellMedium.taxon_id,
+      character_id: cellMedium.character_id,
+      media_id: cellMedium.media_id,
+      label_count: await this.getMediaLabelCount(linkId),
+    }
+  }
+
+  async getMediaLabelCount(linkId) {
+    const [[{ count }]] = await sequelizeConn.query(
+      `
+      SELECT COUNT(*) AS count
+      FROM media_labels ml
+      INNER JOIN cells_x_media AS cxm ON cxm.link_id = ml.link_id
+      INNER JOIN media_files AS mf ON mf.media_id = ml.media_id
+      WHERE ml.table_num = ? AND cxm.link_id = ?`,
+      { replacements: [TABLE_NUMBERS.cells_x_media, linkId] }
+    )
+    return parseInt(count) ?? 0
+  }
+
   async getCellCitations(taxonId, characterId) {
     const [rows] = await sequelizeConn.query(
       `
@@ -499,6 +534,23 @@ class MatrixEditorService {
     }
 
     return { citations: citations }
+  }
+
+  async getMatrices() {
+    const [rows] = await sequelizeConn.query(
+      'SELECT matrix_id, title, type FROM matrices WHERE project_id = ?',
+      { replacements: [this.project.project_id] }
+    )
+
+    const matrices = []
+    for (const row of rows) {
+      matrices.push({
+        id: parseInt(row.matrix_id),
+        ty: parseInt(row.type),
+        t: row.title,
+      })
+    }
+    return matrices
   }
 
   // TODO(kenzley): We need to implement this when the search engine is done.
@@ -3226,6 +3278,104 @@ class MatrixEditorService {
     }
   }
 
+  async addCellComment(taxonId, characterId, text) {
+    await this.checkCanDo(
+      'addCellComment',
+      'You are not allowed to add comments to this matrix'
+    )
+
+    await this.checkCanEditTaxa([taxonId])
+    await this.checkCanEditCharacters([characterId])
+
+    if (!text) {
+      throw new UserError('Comment must not be empty')
+    }
+
+    const annotation = models.Annotation.build({
+      typecode: 'C',
+      annotation: text,
+      user_id: this.user.user_id,
+      table_num: TABLE_NUMBERS.cells,
+      row_id: this.matrix.matrix_id,
+      specifier_id: characterId,
+      subspecifier_id: taxonId,
+    })
+
+    const transaction = await sequelizeConn.transaction()
+    await annotation.save({
+      user: this.user,
+      transaction: transaction,
+    })
+    await transaction.commit()
+
+    return {
+      comment: {
+        taxon_id: taxonId,
+        character_id: characterId,
+        comment: text,
+      },
+    }
+  }
+
+  async getCellComments(taxonId, characterId) {
+    const [rows] = await sequelizeConn.query(
+      `
+      SELECT
+        a.annotation_id, a.annotation, a.created_on,
+        wu.user_id, wu.fname, wu.lname, wu.email
+      FROM annotations a
+      INNER JOIN ca_users AS wu ON wu.user_id = a.user_id
+      WHERE
+        table_num = ? AND 
+        row_id = ? AND 
+        specifier_id = ? AND 
+        subspecifier_id = ? AND 
+        typecode = 'C'
+      ORDER BY
+        a.created_on ASC`,
+      {
+        replacements: [
+          TABLE_NUMBERS.cells,
+          this.matrix.matrix_id,
+          characterId,
+          taxonId,
+        ],
+      }
+    )
+
+    const createdTime = time()
+    const comments = []
+    const annotationEvents = []
+    for (const row of rows) {
+      const annotationId = parseInt(row.annotation_id)
+      const user = `${row.fname} ${row.lname} (${row.email})`
+      comments.push({
+        date: row.created_on,
+        user: user,
+        comment: row.annotation,
+      })
+      annotationEvents.push({
+        annotation_id: annotationId,
+        typecode: 0,
+        date_time: createdTime,
+        user_id: this.user.user_id,
+      })
+    }
+
+    // Add an event to indicate that the user read the comments.
+    const transaction = await sequelizeConn.transaction()
+    await models.AnnotationEvent.bulkCreate(annotationEvents, {
+      user: this.user,
+      transaction: transaction,
+      updateOnDuplicate: ['date_time'],
+    })
+    await transaction.commit()
+
+    return {
+      comments: comments,
+    }
+  }
+
   async addCellMedia(taxonId, characterIds, mediaIds, batchMode) {
     await this.checkCanDo(
       'editCellData',
@@ -4457,10 +4607,10 @@ class MatrixEditorService {
       user_groups: await this.getUserMemberGroups(),
       is_admin: await this.isAdminLike(),
       user_id: parseInt(this.user.user_id),
-      last_login: 0, // TODO(alvaro): Implement this.
+      last_login: this.user.getLastLogout(),
       allowable_actions: await this.getUserAllowableActions(),
       allowable_publish: this.getPublishAllowableActions(),
-      preferences: this.getPreferences(),
+      preferences: await this.getPreferences(),
       ...(await this.getPublicAccessInfo()),
     }
   }
@@ -4483,11 +4633,6 @@ class MatrixEditorService {
       publish_bibliography: this.project.publish_bibliography,
       publish_cell_notes: this.project.publish_cell_notes,
     }
-  }
-
-  // TODO(alvaro): Implement this.
-  getNewSyncPoint() {
-    return ''
   }
 
   async fetchChanges(changedTime) {
@@ -4931,9 +5076,121 @@ class MatrixEditorService {
     }
   }
 
-  // TODO(alvaro): Implement this.
-  getPreferences() {
-    return []
+  async getPreferences() {
+    const preferences = {}
+    const projectUser = await models.ProjectsXUser.findOne({
+      where: {
+        user_id: this.user.user_id,
+        project_id: this.project.project_id,
+      },
+    })
+
+    const matricesPreferences = projectUser
+      ? projectUser.getPreferences('matrix')
+      : null
+    const matrixPrefences = matricesPreferences
+      ? matricesPreferences[this.matrix.matrix_id]
+      : {}
+
+    for (const key in matrixPrefences) {
+      preferences[key] = parseInt(matrixPrefences[key])
+    }
+
+    // In v3, we required streaming if the matrix was too large. We need to
+    // re-evaluate whether this is needed in v4 since we can load larger
+    // matrices.
+    preferences['REQUIRE_STREAMING'] = 0
+
+    if (!('DEFAULT_NUMBERING_MODE' in preferences)) {
+      preferences['DEFAULT_NUMBERING_MODE'] = parseInt(
+        this.matrix.getOption('DEFAULT_NUMBERING_MODE')
+      )
+    }
+
+    return preferences
+  }
+
+  async setPreferences(options, preferences) {
+    await this.checkCanDo(
+      'setMatrixOptions',
+      'You are not allowed to set matrix options'
+    )
+
+    const projectUser = await models.ProjectsXUser.findOne({
+      where: {
+        user_id: this.user.user_id,
+        project_id: this.project.project_id,
+      },
+    })
+
+    if (!projectUser) {
+      throw new UserError('You are not a member of this project')
+    }
+
+    const adminSettings = ['DISABLE_SCORING', 'ENABLE_CELL_MEDIA_AUTOMATION']
+    for (const key in options) {
+      if (adminSettings.includes(key) && !(await this.isAdminLike())) {
+        continue
+      }
+      this.matrix.setOption(key, options[key])
+    }
+
+    const matricesPreferences = projectUser.getPreferences('matrix') ?? {}
+    const matrixPrefences = matricesPreferences[this.matrix.matrix_id] ?? {}
+
+    // Old Preferences which were once supported but should no longer be written
+    // to the database.
+    const skippedPreferences = ['REQUIRE_STREAMING', 'ENABLE_HTML5']
+    const validPreferences = [
+      // The number mode which indicates whether the characters/taxa start at
+      // zero or one.
+      'DEFAULT_NUMBERING_MODE',
+
+      // Whether the user elected that this matrix should stream.
+      'ENABLE_STREAMING',
+
+      // How the character names should be displayed (e.g numbers, names,
+      // truncated names).
+      'MATRIX_VIEW_MODE',
+
+      // Whether we should load the previous view state, default is to enable
+      // it.
+      'DISABLE_LOAD_SAVED_VIEW_STATE',
+    ]
+
+    for (const key in preferences) {
+      if (skippedPreferences.includes(key)) {
+        delete matrixPrefences[key]
+        continue
+      }
+
+      if (!validPreferences.includes(key)) {
+        throw new UserError('Invalid Matrix Preference: ' + key)
+      }
+
+      const value = parseInt(preferences[key]) ?? null
+      if (value) {
+        matrixPrefences[key] = value
+      } else {
+        delete matrixPrefences[key]
+      }
+    }
+
+    if (Object.keys(matrixPrefences).length == 0) {
+      delete matricesPreferences[this.matrix.matrix_id]
+    }
+
+    projectUser.setPreferences('matrix', matricesPreferences)
+
+    const transaction = await sequelizeConn.transaction()
+    this.matrix.save({ user: this.user, transaction: transaction })
+    projectUser.save({ user: this.user, transaction: transaction })
+    await transaction.commit()
+
+    return {
+      preferences: matrixPrefences,
+      options: options,
+    }
   }
 
   async getCommentCounts() {
@@ -6243,5 +6500,3 @@ const CHARACTER_ANNOTATOR_CAPABILITIES = [
   'deleteTaxonMedia',
   'editPartition',
 ]
-
-export default MatrixEditorService

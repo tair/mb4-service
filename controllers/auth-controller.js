@@ -41,7 +41,7 @@ function authenticateToken(req, res, next) {
 }
 
 async function maybeAuthenticateToken(req, res, next) {
-  const authHeader =  req.cookies['authorization']
+  const authHeader = req.cookies['authorization']
   const token = authHeader && authHeader.split(' ')[1]
   if (token == null) {
     next()
@@ -102,7 +102,7 @@ async function login(req, res, next) {
   const expiry = getTokenExpiry(accessToken)
   res.cookie('authorization', `Bearer ${accessToken}`, {
     expires: new Date(expiry * 1000),
-    httpOnly: true
+    httpOnly: true,
   })
   res.status(200).json({ accessToken: accessToken, user: userResponse })
 }
