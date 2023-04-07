@@ -3295,7 +3295,7 @@ export default class MatrixEditorService {
       typecode: 'C',
       annotation: text,
       user_id: this.user.user_id,
-      table_num: TABLE_NUMBERS.cells,
+      table_num: TABLE_NUMBERS.matrices,
       row_id: this.matrix.matrix_id,
       specifier_id: characterId,
       subspecifier_id: taxonId,
@@ -3335,7 +3335,7 @@ export default class MatrixEditorService {
         a.created_on ASC`,
       {
         replacements: [
-          TABLE_NUMBERS.cells,
+          TABLE_NUMBERS.matrices,
           this.matrix.matrix_id,
           characterId,
           taxonId,
@@ -5183,8 +5183,8 @@ export default class MatrixEditorService {
     projectUser.setPreferences('matrix', matricesPreferences)
 
     const transaction = await sequelizeConn.transaction()
-    this.matrix.save({ user: this.user, transaction: transaction })
-    projectUser.save({ user: this.user, transaction: transaction })
+    await this.matrix.save({ user: this.user, transaction: transaction })
+    await projectUser.save({ user: this.user, transaction: transaction })
     await transaction.commit()
 
     return {

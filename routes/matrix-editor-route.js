@@ -89,7 +89,7 @@ router.post('/removePartition', controller.removePartition)
 router.post('/removeTaxaToPartition', controller.removeTaxaFromPartition)
 
 // General endpoints
-router.get('/getCharacterData', controller.getCharacterData)
+router.post('/getCharacterData', controller.getCharacterData)
 router.post('/getMatrixData', controller.getMatrixData)
 router.post('/logError', controller.logError)
 router.post('/setPreferences', controller.setPreferences)
