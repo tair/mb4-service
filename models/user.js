@@ -1,6 +1,9 @@
 import _sequelize from 'sequelize'
 const { Model } = _sequelize
 
+// TODO(kenzley): We store the last_login and last_logout as numbers in the vars
+//     column. We should move them in their own column so that they can be easily
+//     searched and updated.
 export default class User extends Model {
   static init(sequelize, DataTypes) {
     return super.init(
@@ -50,6 +53,8 @@ export default class User extends Model {
           allowNull: true,
           shouldLog: false,
         },
+        // TODO(kenzley): Remove this column and consolidate all user-based
+        //     preferences and variables into the vars column.
         volatile_vars: {
           type: DataTypes.JSON,
           allowNull: true,
@@ -123,5 +128,33 @@ export default class User extends Model {
         ],
       }
     )
+  }
+
+  getVar(key) {
+    if (this.vars && key in this.vars) {
+      return this.vars[key]
+    }
+    if (this.volatile_vars && key in this.volatile_vars) {
+      return this.volatile_vars[key]
+    }
+    return undefined
+  }
+
+  setVar(key, value) {
+    if (this.vars == null) {
+      this.vars = {}
+    }
+    if (this.volatile_vars == null) {
+      this.volatile_vars = {}
+    }
+    this.vars[key] = value
+    this.volatile_vars[key] = value
+    this.changed('vars', true)
+    this.changed('volatile_vars', true)
+  }
+
+  getLastLogout() {
+    const lastLogout = this.getVar('morphobank3_last_logout') ?? 0
+    return parseInt(lastLogout)
   }
 }

@@ -9,6 +9,10 @@ export async function getMatrixData(req, res) {
   await applyMatrix(req, res, (service) => service.getMatrixData())
 }
 
+export async function getCharacterData(req, res) {
+  await applyMatrix(req, res, (service) => service.getCharacterData())
+}
+
 export async function getCellData(req, res) {
   await applyMatrix(req, res, (service) => service.getCellData())
 }
@@ -42,6 +46,11 @@ export async function getAllCellNotes(req, res) {
 
 export async function getCellMedia(req, res) {
   await applyMatrix(req, res, (service) => service.getCellMedia())
+}
+
+export async function getLabelCount(req, res) {
+  const linkId = parseInt(req.body.link_id)
+  await applyMatrix(req, res, (service) => service.getLabelCount(linkId))
 }
 
 export async function getAvailableTaxa(req, res) {
@@ -464,6 +473,23 @@ export async function setCellNotes(req, res) {
   }
 }
 
+export async function addCellComment(req, res) {
+  const taxonId = parseInt(req.body.taxon_id)
+  const characterId = parseInt(req.body.character_id)
+  const text = req.body.text
+  await applyMatrix(req, res, (service) =>
+    service.addCellComment(taxonId, characterId, text)
+  )
+}
+
+export async function getCellComments(req, res) {
+  const taxonId = parseInt(req.body.taxon_id)
+  const characterId = parseInt(req.body.character_id)
+  await applyMatrix(req, res, (service) =>
+    service.getCellComments(taxonId, characterId)
+  )
+}
+
 export async function addCellMedia(req, res) {
   const taxonId = parseInt(req.body.taxon_id)
   const characterIds = parseIntArray(req.body.character_ids)
@@ -681,6 +707,18 @@ export async function searchTaxa(req, res) {
   const limitToNPACells = req.body.limitToNPACells
   await applyMatrix(req, res, (service) =>
     service.searchTaxa(partitionId, limitToUnscoredCells, limitToNPACells)
+  )
+}
+
+export async function getPreferences(req, res) {
+  await applyMatrix(req, res, (service) => service.getPreferences())
+}
+
+export async function setPreferences(req, res) {
+  const options = req.body.options
+  const preferences = req.body.preferences
+  await applyMatrix(req, res, (service) =>
+    service.setPreferences(options, preferences)
   )
 }
 
