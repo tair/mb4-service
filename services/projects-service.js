@@ -27,10 +27,7 @@ async function getProjects() {
     }
     const prj_stats = await statsService.getProjectStats(projectId)
 
-    const image_props = await mediaService.getImageProps(
-      projectId,
-      'preview'
-    )
+    const image_props = await mediaService.getImageProps(projectId, 'preview')
 
     await setJournalCoverUrl(rows[i])
 
@@ -42,7 +39,7 @@ async function getProjects() {
   }
 
   let end = new Date().getTime()
-  console.log("Spent " + (end - start) / 1000 + 's to complete')
+  console.log('Spent ' + (end - start) / 1000 + 's to complete')
 
   return rows
 }
@@ -66,24 +63,24 @@ async function setJournalCoverUrl(project) {
   delete project.journal_title
   let urlByCover = getCoverUrlByJournalCover(project.journal_cover)
   delete project.journal_cover
-  
+
   if (urlByTitle) {
-    try{
-      let response = await axios.get(urlByTitle);
+    try {
+      let response = await axios.get(urlByTitle)
       project.journal_cover_url = urlByTitle
       return
-    } catch(e) {
-      // do nothing 
+    } catch (e) {
+      // do nothing
     }
   }
 
   if (urlByCover) {
-    try{
-      let response = await axios.get(urlByCover);
+    try {
+      let response = await axios.get(urlByCover)
       project.journal_cover_url = urlByCover
       return
-    } catch(e) {
-      // do nothing 
+    } catch (e) {
+      // do nothing
     }
   }
 
@@ -101,8 +98,12 @@ function getCoverUrlByJournalCover(journal_cover) {
 
 function getCoverUrlByJournalTitle(journal_title) {
   if (journal_title) {
-    let cleanTitle = journal_title.replace(/\s/g, "_").replace(/:/g, "")
-      .replace(/\./g, "").replace(/\&/g, "and").toLowerCase()
+    let cleanTitle = journal_title
+      .replace(/\s/g, '_')
+      .replace(/:/g, '')
+      .replace(/\./g, '')
+      .replace(/\&/g, 'and')
+      .toLowerCase()
     let urlByTitle = `https://morphobank.org/themes/default/graphics/journalIcons/${cleanTitle}.jpg`
     return urlByTitle
   }
@@ -138,10 +139,10 @@ async function getInstitutionsWithProjects() {
     }
 
     if (!institutionsDict[iname]) {
-      institutionsDict[iname] = {"count": 1, "projects": [project]}
+      institutionsDict[iname] = { count: 1, projects: [project] }
     } else {
-      institutionsDict[iname]["count"] += 1
-      institutionsDict[iname]["projects"].push(project)
+      institutionsDict[iname]['count'] += 1
+      institutionsDict[iname]['projects'].push(project)
     }
   }
 
@@ -149,8 +150,8 @@ async function getInstitutionsWithProjects() {
   for (var iname in institutionsDict) {
     let institution = {
       name: iname,
-      count: institutionsDict[iname]["count"],
-      projects: institutionsDict[iname]["projects"]
+      count: institutionsDict[iname]['count'],
+      projects: institutionsDict[iname]['projects'],
     }
     institutions.push(institution)
   }

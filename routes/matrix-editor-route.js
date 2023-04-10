@@ -54,17 +54,21 @@ router.post('/setCellStates', controller.setCellStates)
 // Cell Media
 router.post('/addCellMedia', controller.addCellMedia)
 router.post('/getCellMedia', controller.getCellMedia)
+router.post('/getLabelCount', controller.getLabelCount)
 router.post('/removeCellMedia', controller.removeCellMedia)
 router.post('/removeCellsMedia', controller.removeCellsMedia)
-router.post('/upsertCellCitation', controller.upsertCellCitation)
 // Cell Citation
 router.post('/addCellCitations', controller.addCellCitations)
 router.post('/findCitation', controller.findCitation)
 router.post('/getCellCitations', controller.getCellCitations)
 router.post('/removeCellCitation', controller.removeCellCitation)
+router.post('/upsertCellCitation', controller.upsertCellCitation)
 // Cell Notes
 router.post('/getAllCellNotes', controller.getAllCellNotes)
 router.post('/setCellNotes', controller.setCellNotes)
+// Cell Comments
+router.post('/addCellComment', controller.addCellComment)
+router.post('/getCellComments', controller.getCellComments)
 // Cell Changes
 router.post('/getCellBatchLogs', controller.getCellBatchLogs)
 router.post('/getCellChanges', controller.getCellChanges)
@@ -85,8 +89,10 @@ router.post('/removePartition', controller.removePartition)
 router.post('/removeTaxaToPartition', controller.removeTaxaFromPartition)
 
 // General endpoints
+router.post('/getCharacterData', controller.getCharacterData)
 router.post('/getMatrixData', controller.getMatrixData)
 router.post('/logError', controller.logError)
+router.post('/setPreferences', controller.setPreferences)
 
 // Search endpoints
 router.post('/searchCells', controller.searchCells)
