@@ -194,6 +194,8 @@ export async function editFolder(req, res) {
   if (req.body.access !== undefined) {
     folder.access = req.body.access
   }
+
+  const transaction = await sequelizeConn.transaction()
   await folder.save({
     transaction,
     user: req.user,
@@ -203,6 +205,7 @@ export async function editFolder(req, res) {
 }
 
 export async function deleteFolder(req, res) {
+  const projectId = req.params.projectId
   const folderId = req.params.folderId
   const folder = await models.ProjectDocumentFolder.findByPk(folderId)
   if (folder == null || folder.project_id != projectId) {
@@ -210,6 +213,7 @@ export async function deleteFolder(req, res) {
     return
   }
 
+  const transaction = await sequelizeConn.transaction()
   await models.ProjectDocument.destroy({
     where: {
       folder_id: folderId,
@@ -218,8 +222,16 @@ export async function deleteFolder(req, res) {
     individualHooks: true,
     user: req.user,
   })
+  await models.ProjectDocumentFolder.destroy({
+    where: {
+      folder_id: folderId,
+    },
+    transaction: transaction,
+    individualHooks: true,
+    user: req.user,
+  })
   await transaction.commit()
-  res.status(200).json({ document_ids: documentIds })
+  res.status(200).json({ folder_id: folderId })
 }
 
 function convertDocumentResponse(document) {
