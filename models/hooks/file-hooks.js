@@ -1,3 +1,5 @@
+import config from '../../config.js'
+import crypto from 'crypto'
 import { models } from '../init-models.js'
 import { normalizeJson } from '../../util/json.js'
 
@@ -86,12 +88,12 @@ async function unlink(tableName, rowId, json, transaction, user) {
     return
   }
 
-  const basePath = `${config.media.directory}/${config.app.name}/`
+  const basePath = `${config.media.directory}/${config.app.name}`
   const oldPath = `${basePath}/${volume}/${hash}/${magic}_${filename}`
   const rowKey = `${tableName}/${rowId}/unlink`
   await models.TaskQueue.create(
     {
-      user_id: this.user.user_id,
+      user_id: user.user_id,
       priority: 200,
       entity_key: crypto.createHash('md5').update(rowKey).digest('hex'),
       row_key: crypto.createHash('md5').update(rowKey).digest('hex'),

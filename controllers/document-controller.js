@@ -1,6 +1,7 @@
-import * as documentService from '../services/document-service.js'
 import config from '../config.js'
+import sequelizeConn from '../util/db.js'
 import { models } from '../models/init-models.js'
+import { getDocumentUrl } from '../util/document.js'
 import { normalizeJson } from '../util/json.js'
 
 export async function getDocument(req, res) {
@@ -12,32 +13,20 @@ export async function getDocument(req, res) {
     return
   }
 
-  const json = normalizeJson(document.upload)
-  const originalFileName = json['original_filename']
-  const mimeType = json['mimetype'] || json['properties']['mimetype']
-  const filesize = json['properties']['filesize']
-  const data = {
-    document_id: document.document_id,
-    folder_id: document.folder_id,
-    access: document.access,
-    publish: document.publish,
-    uploaded_on: document.uploaded_on,
-    title: document.title,
-    description: document.description,
-    file_name: originalFileName,
-    mime_type: mimeType,
-    size: filesize,
-  }
-  res.status(200).json(data)
+  res.status(200).json(convertDocumentResponse(document))
 }
 
 export async function getDocuments(req, res) {
   const projectId = req.params.projectId
-  const documents = await documentService.getDocuments(projectId)
-  const folders = await documentService.getDocumentFolders(projectId)
+  const documents = await models.ProjectDocument.findAll({
+    where: { project_id: projectId },
+  })
+  const folders = await models.ProjectDocumentFolder.findAll({
+    where: { project_id: projectId },
+  })
   const data = {
-    documents,
-    folders,
+    documents: documents.map(convertDocumentResponse),
+    folders: folders.map(convertFolderResponse),
   }
   res.status(200).json(data)
 }
@@ -81,7 +70,7 @@ export async function createDocument(req, res) {
 }
 
 export async function deleteDocuments(req, res) {
-  const documentIds = req.body.documentIds
+  const documentIds = req.body.document_ids
   const transaction = await sequelizeConn.transaction()
   await models.ProjectDocument.destroy({
     where: {
@@ -157,9 +146,7 @@ export async function downloadDocument(req, res) {
   const json = normalizeJson(document.upload)
   const { volume, hash, magic, filename } = json
   if (!volume || !hash || !magic || !filename) {
-    res
-      .status(404)
-      .json({ message: 'Document does not exist' })
+    res.status(404).json({ message: 'Document does not exist' })
     return
   }
 
@@ -233,4 +220,35 @@ export async function deleteFolder(req, res) {
   })
   await transaction.commit()
   res.status(200).json({ document_ids: documentIds })
+}
+
+function convertDocumentResponse(document) {
+  const json = normalizeJson(document.upload) ?? {}
+  const originalFileName = json['original_filename']
+  const properties = json['properties'] ?? {}
+  const filesize = properties['filesize']
+  const mimeType = json['mimetype'] || properties['mimetype']
+  const data = {
+    document_id: document.document_id,
+    folder_id: document.folder_id,
+    access: document.access,
+    publish: document.publish,
+    uploaded_on: document.uploaded_on,
+    title: document.title,
+    description: document.description,
+    file_name: originalFileName,
+    mime_type: mimeType,
+    size: filesize,
+    download_url: getDocumentUrl(json),
+  }
+  return data
+}
+
+function convertFolderResponse(folder) {
+  return {
+    folder_id: folder.folder_id,
+    title: folder.title,
+    description: folder.description,
+    access: folder.access,
+  }
 }
