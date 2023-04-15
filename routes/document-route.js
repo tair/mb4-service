@@ -16,7 +16,7 @@ documentRouter.post(
 )
 documentRouter.get('/:documentId/download', controller.downloadDocument)
 
-documentRouter.get('/folder/create', controller.createFolder)
+documentRouter.post('/folder/create', controller.createFolder)
 documentRouter.post(
   '/folder/:folderId/edit',
   upload.single('file'),

@@ -24,6 +24,7 @@ export default class ProjectDocument extends Model {
           type: DataTypes.JSON,
           allowNull: true,
           file: true,
+          volume: 'documents',
         },
         title: {
           type: DataTypes.STRING(255),
@@ -102,14 +103,6 @@ export default class ProjectDocument extends Model {
             fields: [{ name: 'project_id' }],
           },
         ],
-        hooks: {
-          beforeCreate: (record) => {
-            record.dataValues.taxon_hash = getColumnHash(record)
-          },
-          beforeUpdate: (record) => {
-            record.dataValues.taxon_hash = getColumnHash(record)
-          },
-        },
       }
     )
   }

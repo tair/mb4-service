@@ -3,6 +3,7 @@ import sequelizeConn from '../util/db.js'
 import { models } from '../models/init-models.js'
 import { getDocumentUrl } from '../util/document.js'
 import { normalizeJson } from '../util/json.js'
+import { FileUploader } from '../lib/file-uploader.js'
 
 export async function getDocument(req, res) {
   const projectId = req.params.projectId
@@ -55,6 +56,10 @@ export async function createDocument(req, res) {
   })
 
   const transaction = await sequelizeConn.transaction()
+  await document.save({
+    transaction,
+    user: req.user,
+  })
 
   if (req.file) {
     const fileUploader = new FileUploader(transaction, req.user)
@@ -66,7 +71,7 @@ export async function createDocument(req, res) {
     user: req.user,
   })
   await transaction.commit()
-  res.status(200).json({ document_id: documentId })
+  res.status(200).json(convertDocumentResponse(document))
 }
 
 export async function deleteDocuments(req, res) {
@@ -158,12 +163,17 @@ export async function downloadDocument(req, res) {
 
 export async function createFolder(req, res) {
   const projectId = req.params.projectId
+  if (!req.body.title) {
+    res.status(400).json({ message: 'Title cannot be empty' })
+    return
+  }
+
   const transaction = await sequelizeConn.transaction()
   const folder = await models.ProjectDocumentFolder.create(
     {
       title: req.body.title,
-      description: req.body.title,
-      access: req.body.access,
+      description: req.body.description || '',
+      access: req.body.access || 0,
       user_id: req.user.user_id,
       project_id: projectId,
     },
@@ -173,7 +183,7 @@ export async function createFolder(req, res) {
     }
   )
   await transaction.commit()
-  res.status(200).json({ folder_id: folder.folder_id })
+  res.status(200).json(convertFolderResponse(folder))
 }
 
 export async function editFolder(req, res) {
