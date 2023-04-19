@@ -36,7 +36,7 @@ export async function createDocument(req, res) {
   const projectId = req.params.projectId
 
   // Ensure that the supplied folder belongs to the current project.
-  const folderId = req.body.folder_id ?? null
+  const folderId = parseInt(req.body.folder_id) || null
   if (folderId) {
     const folder = await models.ProjectDocumentFolder.findByPk(folderId)
     if (folder == null || folder.project_id != projectId) {
@@ -100,15 +100,15 @@ export async function editDocument(req, res) {
 
   // Ensure that the supplied folder belongs to the current project.
   if (req.body.folder_id !== undefined) {
-    const folder = await models.ProjectDocumentFolder.findByPk(
-      req.body.folder_id
-    )
-    if (folder == null || folder.project_id != projectId) {
-      res.status(404).json({ message: 'Folder is not found' })
-      return
+    const folderId = parseInt(req.body.folder_id) || null
+    if (folderId) {
+      const folder = await models.ProjectDocumentFolder.findByPk(folderId)
+      if (folder == null || folder.project_id != projectId) {
+        res.status(404).json({ message: 'Folder is not found' })
+        return
+      }
     }
-
-    document.folder_id = req.body.folder_id
+    document.folder_id = folderId
   }
 
   if (req.body.title !== undefined) {
@@ -254,7 +254,7 @@ function convertDocumentResponse(document) {
     document_id: document.document_id,
     folder_id: document.folder_id,
     access: document.access,
-    publish: document.publish,
+    published: document.published,
     uploaded_on: document.uploaded_on,
     title: document.title,
     description: document.description,
