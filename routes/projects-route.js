@@ -7,16 +7,17 @@ import taxaRouter from './taxa-route.js'
 import * as controller from '../controllers/project-controller.js'
 import { authenticateToken } from './auth-interceptor.js'
 import { authorizeProject } from './project-interceptor.js'
+import { authorizeUser } from './user-interceptor.js'
 
 // This route focuses on /projects
 const projectsRouter = express.Router({ mergeParams: true })
 projectsRouter.use(authenticateToken)
 
-
 // This is a sub-route focused on /projects/<ID>
 const projectRouter = express.Router({ mergeParams: true })
 projectsRouter.use('/:projectId/', projectRouter)
 
+projectRouter.use(authorizeUser)
 projectRouter.use(authorizeProject)
 
 projectRouter.use('/characters', characterRouter)
