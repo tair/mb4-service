@@ -1,10 +1,15 @@
-import bcrypt from 'bcrypt'
-import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import process from 'node:process'
 import { Buffer } from 'node:buffer'
-import { models } from '../models/init-models.js'
 import { validationResult } from 'express-validator'
+import UserAuthenticationHandler from '../lib/user_authentication_handler.js'
+import ReviewerAuthenticationHandler from '../lib/reviewer_authentication_handler.js'
+
+// The types of handlers that are accepted by Morphobank.
+const authenticationHandlers = [
+  new UserAuthenticationHandler(),
+  new ReviewerAuthenticationHandler(),
+]
 
 export async function login(req, res, next) {
   const errors = validationResult(req.body)
@@ -15,46 +20,29 @@ export async function login(req, res, next) {
     throw error
   }
 
-  const email = req.body.email
+  try {
+    const email = req.body.email
+    for (const handler of authenticationHandlers) {
+      if (handler.canHandle(email)) {
+        const password = req.body.password
+        const userResponse = await handler.handle(email, password)
+        const accessToken = generateAccessToken(userResponse)
+        const expiry = getTokenExpiry(accessToken)
+        res.cookie('authorization', accessToken, {
+          expires: new Date(expiry * 1000),
+          httpOnly: true,
+        })
+        res.status(200).json({ accessToken: accessToken, user: userResponse })
+        return
+      }
+    }
 
-  const user = await models.User.findOne({ where: { email: email } })
-
-  if (!user) {
-    const error = new Error('A user with this email could not be found.')
+    const error = new Error('Not a valid user name')
     error.statusCode = 401
     next(error)
-    return
+  } catch (e) {
+    next(e)
   }
-
-  const password = req.body.password
-  const passwordHash = crypto.createHash('md5').update(password).digest('hex')
-
-  // The password stored in the MorphoBank database uses the password_hash and password_verify
-  // methods which use the Crypt algorithm instead. To make this compatible with the Bcrypt
-  // algorithm, we replace the algorithm part of the string, as suggested by:
-  // https://stackoverflow.com/questions/23015043
-  const storedPassword = user.password_hash.replace('$2y$', '$2a$')
-
-  const passwordMatch = await bcrypt.compare(passwordHash, storedPassword)
-  if (!passwordMatch) {
-    const error = new Error('Wrong password!')
-    error.statusCode = 401
-    next(error)
-    return
-  }
-
-  const userResponse = {
-    email: user.email,
-    user_id: user.user_id,
-    name: user.name,
-  }
-  const accessToken = generateAccessToken(userResponse)
-  const expiry = getTokenExpiry(accessToken)
-  res.cookie('authorization', accessToken, {
-    expires: new Date(expiry * 1000),
-    httpOnly: true,
-  })
-  res.status(200).json({ accessToken: accessToken, user: userResponse })
 }
 
 function generateAccessToken(user) {
