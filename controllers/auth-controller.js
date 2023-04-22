@@ -6,57 +6,7 @@ import { Buffer } from 'node:buffer'
 import { models } from '../models/init-models.js'
 import { validationResult } from 'express-validator'
 
-function isTokenExpired(token) {
-  return Math.floor(new Date().getTime() / 1000) >= getTokenExpiry(token)
-}
-
-function getTokenExpiry(token) {
-  const payload = Buffer.from(token.split('.')[1], 'base64')
-  const expiry = JSON.parse(payload).exp // expiry in seconds
-  return expiry
-}
-
-function authenticateToken(req, res, next) {
-  const authHeader = req.cookies['authorization']
-  const token = authHeader && authHeader.split(' ')[1]
-
-  // Return 401 when token is not present in the header.
-  if (token == null) {
-    return res.status(401).json({ message: 'Auth token not found.' })
-  }
-
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
-    // Return 403 when the token is present but invalid.
-    if (err) {
-      return res.status(403).json({ message: 'Auth token is invalid.' })
-    }
-
-    if (isTokenExpired(token)) {
-      return res.status(403).json({ message: 'Auth token expired.' })
-    }
-
-    req.user = user
-    next()
-  })
-}
-
-async function maybeAuthenticateToken(req, res, next) {
-  const authHeader = req.cookies['authorization']
-  const token = authHeader && authHeader.split(' ')[1]
-  if (token == null) {
-    next()
-    return
-  }
-
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) => {
-    if (!err) {
-      req.user = user
-    }
-    next()
-  })
-}
-
-async function login(req, res, next) {
+export async function login(req, res, next) {
   const errors = validationResult(req.body)
   if (!errors.isEmpty()) {
     const error = new Error('Validation failed.')
@@ -100,7 +50,7 @@ async function login(req, res, next) {
   }
   const accessToken = generateAccessToken(userResponse)
   const expiry = getTokenExpiry(accessToken)
-  res.cookie('authorization', `Bearer ${accessToken}`, {
+  res.cookie('authorization', accessToken, {
     expires: new Date(expiry * 1000),
     httpOnly: true,
   })
@@ -113,4 +63,8 @@ function generateAccessToken(user) {
   })
 }
 
-export { authenticateToken, login, maybeAuthenticateToken }
+function getTokenExpiry(token) {
+  const payload = Buffer.from(token.split('.')[1], 'base64')
+  const expiry = JSON.parse(payload).exp // expiry in seconds
+  return expiry
+}
