@@ -3,8 +3,7 @@ import process from 'node:process'
 import { Buffer } from 'node:buffer'
 
 export function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization']
-  const token = authHeader && authHeader.split(' ')[1]
+  const token = req.cookies['authorization']
 
   // Return 401 when token is not present in the header.
   if (token == null) {
@@ -27,8 +26,7 @@ export function authenticateToken(req, res, next) {
 }
 
 export function maybeAuthenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization']
-  const token = authHeader && authHeader.split(' ')[1]
+  const token = req.cookies['authorization']
   if (token == null) {
     next()
     return
