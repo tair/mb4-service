@@ -1,7 +1,7 @@
 import express from 'express'
 import { body } from 'express-validator'
 import { models } from '../models/init-models.js'
-import { login } from '../controllers/auth-controller.js'
+import { login, getORCIDAuthUrl } from '../controllers/auth-controller.js'
 import { signup } from '../controllers/user-controller.js'
 
 const authRouter = express.Router()
@@ -40,6 +40,12 @@ authRouter.post(
       .withMessage('Password should be of length 5 characters.'),
   ],
   login
+)
+
+authRouter.get(
+  '/get-orcid-login-url',
+  [],
+  getORCIDAuthUrl
 )
 
 export default authRouter

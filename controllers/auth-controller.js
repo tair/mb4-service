@@ -5,6 +5,7 @@ import process from 'node:process'
 import { Buffer } from 'node:buffer'
 import { models } from '../models/init-models.js'
 import { validationResult } from 'express-validator'
+import config from '../config.js'
 
 function isTokenExpired(token) {
   return Math.floor(new Date().getTime() / 1000) >= getTokenExpiry(token)
@@ -113,4 +114,10 @@ function generateAccessToken(user) {
   })
 }
 
-export { authenticateToken, login, maybeAuthenticateToken }
+async function getORCIDAuthUrl(req, res) {
+  let url = `${config.orcid.domain}/oauth/authorize?client_id=${config.orcid.clientId}\
+&response_type=code&scope=/authenticate&redirect_uri=${config.orcid.redirect}`
+  res.status(200).json({ url: url})
+}
+
+export { authenticateToken, login, maybeAuthenticateToken, getORCIDAuthUrl }

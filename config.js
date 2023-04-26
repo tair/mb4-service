@@ -29,6 +29,12 @@ const config = {
     hostname: process.env.DATACITE_HOSTNAME,
     urlPath: process.env.DATACITE_URL_PATH,
   },
+  orcid: {
+    domain: process.env.ORCID_DOMAIN,
+    clientId: process.env.ORCID_CLIENT_ID,
+    cliendSecret: process.env.ORCID_CLIENT_SECRET,
+    redirect: process.env.ORCID_REDIRECT_URL,
+  },
 }
 
 export default config
