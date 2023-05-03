@@ -17,24 +17,20 @@ Then fill in all the variable values. Note the database DB_USER and DB_PASSWORD 
 
 
 ### Compile and Hot-Reload for Development With Container
-
 The service container is accessible on **http://localhost:8080/**
 The database container is accessible on **http://127.0.0.1:3306/**
 
 #### Start the container
-
 ```sh
 docker-compose -f docker-compose.dev.yml up
 ```
 
 #### Rebuild when .env file gets updated
-
 ```sh
 docker-compose -f docker-compose.dev.yml up --build
 ```
 
 #### Force rebuild when package.json or package-lock.json file gets updated
-
 ```sh
 docker stop mb4-service-container-dev
 docker rm mb4-service-container-dev
@@ -56,6 +52,30 @@ mysql -h 127.0.0.1 -u morphobank -p
 ```
 Then enter the password you defined in the db-dev/.env file
 
+
+### Compile and Hot-Reload for Development on Local with Shared Network Container
+The service container is accessible on **http://localhost:81/services/** and **http://localhost:8080/**
+The database container is accessible on **http://127.0.0.1:3306/**
+
+#### Start the container
+```sh
+docker-compose -f docker-compose.local.yml up
+```
+
+#### Rebuild when .env file gets updated
+```sh
+docker-compose -f docker-compose.local.yml up --build
+```
+
+#### Force rebuild when package.json or package-lock.json file gets updated
+```sh
+docker stop mb4-web-container-dev
+docker rm mb4-web-container-dev
+docker-compose -f docker-compose.local.yml build --no-cache
+docker-compose -f docker-compose.local.yml up
+```
+
+
 ### Configure Local Environment File for Production
 #### Configure for the NodeJS application
 ```sh
@@ -65,19 +85,18 @@ Then fill in all the variable values
 
 
 ### Compile and Minify for Production (TBD)
-
 ```sh
 npm run build
 ```
 
-### Compile and Minify for Production With Container - Build Only (TBD)
 
+### Compile and Minify for Production With Container - Build Only (TBD)
 ```sh
 docker build -t mb4-service:<version_number> .
 ```
 
-### Compile and Minify for Production With Container - Host As a Server (TBD)
 
+### Compile and Minify for Production With Container - Host As a Server (TBD)
 The container is accessible on **http://localhost:4001/**
 
 ```sh
