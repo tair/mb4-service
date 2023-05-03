@@ -6,6 +6,11 @@ import { Buffer } from 'node:buffer'
 import { models } from '../models/init-models.js'
 import { validationResult } from 'express-validator'
 import config from '../config.js'
+import axios from 'axios'
+import qs from 'qs'
+import { Op } from 'sequelize'
+import Sequelize from 'sequelize'
+
 
 function isTokenExpired(token) {
   return Math.floor(new Date().getTime() / 1000) >= getTokenExpiry(token)
@@ -97,7 +102,7 @@ async function login(req, res, next) {
   const userResponse = {
     email: user.email,
     user_id: user.user_id,
-    name: user.name,
+    name: user.getName(),
   }
   const accessToken = generateAccessToken(userResponse)
   const expiry = getTokenExpiry(accessToken)
@@ -115,9 +120,123 @@ function generateAccessToken(user) {
 }
 
 async function getORCIDAuthUrl(req, res) {
-  let url = `${config.orcid.domain}/oauth/authorize?client_id=${config.orcid.clientId}\
+  const url = `${config.orcid.domain}/oauth/authorize?client_id=${config.orcid.clientId}\
 &response_type=code&scope=/authenticate&redirect_uri=${config.orcid.redirect}`
   res.status(200).json({ url: url})
 }
 
-export { authenticateToken, login, maybeAuthenticateToken, getORCIDAuthUrl }
+async function authenticateORCID(req, res) {
+  const authCode = req.body.authCode
+  const url = `${config.orcid.domain}/oauth/token`
+  const data = {
+    client_id: config.orcid.clientId,
+    client_secret: config.orcid.cliendSecret,
+    grant_type: 'authorization_code',
+    redirect_uri: config.orcid.redirect,
+    code: authCode
+  }
+  const options = {
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
+  }
+  let loggedInUser = null
+  try {
+    if (req.user) {
+      loggedInUser = await models.User.findByPk(req.user.user_id)
+    }
+  } catch(error) {
+    console.error(error);
+    let status = 400;
+    if (error.response && error.response.status) status = error.response.status
+    res.status(status).json(error)
+    return
+  }
+  axios.post(url, qs.stringify(data), options)
+  .then(async response => {
+    const orcid = response.data.orcid
+    const name = response.data.name
+
+    // check if a user is already linked to the ORCID
+    // if so, login the user
+    const user = await models.User.findOne({ where: { orcid: orcid } })
+
+    // in case the orcid user and the logged in user is not the same account - shall not happen
+    if (user && loggedInUser && loggedInUser.user_id != user.user_id) 
+      throw new Error("User by ORCID and the current user is different.")
+    
+    if (loggedInUser) {
+      if (loggedInUser.orcid) {
+        // in case current user's orcid is different - shall not happen
+        if (loggedInUser.orcid != orcid) throw new Error("ORCID is different from the ORCID of the current user")
+      } else {
+        // add orcid to the current user
+        loggedInUser.orcid = orcid
+        try {
+          await loggedInUser.save()
+        } catch (error) {
+          console.error(error)
+          res.status(400).json(error)
+        }
+        
+        user = loggedInUser
+      }
+    }
+
+    if (user) {
+      let userResponse = {
+        email: user.email,
+        user_id: user.user_id,
+        name: user.getName(),
+      }
+      const accessToken = generateAccessToken(userResponse)
+      const expiry = getTokenExpiry(accessToken)
+      res.cookie('authorization', `Bearer ${accessToken}`, {
+        expires: new Date(expiry * 1000),
+        httpOnly: true,
+      })
+      res.status(200).json({ 
+        accessToken: accessToken, 
+        user: userResponse,
+        orcidProfile: response.data
+      })
+      return
+    }
+
+    // find potential users by name
+    const potentialUsers = await models.User.findAll({
+      where: Sequelize.where(
+        Sequelize.fn('LOWER', Sequelize.fn('concat', Sequelize.col('fname'), ' ', Sequelize.col('lname'))),
+        { [Op.like]: `%${name.toLowerCase()}%` }
+      )
+    });
+
+    if (potentialUsers) {
+      const potentialUsersArray = potentialUsers.map(user => ({
+        email: user.email,
+        user_id: user.user_id,
+        name: user.getName()
+      }));
+      res.status(200).json({
+        user: null,
+        potentialUsers: potentialUsersArray,
+        profile: response.data
+      })
+      return
+    }
+
+    // return the orcid profile only when no associated user and no potential user
+    res.status(200).json({
+      profile: response.data
+    })
+
+  }).catch(error => {
+    console.error(error);
+    let status = 400;
+    if (error.response && error.response.status) status = error.response.status
+    res.status(status).json(error)
+  });
+}
+
+export { authenticateToken, login, maybeAuthenticateToken, getORCIDAuthUrl, authenticateORCID }

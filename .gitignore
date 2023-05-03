@@ -20,6 +20,7 @@ coverage
 db-dev/*.sql
 !db-dev/schema.sql
 db-dev/*.env
+config/config.json
 
 # env files
 *.env
