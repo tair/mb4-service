@@ -1,6 +1,6 @@
 import express from 'express'
 import * as userController from '../controllers/user-controller.js'
-import { authenticateToken } from './auth-interceptor.js'
+import { authenticateToken } from '../controllers/auth-controller.js'
 
 const userRouter = express.Router()
 

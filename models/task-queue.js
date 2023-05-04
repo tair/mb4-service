@@ -61,13 +61,9 @@ export default class TaskQueue extends Model {
           type: DataTypes.JSON,
           allowNull: true,
         },
-        // TODO(kenzley): Set this value to NULL. Possibly rename to 'results'
-        //     and set as JSON so that so that handlers will store the results
-        //     properly.
         notes: {
           type: DataTypes.TEXT,
           allowNull: false,
-          defaultValue: '',
         },
         error_code: {
           type: DataTypes.SMALLINT.UNSIGNED,
