@@ -2,8 +2,8 @@ import jwt from 'jsonwebtoken'
 import process from 'node:process'
 import { Buffer } from 'node:buffer'
 import { validationResult } from 'express-validator'
-import UserAuthenticationHandler from '../lib/user_authentication_handler.js'
-import ReviewerAuthenticationHandler from '../lib/reviewer_authentication_handler.js'
+import UserAuthenticationHandler from '../lib/user-authentication-handler.js'
+import ReviewerAuthenticationHandler from '../lib/reviewer-authentication-handler.js'
 
 // The types of handlers that are accepted by Morphobank.
 const authenticationHandlers = [
