@@ -13,11 +13,13 @@ services:
             - ./db-dev/.env
         ports:
             - "3306:3306"
+        volumes:
+            - dbdata:/var/lib/mysql
 
     mb4-service-dev:
         depends_on:
             - mb4-db-dev
-        build: 
+        build:
             context: .
             target: dev-stage
         image: mb4-service-dev:1.0
@@ -30,3 +32,5 @@ services:
             - /app/node_modules
         ports:
             - "8080:8080"
+volumes:
+    dbdata:
