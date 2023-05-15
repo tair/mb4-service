@@ -126,6 +126,22 @@ async function getORCIDAuthUrl(req, res) {
 }
 
 async function authenticateORCID(req, res) {
+  // find the current logged in user
+  let loggedInUser = null
+
+  try {
+    if (req.user) {
+      loggedInUser = await models.User.findByPk(req.user.user_id)
+    }
+  } catch(error) {
+    console.error(error);
+    let status = 400;
+    if (error.response && error.response.status) status = error.response.status
+    res.status(status).json(error)
+    return
+  }
+
+  // compose ORCID authentication request
   const authCode = req.body.authCode
   const url = `${config.orcid.domain}/oauth/token`
   const data = {
@@ -141,18 +157,7 @@ async function authenticateORCID(req, res) {
       'Content-Type': 'application/x-www-form-urlencoded'
     }
   }
-  let loggedInUser = null
-  try {
-    if (req.user) {
-      loggedInUser = await models.User.findByPk(req.user.user_id)
-    }
-  } catch(error) {
-    console.error(error);
-    let status = 400;
-    if (error.response && error.response.status) status = error.response.status
-    res.status(status).json(error)
-    return
-  }
+
   axios.post(url, qs.stringify(data), options)
   .then(async response => {
     const orcid = response.data.orcid
@@ -160,7 +165,7 @@ async function authenticateORCID(req, res) {
 
     // check if a user is already linked to the ORCID
     // if so, login the user
-    const user = await models.User.findOne({ where: { orcid: orcid } })
+    let user = await models.User.findOne({ where: { orcid: orcid } })
 
     // in case the orcid user and the logged in user is not the same account - shall not happen
     if (user && loggedInUser && loggedInUser.user_id != user.user_id) 
@@ -174,12 +179,12 @@ async function authenticateORCID(req, res) {
         // add orcid to the current user
         loggedInUser.orcid = orcid
         try {
-          await loggedInUser.save()
+          await loggedInUser.save({ user:loggedInUser }) // need user for changelog hook
         } catch (error) {
           console.error(error)
           res.status(400).json(error)
+          return
         }
-        
         user = loggedInUser
       }
     }

@@ -238,6 +238,12 @@ function initModels(sequelizeConn) {
     as: 'institutions_x_users',
     foreignKey: 'user_id',
   })
+  User.belongsToMany(Institution, {
+    through: InstitutionsXUser,
+    foreignKey: 'user_id',
+    otherKey: 'institution_id',
+    as: 'institutions',
+  });
   CharacterRuleAction.belongsTo(CharacterRule, {
     as: 'rule',
     foreignKey: 'rule_id',
@@ -375,6 +381,12 @@ function initModels(sequelizeConn) {
     as: 'institutions_x_users',
     foreignKey: 'institution_id',
   })
+  Institution.belongsToMany(User, {
+    through: InstitutionsXUser,
+    foreignKey: 'institution_id',
+    otherKey: 'user_id',
+    as: 'users',
+  });
   CellNote.belongsTo(Matrix, { as: 'matrix', foreignKey: 'matrix_id' })
   Matrix.hasMany(CellNote, { as: 'cell_notes', foreignKey: 'matrix_id' })
   Cell.belongsTo(Matrix, { as: 'matrix', foreignKey: 'matrix_id' })
