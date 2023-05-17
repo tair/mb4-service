@@ -31,8 +31,10 @@ const config = {
   },
   orcid: {
     domain: process.env.ORCID_DOMAIN,
+    apiDomain: process.env.ORCID_API_DOMAIN,
     clientId: process.env.ORCID_CLIENT_ID,
     cliendSecret: process.env.ORCID_CLIENT_SECRET,
+    clientAccessToken: process.env.ORCID_CLIENT_ACCESS_TOKEN,
     redirect: process.env.ORCID_REDIRECT_URL,
   },
 }

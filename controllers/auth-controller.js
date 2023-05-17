@@ -72,8 +72,16 @@ async function login(req, res, next) {
   }
 
   const email = req.body.email
+  const password = req.body.password
 
-  const user = await models.User.findOne({ where: { email: email } })
+  if (!email || !password) {
+    const error = new Error('Missing email or password.')
+    error.statusCode = 401
+    next(error)
+    return
+  }
+
+  let user = await models.User.findOne({ where: { email: email } })
 
   if (!user) {
     const error = new Error('A user with this email could not be found.')
@@ -82,7 +90,6 @@ async function login(req, res, next) {
     return
   }
 
-  const password = req.body.password
   const passwordHash = crypto.createHash('md5').update(password).digest('hex')
 
   // The password stored in the MorphoBank database uses the password_hash and password_verify
@@ -99,6 +106,20 @@ async function login(req, res, next) {
     return
   }
 
+  // link with orcid profile
+  if (!user.orcid && req.body.orcid) {
+    const orcidProfile = req.body.orcid
+    user.orcid = orcidProfile.orcid
+    user.orcid_access_token = orcidProfile.accessToken
+    user.orcid_refresh_token = orcidProfile.refreshToken
+    try {
+      await user.save({ user:user }) // need user for changelog hook
+    } catch (error) {
+      console.log("Save user orcid failed")
+      console.error(error)
+    }
+  }
+  
   const userResponse = {
     email: user.email,
     user_id: user.user_id,
@@ -122,6 +143,9 @@ function generateAccessToken(user) {
 async function getORCIDAuthUrl(req, res) {
   const url = `${config.orcid.domain}/oauth/authorize?client_id=${config.orcid.clientId}\
 &response_type=code&scope=/authenticate&redirect_uri=${config.orcid.redirect}`
+// url below is available for member API
+  // const url = `${config.orcid.domain}/oauth/authorize?client_id=${config.orcid.clientId}\
+// &response_type=code&scope=/read-limited&redirect_uri=${config.orcid.redirect}`
   res.status(200).json({ url: url})
 }
 
@@ -134,6 +158,7 @@ async function authenticateORCID(req, res) {
       loggedInUser = await models.User.findByPk(req.user.user_id)
     }
   } catch(error) {
+    console.log("Get logged in user failed");
     console.error(error);
     let status = 400;
     if (error.response && error.response.status) status = error.response.status
@@ -143,7 +168,7 @@ async function authenticateORCID(req, res) {
 
   // compose ORCID authentication request
   const authCode = req.body.authCode
-  const url = `${config.orcid.domain}/oauth/token`
+  const authUrl = `${config.orcid.domain}/oauth/token`
   const data = {
     client_id: config.orcid.clientId,
     client_secret: config.orcid.cliendSecret,
@@ -158,10 +183,18 @@ async function authenticateORCID(req, res) {
     }
   }
 
-  axios.post(url, qs.stringify(data), options)
+  axios.post(authUrl, qs.stringify(data), options)
   .then(async response => {
     const orcid = response.data.orcid
     const name = response.data.name
+    const orcidAccessToken = response.data.access_token
+    const orcidRefreshToken = response.data.refresh_token
+    const orcidProfile = {
+      orcid: orcid,
+      name: name,
+      access_token: orcidAccessToken,
+      refresh_token: orcidRefreshToken
+    }
 
     // check if a user is already linked to the ORCID
     // if so, login the user
@@ -176,11 +209,14 @@ async function authenticateORCID(req, res) {
         // in case current user's orcid is different - shall not happen
         if (loggedInUser.orcid != orcid) throw new Error("ORCID is different from the ORCID of the current user")
       } else {
-        // add orcid to the current user
+        // add orcid and 3-legged access token to the current user
         loggedInUser.orcid = orcid
+        loggedInUser.orcid_access_token = orcidAccessToken
+        loggedInUser.orcid_refresh_token = orcidRefreshToken
         try {
           await loggedInUser.save({ user:loggedInUser }) // need user for changelog hook
         } catch (error) {
+          console.log("Save user orcid failed")
           console.error(error)
           res.status(400).json(error)
           return
@@ -204,8 +240,45 @@ async function authenticateORCID(req, res) {
       res.status(200).json({ 
         accessToken: accessToken, 
         user: userResponse,
-        orcidProfile: response.data
+        orcidProfile: orcidProfile
       })
+      return
+    }
+
+    // find potential users by email
+    const userRecordUrl = `${config.orcid.apiDomain}/v3.0/${orcid}/email`
+    const recordReqOptions = {
+      headers: {
+        'Accept': 'application/orcid+json',
+        'Authorization': `Bearer ${config.orcid.clientAccessToken}`
+      }
+    }
+    
+    try {
+      const emailRes = await axios.get(userRecordUrl, recordReqOptions)
+      if (emailRes.data && emailRes.data.email) {
+        const emails = emailRes.data.email.map(email => email.email)
+        for (let i in emails) {
+          const potentialUserByEmail = await models.User.findOne({
+            where: {email: emails[i]},
+            attributes: ['user_id', 'email']
+          })
+          if (potentialUserByEmail) {
+            res.status(200).json({
+              user: null,
+              potentialUserByEmail: potentialUserByEmail,
+              orcidProfile: orcidProfile
+            })
+            return
+          }
+        }
+      }
+    } catch(error)  {
+      console.log("Get user orcid emails failed");
+      console.error(error);
+      let status = 400;
+      if (error.response && error.response.status) status = error.response.status
+      res.status(status).json(error)
       return
     }
 
@@ -217,7 +290,7 @@ async function authenticateORCID(req, res) {
       )
     });
 
-    if (potentialUsers) {
+    if (potentialUsers && potentialUsers.length > 0) {
       const potentialUsersArray = potentialUsers.map(user => ({
         email: user.email,
         user_id: user.user_id,
@@ -225,18 +298,19 @@ async function authenticateORCID(req, res) {
       }));
       res.status(200).json({
         user: null,
-        potentialUsers: potentialUsersArray,
-        profile: response.data
+        potentialUsersByName: potentialUsersArray,
+        orcidProfile: orcidProfile
       })
       return
     }
 
-    // return the orcid profile only when no associated user and no potential user
+    // return the orcid profile alone when no associated user and no potential user
     res.status(200).json({
-      profile: response.data
+      orcidProfile: orcidProfile
     })
 
   }).catch(error => {
+    console.log("authenticate orcid user failed");
     console.error(error);
     let status = 400;
     if (error.response && error.response.status) status = error.response.status

@@ -96,6 +96,19 @@ export default class User extends Model {
           allowNull: true,
           unique: 'u_orcid_key',
           shouldLog: false,
+        },
+        // by default this token is valid for 20 years
+        orcid_access_token: {
+          type: DataTypes.STRING,
+          allowNull: true,
+          unique: true,
+          shouldLog: false,
+        },
+        orcid_refresh_token: {
+          type: DataTypes.STRING,
+          allowNull: true,
+          unique: true,
+          shouldLog: false,
         }
       },
       {
