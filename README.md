@@ -69,12 +69,24 @@ docker-compose -f docker-compose.local.yml up --build
 
 #### Force rebuild when package.json or package-lock.json file gets updated
 ```sh
-docker stop mb4-web-container-dev
-docker rm mb4-web-container-dev
+docker stop mb4-service-container-dev
+docker rm mb4-service-container-dev
 docker-compose -f docker-compose.local.yml build --no-cache
 docker-compose -f docker-compose.local.yml up
 ```
 
+### Run database migration
+#### Config sequelize parameters
+```sh
+cp config/config.json.template config/config.json
+```
+Then fill in all the variable values
+
+#### Run migration
+```sh
+docker exec -it mb4-service-container-dev /bin/bash
+npx sequelize-cli db:migrate
+```
 
 ### Configure Local Environment File for Production
 #### Configure for the NodeJS application
