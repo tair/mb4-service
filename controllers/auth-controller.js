@@ -134,6 +134,11 @@ async function login(req, res, next) {
   res.status(200).json({ accessToken: accessToken, user: userResponse })
 }
 
+function logout(req, res) {
+  res.clearCookie('authorization');
+  res.status(200).json({ message: "Log out succeeded!"})
+}
+
 function generateAccessToken(user) {
   return jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
     expiresIn: process.env.JWT_TOKEN_EXPIRES_IN,
@@ -146,7 +151,7 @@ async function getORCIDAuthUrl(req, res) {
 // url below is available for member API
   // const url = `${config.orcid.domain}/oauth/authorize?client_id=${config.orcid.clientId}\
 // &response_type=code&scope=/read-limited&redirect_uri=${config.orcid.redirect}`
-  res.status(200).json({ url: url})
+  res.status(200).json({ url: url })
 }
 
 async function authenticateORCID(req, res) {
@@ -318,4 +323,4 @@ async function authenticateORCID(req, res) {
   });
 }
 
-export { authenticateToken, login, maybeAuthenticateToken, getORCIDAuthUrl, authenticateORCID }
+export { authenticateToken, login, logout, maybeAuthenticateToken, getORCIDAuthUrl, authenticateORCID }
