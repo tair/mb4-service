@@ -24,6 +24,7 @@ export default class ProjectDocument extends Model {
           type: DataTypes.JSON,
           allowNull: true,
           file: true,
+          volume: 'documents',
         },
         title: {
           type: DataTypes.STRING(255),

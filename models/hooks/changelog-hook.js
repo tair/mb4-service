@@ -78,6 +78,10 @@ function shouldLogAttributes(attributes) {
     return false
   }
 
+  if (attributes.file) {
+    return false
+  }
+
   switch (attributes.type) {
     case DataTypes.JSON:
       return false

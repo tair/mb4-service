@@ -59,6 +59,7 @@ import sequelizeConn from '../util/db.js'
 import { logCellChange } from './hooks/cell-hooks.js'
 import { logChange } from './hooks/changelog-hook.js'
 import { logCharacterChange } from './hooks/character-hooks.js'
+import { fileChanged, fileDeleted } from './hooks/file-hooks.js'
 
 function initModels(sequelizeConn) {
   const AnnotationEvent = _AnnotationEvent.init(sequelizeConn, DataTypes)
@@ -726,6 +727,7 @@ function initModels(sequelizeConn) {
     )
   })
 
+  // Changelog hooks
   sequelizeConn.addHook('afterCreate', (model, options) =>
     logChange(model, 'I', options)
   )
@@ -734,6 +736,14 @@ function initModels(sequelizeConn) {
   )
   sequelizeConn.addHook('afterDestroy', (model, options) =>
     logChange(model, 'D', options)
+  )
+
+  // File deletion hooks
+  sequelizeConn.addHook('afterUpdate', (model, options) =>
+    fileChanged(model, options)
+  )
+  sequelizeConn.addHook('afterDestroy', (model, options) =>
+    fileDeleted(model, options)
   )
 
   return {
