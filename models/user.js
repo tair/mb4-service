@@ -91,6 +91,25 @@ export default class User extends Model {
           allowNull: false,
           defaultValue: 0,
         },
+        orcid: {
+          type: DataTypes.STRING,
+          allowNull: true,
+          unique: 'u_orcid_key',
+          shouldLog: false,
+        },
+        // by default this token is valid for 20 years
+        orcid_access_token: {
+          type: DataTypes.STRING,
+          allowNull: true,
+          unique: true,
+          shouldLog: false,
+        },
+        orcid_refresh_token: {
+          type: DataTypes.STRING,
+          allowNull: true,
+          unique: true,
+          shouldLog: false,
+        }
       },
       {
         sequelize,
@@ -114,6 +133,12 @@ export default class User extends Model {
             unique: true,
             using: 'BTREE',
             fields: [{ name: 'email' }],
+          },
+          {
+            name: 'u_orcid',
+            unique: true,
+            using: 'BTREE',
+            fields: [{ name: 'orcid' }],
           },
           {
             name: 'i_userclass',
@@ -151,6 +176,10 @@ export default class User extends Model {
     this.volatile_vars[key] = value
     this.changed('vars', true)
     this.changed('volatile_vars', true)
+  }
+
+  getName() {
+    return this.fname + " " + this.lname
   }
 
   getLastLogout() {

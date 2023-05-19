@@ -1,0 +1,23 @@
+{
+  "development": {
+    "username": "morphobank",
+    "password": "sunnyday",
+    "database": "morphobank",
+    "host": "mb4-db-dev",
+    "dialect": "mysql"
+  },
+  "test": {
+    "username": "morphobank",
+    "password": null,
+    "database": "morphobank",
+    "host": "mb4-db-dev",
+    "dialect": "mysql"
+  },
+  "production": {
+    "username": "curator",
+    "password": null,
+    "database": "morphobank",
+    "host": "back-prod.morphobank.org",
+    "dialect": "mysql"
+  }
+}

@@ -16,6 +16,25 @@ function getUsers(req, res, next) {
     })
 }
 
+function getProfile(req, res, next) {
+  models.User.findByPk(req.user.user_id, {
+      attributes: ['fname', 'lname', 'email', 'orcid'],
+      include: [{ 
+        model: models.Institution,
+        as: 'institutions',
+        attributes: ['institution_id', 'name'] 
+      }],
+  }).then ((profile) => {
+    return res.status(200).json(profile)
+  })   
+  .catch((err) => {
+    if (!err.statusCode) {
+      err.statusCode = 500
+    }
+    next(err)
+  })
+}
+
 function signup(req, res, next) {
   const errors = validationResult(req.body)
   if (!errors.isEmpty()) {
@@ -55,4 +74,4 @@ function signup(req, res, next) {
     })
 }
 
-export { getUsers, signup }
+export { getUsers, signup, getProfile }

@@ -5,5 +5,6 @@ import { authenticateToken } from './auth-interceptor.js'
 const userRouter = express.Router()
 
 userRouter.get('/', authenticateToken, userController.getUsers)
+userRouter.get('/get-profile', authenticateToken, userController.getProfile)
 
 export default userRouter
