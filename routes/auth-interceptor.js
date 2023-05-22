@@ -3,9 +3,19 @@ import process from 'node:process'
 import { Buffer } from 'node:buffer'
 
 export function authenticateToken(req, res, next) {
-  const token = req.cookies['authorization']
+  // Return 401 when token is not present or in a invalid format in the header.
+  if (!req.cookies['authorization']) {
+    return res.status(401).json({ message: 'Auth token not found.' })
+  }
 
-  // Return 401 when token is not present in the header.
+  const authHeaderArray = req.cookies['authorization'].split(' ')
+
+  const method = authHeaderArray && authHeaderArray[0]
+  if (method != 'Bearer') {
+    return res.status(401).json({ message: 'Invalid authentication method.' })
+  }
+
+  const token = authHeaderArray && authHeaderArray.length > 0 && authHeaderArray[1]
   if (token == null) {
     return res.status(401).json({ message: 'Auth token not found.' })
   }
@@ -26,7 +36,18 @@ export function authenticateToken(req, res, next) {
 }
 
 export function maybeAuthenticateToken(req, res, next) {
-  const token = req.cookies['authorization']
+  if (!req.cookies['authorization']) {
+    next()
+    return
+  }
+
+  const authHeaderArray = req.cookies['authorization'].split(' ')
+  const method = authHeaderArray && authHeaderArray[0]
+  if (method != 'Bearer') {
+    next()
+    return
+  }
+  const token = authHeaderArray && authHeaderArray.length > 0 && authHeaderArray[1]  
   if (token == null) {
     next()
     return

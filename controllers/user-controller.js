@@ -17,7 +17,7 @@ function getUsers(req, res, next) {
 }
 
 function getProfile(req, res, next) {
-  models.User.findByPk(req.user.user_id, {
+  models.User.findByPk(req.credential.user_id, {
       attributes: ['fname', 'lname', 'email', 'orcid'],
       include: [{ 
         model: models.Institution,

@@ -1,7 +1,8 @@
 import express from 'express'
 import { body } from 'express-validator'
 import { models } from '../models/init-models.js'
-import { login, logout, getORCIDAuthUrl, authenticateORCID, maybeAuthenticateToken } from '../controllers/auth-controller.js'
+import { login, logout, getORCIDAuthUrl, authenticateORCID } from '../controllers/auth-controller.js'
+import { maybeAuthenticateToken } from './auth-interceptor.js'
 import { signup } from '../controllers/user-controller.js'
 
 const authRouter = express.Router()
