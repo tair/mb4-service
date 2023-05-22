@@ -1,14 +1,14 @@
 import jwt from 'jsonwebtoken'
 import process from 'node:process'
+import axios from 'axios'
+import qs from 'qs'
+import Sequelize, { Op } from 'sequelize'
 import { Buffer } from 'node:buffer'
 import { validationResult } from 'express-validator'
 import config from '../config.js'
-import axios from 'axios'
-import qs from 'qs'
-import Sequelize from 'sequelize'
+import { models } from '../models/init-models.js'
 import UserAuthenticationHandler from '../lib/user-authentication-handler.js'
 import ReviewerAuthenticationHandler from '../lib/reviewer-authentication-handler.js'
-
 
 // The types of handlers that are accepted by Morphobank.
 const authenticationHandlers = [
@@ -57,7 +57,7 @@ async function login(req, res, next) {
         }
         const accessToken = generateAccessToken(userResponse)
         const expiry = getTokenExpiry(accessToken)
-        res.cookie('authorization', accessToken, {
+        res.cookie('authorization', `Bearer ${accessToken}`, {
           expires: new Date(expiry * 1000),
           httpOnly: true,
         })
@@ -94,8 +94,8 @@ async function authenticateORCID(req, res) {
   let loggedInUser = null
 
   try {
-    if (req.user) {
-      loggedInUser = await models.User.findByPk(req.user.user_id)
+    if (req.credential) {
+      loggedInUser = await models.User.findByPk(req.credential.user_id)
     }
   } catch(error) {
     console.log("Get logged in user failed");
@@ -138,12 +138,15 @@ async function authenticateORCID(req, res) {
 
     // check if a user is already linked to the ORCID
     // if so, login the user
-    let user = await models.User.findOne({ where: { orcid: orcid } })
+    let userWithOrcid = await models.User.findOne({ where: { orcid: orcid } })
+    // flag to instruct frontend whether to redirect to profile page
+    let redirectToProfile = false
 
     // in case the orcid user and the logged in user is not the same account - shall not happen
-    if (user && loggedInUser && loggedInUser.user_id != user.user_id) 
+    if (userWithOrcid && loggedInUser && loggedInUser.user_id != userWithOrcid.user_id) 
       throw new Error("User by ORCID and the current user is different.")
     
+    // handle case when the logged in user links ORCID to their profile
     if (loggedInUser) {
       if (loggedInUser.orcid) {
         // in case current user's orcid is different - shall not happen
@@ -161,15 +164,17 @@ async function authenticateORCID(req, res) {
           res.status(400).json(error)
           return
         }
-        user = loggedInUser
+        userWithOrcid = loggedInUser
+        // redirect to profile page since the user just linked their ORCID
+        redirectToProfile = true
       }
     }
 
-    if (user) {
+    if (userWithOrcid) {
       let userResponse = {
-        email: user.email,
-        user_id: user.user_id,
-        name: user.getName(),
+        name: userWithOrcid.getName(),
+        email: userWithOrcid.email,
+        user_id: userWithOrcid.user_id,
       }
       const accessToken = generateAccessToken(userResponse)
       const expiry = getTokenExpiry(accessToken)
@@ -180,7 +185,8 @@ async function authenticateORCID(req, res) {
       res.status(200).json({ 
         accessToken: accessToken, 
         user: userResponse,
-        orcidProfile: orcidProfile
+        orcidProfile: orcidProfile,
+        redirectToProfile: redirectToProfile
       })
       return
     }
