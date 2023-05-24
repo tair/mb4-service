@@ -6,13 +6,13 @@ export async function logCharacterChange(model, type, options) {
   const isMinorEdit = options.is_minor_edit ? 1 : 0
   const user = options.user
   if (user == null) {
-    throw 'User is not defined so cannot generate logs'
+    throw new Error('User is not defined so cannot generate logs')
   }
-
+  
   const userId = user.user_id
   if (!userId) {
-    throw 'User ID is not defined and cannot be logged'
-  }
+    throw new Error('User ID is not defined and cannot be logged')
+  }  
 
   await sequelizeConn.query(
     `

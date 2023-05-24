@@ -57,8 +57,9 @@ function signup(req, res, next) {
         password_hash: passwordHash,
         fname: firstName,
         lname: lastName,
+        active: true, // Assuming a new user should be active. Change this based on your requirements.
       })
-      return userModel.save()
+      return userModel.save({ user: userModel })
     })
     .then((result) => {
       res.status(201).json({

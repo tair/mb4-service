@@ -6,28 +6,28 @@ import { getTableNumber } from '../../lib/table-number.js'
 export async function logChange(model, type, options) {
   const user = options.user
   if (user == null) {
-    throw 'User is not defined so cannot generate logs'
+    throw new Error('User is not defined so cannot generate logs')
   }
-
+  
   const userId = user.user_id
   if (!userId) {
-    throw 'User ID is not defined and cannot be logged'
+    throw new Error('User ID is not defined and cannot be logged')
   }
-
+  
   const primaryKeys = getPrimaryKey(model)
   if (primaryKeys.length != 1) {
-    throw 'Model does not have a single primary key cannot have logged'
+    throw new Error('Model does not have a single primary key cannot have logged')
   }
-
+  
   const rowId = model[primaryKeys[0]]
   if (!rowId) {
-    throw 'Row Id is not defined and cannot be logged.'
+    throw new Error('Row Id is not defined and cannot be logged.')
   }
-
+  
   const tableNumber = getTableNumber(model)
   if (!tableNumber) {
-    throw 'Table number is not defined and cannot be logged.'
-  }
+    throw new Error('Table number is not defined and cannot be logged.')
+  }  
 
   const snapshot = {}
   for (const [field, attributes] of Object.entries(model.rawAttributes)) {
