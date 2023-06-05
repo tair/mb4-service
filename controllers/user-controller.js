@@ -48,6 +48,9 @@ function signup(req, res, next) {
   const firstName = req.body.fname
   const lastName = req.body.lname
   const password = req.body.password
+  const orcid = req.body.orcid
+  const accessToken = req.body.accessToken
+  const refreshToken = req.body.refreshToken
   const md5Password = crypto.createHash('md5').update(password).digest('hex')
   bcrypt
     .hash(md5Password, 10)
@@ -57,6 +60,9 @@ function signup(req, res, next) {
         password_hash: passwordHash,
         fname: firstName,
         lname: lastName,
+        orcid: orcid,
+        orcid_access_token: accessToken,
+        orcid_refresh_token: refreshToken,
         active: true, // Assuming a new user should be active. Change this based on your requirements.
       })
       return userModel.save({ user: userModel })
