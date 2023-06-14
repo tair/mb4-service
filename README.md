@@ -54,6 +54,7 @@ Then enter the password you defined in the db-dev/.env file
 
 
 ### Compile and Hot-Reload for Development on Local with Shared Network Container
+Before launching the application, make sure you've created a shared network as instructed in mb4-proxy project
 The service container is accessible on **http://localhost:81/services/** and **http://localhost:8080/**
 The database container is accessible on **http://127.0.0.1:3306/**
 

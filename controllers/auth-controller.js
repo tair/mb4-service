@@ -61,7 +61,7 @@ async function login(req, res, next) {
           expires: new Date(expiry * 1000),
           httpOnly: true,
         })
-        res.status(200).json({ accessToken: accessToken, user: userResponse })
+        res.status(200).json({ accessToken: accessToken, accessTokenExpiry: expiry, user: userResponse })
         return
       }
     }
@@ -184,6 +184,7 @@ async function authenticateORCID(req, res) {
       })
       res.status(200).json({ 
         accessToken: accessToken, 
+        accessTokenExpiry: expiry,
         user: userResponse,
         orcidProfile: orcidProfile,
         redirectToProfile: redirectToProfile
