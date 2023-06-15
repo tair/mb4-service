@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt'
 import crypto from 'crypto'
 import { validationResult } from 'express-validator'
 import { models } from '../models/init-models.js'
+import { Sequelize } from 'sequelize'; 
 
 function getUsers(req, res, next) {
   models.User.findAll({ attributes: ['user_id', 'email'] })
@@ -32,6 +33,27 @@ function getProfile(req, res, next) {
       err.statusCode = 500
     }
     next(err)
+  })
+}
+
+function searchInstitutions(req, res, next) {
+  const searchTerm = req.query.searchTerm;
+  models.Institution.findAll({
+    attributes: ['institution_id', 'name'],
+    where: {
+        name: {
+            [Sequelize.Op.like]: '%' + searchTerm + '%' 
+        }
+    }
+  }).then((institutions) => {
+    return res.status(200).json(institutions)
+  })
+  .catch((err) => {
+    console.log(err)
+    if (!err.statusCode) {
+      err.statusCode = 500
+    }
+    res.status(500).json({ error: 'An error occurred while searching for institutions.' });
   })
 }
 
@@ -81,4 +103,4 @@ function signup(req, res, next) {
     })
 }
 
-export { getUsers, signup, getProfile }
+export { getUsers, signup, getProfile, searchInstitutions }
