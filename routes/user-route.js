@@ -6,6 +6,7 @@ const userRouter = express.Router()
 
 userRouter.get('/', authenticateToken, userController.getUsers)
 userRouter.get('/get-profile', authenticateToken, userController.getProfile)
+userRouter.put('/update-profile', authenticateToken, userController.updateProfile)
 userRouter.get('/search-institutions', authenticateToken, userController.searchInstitutions)
 
 export default userRouter
