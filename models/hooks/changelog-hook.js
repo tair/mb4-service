@@ -8,26 +8,28 @@ export async function logChange(model, type, options) {
   if (user == null) {
     throw new Error('User is not defined so cannot generate logs')
   }
-  
+
   const userId = user.user_id
   if (!userId) {
     throw new Error('User ID is not defined and cannot be logged')
   }
-  
+
   const primaryKeys = getPrimaryKey(model)
   if (primaryKeys.length != 1) {
-    throw new Error('Model does not have a single primary key cannot have logged')
+    throw new Error(
+      'Model does not have a single primary key cannot have logged'
+    )
   }
-  
+
   const rowId = model[primaryKeys[0]]
   if (!rowId) {
     throw new Error('Row Id is not defined and cannot be logged.')
   }
-  
+
   const tableNumber = getTableNumber(model)
   if (!tableNumber) {
     throw new Error('Table number is not defined and cannot be logged.')
-  }  
+  }
 
   const snapshot = {}
   for (const [field, attributes] of Object.entries(model.rawAttributes)) {

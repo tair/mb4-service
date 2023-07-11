@@ -111,7 +111,7 @@ export default class User extends Model {
           allowNull: true,
           unique: true,
           shouldLog: false,
-        }
+        },
       },
       {
         sequelize,
@@ -181,7 +181,7 @@ export default class User extends Model {
   }
 
   getName() {
-    return this.fname + " " + this.lname
+    return this.fname + ' ' + this.lname
   }
 
   getLastLogout() {
@@ -190,7 +190,7 @@ export default class User extends Model {
   }
 
   static md5HashPassword(password) {
-    return crypto.createHash('md5').update(password).digest('hex');
+    return crypto.createHash('md5').update(password).digest('hex')
   }
 
   static hashPassword(password) {

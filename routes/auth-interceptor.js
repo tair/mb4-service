@@ -15,7 +15,8 @@ export function authenticateToken(req, res, next) {
     return res.status(401).json({ message: 'Invalid authentication method.' })
   }
 
-  const token = authHeaderArray && authHeaderArray.length > 0 && authHeaderArray[1]
+  const token =
+    authHeaderArray && authHeaderArray.length > 0 && authHeaderArray[1]
   if (token == null) {
     return res.status(401).json({ message: 'Auth token not found.' })
   }
@@ -47,7 +48,8 @@ export function maybeAuthenticateToken(req, res, next) {
     next()
     return
   }
-  const token = authHeaderArray && authHeaderArray.length > 0 && authHeaderArray[1]  
+  const token =
+    authHeaderArray && authHeaderArray.length > 0 && authHeaderArray[1]
   if (token == null) {
     next()
     return

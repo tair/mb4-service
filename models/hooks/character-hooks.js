@@ -8,11 +8,11 @@ export async function logCharacterChange(model, type, options) {
   if (user == null) {
     throw new Error('User is not defined so cannot generate logs')
   }
-  
+
   const userId = user.user_id
   if (!userId) {
     throw new Error('User ID is not defined and cannot be logged')
-  }  
+  }
 
   await sequelizeConn.query(
     `
