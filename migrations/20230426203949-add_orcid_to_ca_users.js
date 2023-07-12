@@ -1,4 +1,4 @@
-'use strict';
+'use strict'
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
@@ -6,16 +6,16 @@ module.exports = {
       type: Sequelize.STRING,
       allowNull: true,
       unique: true,
-      shouldLog: false
-    });
+      shouldLog: false,
+    })
 
     // Add an index for the orcid column
     await queryInterface.addIndex('ca_users', ['orcid'], {
-      name: 'u_orcid'
-    });
+      name: 'u_orcid',
+    })
   },
 
   down: async (queryInterface, Sequelize) => {
-    await queryInterface.removeColumn('ca_users', 'orcid');
-  }
-};
+    await queryInterface.removeColumn('ca_users', 'orcid')
+  },
+}

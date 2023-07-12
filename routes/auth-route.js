@@ -1,7 +1,12 @@
 import express from 'express'
 import { body } from 'express-validator'
 import { models } from '../models/init-models.js'
-import { login, logout, getORCIDAuthUrl, authenticateORCID } from '../controllers/auth-controller.js'
+import {
+  login,
+  logout,
+  getORCIDAuthUrl,
+  authenticateORCID,
+} from '../controllers/auth-controller.js'
 import { maybeAuthenticateToken } from './auth-interceptor.js'
 import { signup } from '../controllers/user-controller.js'
 
@@ -43,16 +48,9 @@ authRouter.post(
   login
 )
 
-authRouter.post(
-  '/logout',
-  logout
-)
+authRouter.post('/logout', logout)
 
-authRouter.get(
-  '/get-orcid-login-url',
-  [],
-  getORCIDAuthUrl
-)
+authRouter.get('/get-orcid-login-url', [], getORCIDAuthUrl)
 
 authRouter.post(
   '/authenticate-orcid',

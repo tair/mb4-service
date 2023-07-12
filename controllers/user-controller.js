@@ -1,7 +1,6 @@
-import bcrypt from 'bcrypt'
-import crypto from 'crypto'
 import { validationResult } from 'express-validator'
 import { models } from '../models/init-models.js'
+import { Sequelize } from 'sequelize'
 
 function getUsers(req, res, next) {
   models.User.findAll({ attributes: ['user_id', 'email'] })
@@ -18,21 +17,137 @@ function getUsers(req, res, next) {
 
 function getProfile(req, res, next) {
   models.User.findByPk(req.credential.user_id, {
-      attributes: ['fname', 'lname', 'email', 'orcid'],
-      include: [{ 
+    attributes: ['fname', 'lname', 'email', 'orcid'],
+    include: [
+      {
         model: models.Institution,
         as: 'institutions',
-        attributes: ['institution_id', 'name'] 
-      }],
-  }).then ((profile) => {
-    return res.status(200).json(profile)
-  })   
-  .catch((err) => {
+        attributes: ['institution_id', 'name'],
+      },
+    ],
+  })
+    .then((profile) => {
+      return res.status(200).json(profile)
+    })
+    .catch((err) => {
+      if (!err.statusCode) {
+        err.statusCode = 500
+      }
+      next(err)
+    })
+}
+
+async function updateProfile(req, res, next) {
+  const errors = validationResult(req.body)
+  if (!errors.isEmpty()) {
+    const error = new Error('Validation failed.')
+    error.statusCode = 422
+    error.data = errors.array()
+    throw error
+  }
+
+  try {
+    let user = await models.User.findByPk(req.credential.user_id)
+    const currTime = new Date().getTime()
+    // save timestamp in seconds
+    user.last_confirmed_profile_on = Math.floor(currTime / 1000)
+    if (req.body.email) {
+      user.email = req.body.email
+    }
+    if (req.body.firstName) {
+      user.fname = req.body.firstName
+    }
+    if (req.body.lastName) {
+      user.lname = req.body.lastName
+    }
+    if (req.body.newPassword) {
+      let passwordHash = await models.User.hashPassword(req.body.newPassword)
+      user.password_hash = passwordHash
+    }
+    const result = user.save({ user: user })
+    // save affiliated institutions
+    if (req.body.institutions) {
+      const instIds = req.body.institutions.map(
+        (institution) => institution.institution_id
+      )
+      //get all the affiliated institutions
+      const affiliatedInstitutions = await models.InstitutionsXUser.findAll({
+        where: {
+          user_id: user.user_id,
+        },
+      })
+      const affiliatedIds = affiliatedInstitutions.map(
+        (institution) => institution.institution_id
+      )
+      const recordsToDelete = affiliatedInstitutions.filter(
+        (record) => !instIds.includes(record.institution_id)
+      )
+      const recordsToAdd = instIds.filter(
+        (value) => !affiliatedIds.includes(value)
+      )
+      if (recordsToAdd) {
+        await models.InstitutionsXUser.bulkCreate(
+          recordsToAdd.map((id) => ({
+            institution_id: id,
+            user_id: user.user_id,
+          }))
+        )
+      }
+      if (recordsToDelete) {
+        // Delete the filtered InstitutionXUser records
+        await models.InstitutionsXUser.destroy({
+          where: {
+            institution_id: recordsToDelete.map(
+              (record) => record.institution_id
+            ),
+          },
+        })
+      }
+    }
+    const updatedUser = await models.User.findByPk(user.user_id, {
+      attributes: ['fname', 'lname', 'email', 'orcid'],
+      include: [
+        {
+          model: models.Institution,
+          as: 'institutions',
+          attributes: ['institution_id', 'name'],
+        },
+      ],
+    })
+    res.status(200).json({
+      message: 'User update!',
+      user: updatedUser,
+    })
+  } catch (err) {
     if (!err.statusCode) {
       err.statusCode = 500
     }
     next(err)
+  }
+}
+
+function searchInstitutions(req, res, next) {
+  const searchTerm = req.query.searchTerm
+  models.Institution.findAll({
+    attributes: ['institution_id', 'name'],
+    where: {
+      name: {
+        [Sequelize.Op.like]: '%' + searchTerm + '%',
+      },
+    },
   })
+    .then((institutions) => {
+      return res.status(200).json(institutions)
+    })
+    .catch((err) => {
+      console.log(err)
+      if (!err.statusCode) {
+        err.statusCode = 500
+      }
+      res
+        .status(500)
+        .json({ error: 'An error occurred while searching for institutions.' })
+    })
 }
 
 function signup(req, res, next) {
@@ -51,9 +166,7 @@ function signup(req, res, next) {
   const orcid = req.body.orcid
   const accessToken = req.body.accessToken
   const refreshToken = req.body.refreshToken
-  const md5Password = crypto.createHash('md5').update(password).digest('hex')
-  bcrypt
-    .hash(md5Password, 10)
+  models.User.hashPassword(password)
     .then((passwordHash) => {
       const userModel = new models.User({
         email: email,
@@ -81,4 +194,4 @@ function signup(req, res, next) {
     })
 }
 
-export { getUsers, signup, getProfile }
+export { getUsers, signup, getProfile, updateProfile, searchInstitutions }
