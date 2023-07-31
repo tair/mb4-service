@@ -1,5 +1,7 @@
 import _sequelize from 'sequelize'
 const { Model } = _sequelize
+import crypto from 'crypto'
+import bcrypt from 'bcrypt'
 
 // TODO(kenzley): We store the last_login and last_logout as numbers in the vars
 //     column. We should move them in their own column so that they can be easily
@@ -109,7 +111,7 @@ export default class User extends Model {
           allowNull: true,
           unique: true,
           shouldLog: false,
-        }
+        },
       },
       {
         sequelize,
@@ -179,11 +181,40 @@ export default class User extends Model {
   }
 
   getName() {
-    return this.fname + " " + this.lname
+    return this.fname + ' ' + this.lname
   }
 
   getLastLogout() {
     const lastLogout = this.getVar('morphobank3_last_logout') ?? 0
     return parseInt(lastLogout)
+  }
+
+  static md5HashPassword(password) {
+    return crypto.createHash('md5').update(password).digest('hex')
+  }
+
+  static hashPassword(password) {
+    const md5Password = User.md5HashPassword(password)
+    return bcrypt.hash(md5Password, 10)
+  }
+
+  // static method to validate a raw password against a stored hash
+  static async validatePassword(password, storedPassword) {
+    const md5Password = User.md5HashPassword(password)
+
+    // The password stored in the MorphoBank database uses the password_hash
+    // and password_verify methods which use the Crypt algorithm instead. To
+    // make this compatible with the Bcrypt algorithm, we replace the algorithm
+    // part of the string, as suggested by:
+    // https://stackoverflow.com/questions/23015043
+    const storedPasswordHash = storedPassword.replace('$2y$', '$2a$')
+
+    const passwordMatch = await bcrypt.compare(md5Password, storedPasswordHash)
+    return passwordMatch
+  }
+
+  // validate a raw password for the current user
+  async validatePassword(password) {
+    return await this.constructor.validatePassword(password, this.password_hash)
   }
 }
