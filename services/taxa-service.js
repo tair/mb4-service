@@ -24,9 +24,9 @@ async function getTaxaByBrowseType(projectId) {
 }
 
 async function getTaxaStatsByMatrixId(projectId, matrixId) {
-  let [rows] = await sequelizeConn.query(
+  let [taxons] = await sequelizeConn.query(
     `SELECT 
-      taxon_name, unscored_cells, scored_cells,
+      taxon_id, taxon_name, unscored_cells, scored_cells,
       cell_warnings, npa_cells,
       not_cells, cell_images, cell_image_labels
     FROM stats_taxa_overview
@@ -35,7 +35,26 @@ async function getTaxaStatsByMatrixId(projectId, matrixId) {
     { replacements: [projectId, matrixId] }
   )
 
-  return rows
+  let [taxonUsers] = await sequelizeConn.query(
+    `SELECT mto.taxon_id, wu.fname, wu.lname
+    FROM projects_x_users AS pxu
+    LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
+    INNER JOIN matrix_taxa_order AS mto ON mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id IS NULL
+    INNER JOIN stats_taxa_overview AS sto ON sto.project_id = pxu.project_id AND sto.matrix_id = mto.matrix_id AND sto.taxon_id = mto.taxon_id
+    INNER JOIN ca_users AS wu ON pxu.user_id = wu.user_id
+    WHERE pxu.project_id = ? AND mto.matrix_id = ?
+    ORDER BY mto.taxon_id, wu.lname, wu.fname`,
+    { replacements: [projectId, matrixId] }
+  )
+
+  for (const taxon of taxons) {
+    const users = taxonUsers.filter(user => user.taxon_id == taxon.taxon_id).map(user => `${user.fname} ${user.lname}`)
+    // Create a Set to remove duplicates, and convert it back to an array
+    const uniqueUsers = [...new Set(users)];
+    taxon.users = uniqueUsers
+  }
+
+  return taxons
 }
 
 export async function buildTaxa(projectId, matrices) {

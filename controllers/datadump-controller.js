@@ -63,11 +63,6 @@ async function dataDump(req, res) {
     )
     console.log('Dumped project list data - DONE!')
 
-    ///////////////////////////////////////////////
-    res.status(200).json('done!')
-    return
-    ///////////////////////////////////////////////
-
     utilService.createDir(`${dir}/${mediaDir}`)
     utilService.createDir(`${dir}/${detailDir}`)
 
