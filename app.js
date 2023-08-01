@@ -8,6 +8,7 @@ import publicStatsRouter from './routes/public/stats-route.js'
 import authRouter from './routes/auth-route.js'
 import taskRouter from './routes/tasks-route.js'
 import userRouter from './routes/user-route.js'
+import emailRouter from './routes/email-route.js'
 
 const app = express()
 
@@ -23,13 +24,14 @@ app.use((req, res, next) => {
 })
 
 app.use(cors())
-app.use(express.json())
+app.use(express.json({ limit: '5mb' }));
 app.use(cookieParser())
 app.use(
   express.urlencoded({
+    limit: '5mb',
     extended: true,
   })
-)
+);
 
 app.get('/', (req, res) => {
   res.json({ message: 'The API service is alive!' })
@@ -43,6 +45,7 @@ app.use('/public/projects', publicProjectsRouter)
 app.use('/public/stats', publicStatsRouter)
 app.use('/users', userRouter)
 app.use('/tasks', taskRouter)
+app.use('/email', emailRouter)
 
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500
