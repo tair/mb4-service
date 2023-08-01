@@ -51,7 +51,7 @@ async function getTaxaStatsByMatrixId(projectId, matrixId) {
     const users = taxonUsers.filter(user => user.taxon_id == taxon.taxon_id).map(user => `${user.fname} ${user.lname}`)
     // Create a Set to remove duplicates, and convert it back to an array
     const uniqueUsers = [...new Set(users)];
-    taxon.users = uniqueUsers
+    taxon.members = uniqueUsers
   }
 
   return taxons
