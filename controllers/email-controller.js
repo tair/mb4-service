@@ -1,10 +1,9 @@
+import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses'
+import { validationResult } from 'express-validator'
+import { config } from 'dotenv'
+import path from 'path'
 
-import { SESClient, SendRawEmailCommand } from "@aws-sdk/client-ses";
-import { validationResult } from 'express-validator';
-import { config } from 'dotenv';
-import path from 'path';
-
-config({ path: path.join(process.cwd(), '../.env') });
+config({ path: path.join(process.cwd(), '../.env') })
 
 // Configure AWS
 const ses = new SESClient({
@@ -13,22 +12,26 @@ const ses = new SESClient({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
-});
+})
 
-async function sendForm(req, res, next) {
-  const errors = validationResult(req.body);
+async function sendContactUsForm(req, res, next) {
+  const errors = validationResult(req.body)
   if (!errors.isEmpty()) {
-    const error = new Error('Validation failed.');
-    error.statusCode = 422;
-    error.data = errors.array();
-    throw error;
+    const error = new Error('Validation failed.')
+    error.statusCode = 422
+    error.data = errors.array()
+    throw error
   }
 
-const { form } = req.body;
+  const form = req.body
 
-const dateSubmitted = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles', hour12: true }) + ' PST';;
+  const dateSubmitted =
+    new Date().toLocaleString('en-US', {
+      timeZone: 'America/Los_Angeles',
+      hour12: true,
+    }) + ' PST'
 
-const emailBody = `
+  const emailBody = `
 <html>
   <head>
     <style>
@@ -53,27 +56,38 @@ const emailBody = `
       <tr><td><strong>Email:</strong></td><td>${form.email}</td></tr>
       <tr><td><strong>Date Submitted:</strong></td><td>${dateSubmitted}</td></tr>
       <tr><td><strong>Question:</strong></td><td>${form.question}</td></tr>
-      <tr><td><strong>Media or Matrix numbers affected:</strong></td><td>${form.media}</td></tr>
-      <tr><td><strong>Project Number:</strong></td><td>${form.projectNumber}</td></tr>
-      <tr><td><strong>Published:</strong></td><td>${form.published ? 'Yes' : 'No'}</td></tr>
+      <tr><td><strong>Media or Matrix numbers affected:</strong></td><td>${
+        form.media
+      }</td></tr>
+      <tr><td><strong>Project Number:</strong></td><td>${
+        form.projectNumber
+      }</td></tr>
+      <tr><td><strong>Published:</strong></td><td>${
+        form.published ? 'Yes' : 'No'
+      }</td></tr>
     </table>
   </body>
-</html>`;
+</html>`
 
-const sender = 'kartik.khosa@phxbio.org';
-const recipient = 'kartik.khosa@phxbio.org';
-const subject = 'MorphoBank Bug Report';
+  const sender = process.env.ASKUS_SENDER
+  const recipient = process.env.ASKUS_RECEIVER
+  const subject = 'MorphoBank Bug Report'
 
-const attachmentPart = form.attachment ? `
+  let attachmentParts = ''
+  if (form.attachments && Array.isArray(form.attachments)) {
+    for (let attachment of form.attachments) {
+      attachmentParts += `
 --NextPart
-Content-Type: application/octet-stream; name="${form.attachment.name}"
-Content-Disposition: attachment; filename="${form.attachment.name}"
+Content-Type: application/octet-stream; name="${attachment.name}"
+Content-Disposition: attachment; filename="${attachment.name}"
 Content-Transfer-Encoding: base64
 
-${form.attachment.file.trim()}
-` : '';
+${attachment.file.trim()}
+`
+    }
+  }
 
-const emailData = `
+  const emailData = `
 From: ${sender}
 To: ${recipient}
 Subject: ${subject}
@@ -87,25 +101,65 @@ Content-Transfer-Encoding: 7bit
 
 ${emailBody}
 
-${attachmentPart}
---NextPart--`;
+${attachmentParts}
+--NextPart--`
 
-const params = new SendRawEmailCommand({
-  Destinations: [recipient],
-  RawMessage: {
-    Data: Buffer.from(emailData.trim()),
-  },
-});
-
-
+  const params = new SendRawEmailCommand({
+    Destinations: [recipient],
+    RawMessage: {
+      Data: Buffer.from(emailData.trim()),
+    },
+  })
 
   try {
-    const data = await ses.send(params);
-    res.status(200).json({ message: 'Email sent', messageId: data.MessageId });
+    const data = await ses.send(params)
+    res.status(200).json({ message: 'Email sent', messageId: data.MessageId })
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Failed to send email' });
+    console.error(err)
+    emailFailure(err)
+    res.status(500).json({ message: 'Failed to send email' })
   }
 }
 
-export { sendForm };
+async function emailFailure(err, recipient = process.env.ERROR_TECHTEAM) {
+  const sender = process.env.ERROR_TECHTEAM // Update this as per your requirement
+  const subject = 'Email Send Failure Notification'
+  const emailBody = `
+    <html>
+      <head></head>
+      <body>
+        <h3>Email Send Failure</h3>
+        <p>An attempt to send an email failed. Below are the details:</p>
+        <p><strong>Error Message:</strong> ${err.message}</p>
+        <p><strong>Error Stack:</strong> ${err.stack}</p>
+        <p>Please take the necessary actions.</p>
+      </body>
+    </html>`
+
+  const emailData = `
+From: ${sender}
+To: ${recipient}
+Subject: ${subject}
+MIME-Version: 1.0
+Content-Type: text/html; charset=UTF-8
+Content-Transfer-Encoding: 7bit
+
+${emailBody}
+`
+
+  const params = new SendRawEmailCommand({
+    Destinations: [recipient],
+    RawMessage: {
+      Data: Buffer.from(emailData.trim()),
+    },
+  })
+
+  try {
+    const data = await ses.send(params)
+    console.log('Failure notification email sent', data.MessageId)
+  } catch (error) {
+    console.error('Failed to send failure notification email', error)
+  }
+}
+
+export { sendContactUsForm }
