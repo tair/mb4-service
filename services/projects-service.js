@@ -59,9 +59,9 @@ async function getContinuousCharDict() {
 
 async function setJournalCoverUrl(project) {
   project.journal_cover_url = ''
-  let urlByTitle = getCoverUrlByJournalTitle(project.journal_title)
+  const urlByTitle = getCoverUrlByJournalTitle(project.journal_title)
   delete project.journal_title
-  let urlByCover = getCoverUrlByJournalCover(project.journal_cover)
+  const urlByCover = getCoverUrlByJournalCover(project.journal_cover)
   delete project.journal_cover
 
   if (urlByTitle) {
@@ -76,7 +76,6 @@ async function setJournalCoverUrl(project) {
 
   if (urlByCover) {
     try {
-      let response = await axios.get(urlByCover)
       project.journal_cover_url = urlByCover
       return
     } catch (e) {
@@ -89,8 +88,8 @@ async function setJournalCoverUrl(project) {
 
 function getCoverUrlByJournalCover(journal_cover) {
   if (journal_cover) {
-    let preview = journal_cover.preview
-    let urlByCover = `https://morphobank.org/media/morphobank3/images/${preview.HASH}/${preview.MAGIC}_${preview.FILENAME}`
+    const preview = journal_cover.preview
+    const urlByCover = `https://morphobank.org/media/morphobank3/images/${preview.HASH}/${preview.MAGIC}_${preview.FILENAME}`
     return urlByCover
   }
   return ''
@@ -98,24 +97,24 @@ function getCoverUrlByJournalCover(journal_cover) {
 
 function getCoverUrlByJournalTitle(journal_title) {
   if (journal_title) {
-    let cleanTitle = journal_title
+    const cleanTitle = journal_title
       .replace(/\s/g, '_')
-      .replace(/:/g, '')
-      .replace(/\./g, '')
-      .replace(/\&/g, 'and')
+      .replaceAll(':', '')
+      .replaceAll('.', '')
+      .replaceAll('&', 'and')
       .toLowerCase()
-    let urlByTitle = `https://morphobank.org/themes/default/graphics/journalIcons/${cleanTitle}.jpg`
+    const urlByTitle = `https://morphobank.org/themes/default/graphics/journalIcons/${cleanTitle}.jpg`
     return urlByTitle
   }
   return ''
 }
 
 async function getProjectTitles() {
-  let [rows] = await sequelizeConn.query(`
-  select project_id, name from projects 
- where published=1 and deleted=0
- order by name asc`)
-
+  const [rows] = await sequelizeConn.query(`
+    SELECT project_id, name
+    FROM projects 
+    WHERE published = 1 AND deleted = 0
+    ORDER BY name ASC`)
   return rows
 }
 
