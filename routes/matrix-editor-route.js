@@ -6,6 +6,7 @@ const router = express.Router({ mergeParams: true })
 // Taxa endpoints
 router.post('/getAvailableTaxa', controller.getAvailableTaxa)
 router.post('/addTaxaToMatrix', controller.addTaxaToMatrix)
+router.post('/addTaxonMedia', controller.addTaxonMedia)
 router.post('/loadTaxaMedia', controller.loadTaxaMedia)
 router.post('/removeTaxaFromMatrix', controller.removeTaxaFromMatrix)
 router.post('/reorderTaxa', controller.reorderTaxa)
