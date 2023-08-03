@@ -64,7 +64,7 @@ async function updateProfile(req, res, next) {
       let passwordHash = await models.User.hashPassword(req.body.newPassword)
       user.password_hash = passwordHash
     }
-    const result = user.save({ user: user })
+    await user.save({ user: user })
     // save affiliated institutions
     if (req.body.institutions) {
       const instIds = req.body.institutions.map(
@@ -126,7 +126,7 @@ async function updateProfile(req, res, next) {
   }
 }
 
-function searchInstitutions(req, res, next) {
+function searchInstitutions(req, res) {
   const searchTerm = req.query.searchTerm
   models.Institution.findAll({
     attributes: ['institution_id', 'name'],
