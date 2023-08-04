@@ -1441,6 +1441,48 @@ export default class MatrixEditorService {
     return { link_id: linkId }
   }
 
+  async addTaxonMedia(taxaIds, mediaIds) {
+    await this.checkCanEditTaxa(taxaIds)
+    const mediaList = await this.getMediaByIds(mediaIds)
+    if (mediaList.size != mediaIds.length) {
+      throw new UserError(
+        'One or more of the media do not belong to the project'
+      )
+    }
+  
+    const transaction = await sequelizeConn.transaction()
+    const taxaMedia = []
+    const creationTime = time()
+    for (const [mediaId, medium] of mediaList) {
+      for (const taxonId of taxaIds) {
+        const taxaMedium = await models.TaxaXMedium.create(
+          {
+            taxon_id: taxonId,
+            media_id: mediaId,
+            user_id: this.user.user_id,
+            created_on: creationTime,
+          },
+          {
+            user: this.user,
+            transaction: transaction,
+          }
+        )
+
+        taxaMedia.push({
+          link_id: taxaMedium.link_id,
+          taxon_id: taxonId,
+          media_id: mediaId,
+          tiny: getMedia(medium, 'tiny'),
+        })
+      }
+    }
+
+    await transaction.commit()
+    return {
+      media: taxaMedia,
+    }
+  }
+
   async loadTaxaMedia(taxonId, search) {
     const media = []
     const mediaIds = []
