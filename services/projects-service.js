@@ -66,7 +66,7 @@ async function setJournalCoverUrl(project) {
 
   if (urlByTitle) {
     try {
-      let response = await axios.get(urlByTitle)
+      await axios.get(urlByTitle)
       project.journal_cover_url = urlByTitle
       return
     } catch (e) {
@@ -76,7 +76,7 @@ async function setJournalCoverUrl(project) {
 
   if (urlByCover) {
     try {
-      let response = await axios.get(urlByCover)
+      await axios.get(urlByCover)
       project.journal_cover_url = urlByCover
       return
     } catch (e) {

@@ -15,20 +15,18 @@ async function getMatrixMap() {
     `select matrix_id, title from matrices`
   )
   const map = rows.reduce((map, row) => {
-    map[row.matrix_id] = row.title;
-    return map;
-  }, {});
+    map[row.matrix_id] = row.title
+    return map
+  }, {})
   return map
 }
 
 async function getFolioMap() {
-  const [rows] = await sequelizeConn.query(
-    `select folio_id, name from folios`
-  )
+  const [rows] = await sequelizeConn.query(`select folio_id, name from folios`)
   const map = rows.reduce((map, row) => {
-    map[row.folio_id] = row.name;
-    return map;
-  }, {});
+    map[row.folio_id] = row.name
+    return map
+  }, {})
   return map
 }
 
@@ -37,9 +35,9 @@ async function getDocumentMap() {
     `select document_id, title from project_documents`
   )
   const map = rows.reduce((map, row) => {
-    map[row.document_id] = row.title;
-    return map;
-  }, {});
+    map[row.document_id] = row.title
+    return map
+  }, {})
   return map
 }
 
@@ -65,24 +63,24 @@ async function getProjectViews(projectId, matrixMap, folioMap) {
     views[type] += val
     total += val
     // get view details for specific view types
-    const typeWithDetails = ["X", "M", "F"]
+    const typeWithDetails = ['X', 'M', 'F']
     if (typeWithDetails.includes(type)) {
       const rowId = rows[i]['row_id']
-      let name = ""
+      let name = ''
       switch (type) {
-        case "X":
-          name = rowId ? matrixMap[rowId] : "Matrix landing page"
+        case 'X':
+          name = rowId ? matrixMap[rowId] : 'Matrix landing page'
           break
-        case "M":
-          name = rowId ? "M" + rowId : "Media search"
+        case 'M':
+          name = rowId ? 'M' + rowId : 'Media search'
           break
-        case "F":
-          name = rowId? folioMap[rowId] : "Folio list"
+        case 'F':
+          name = rowId ? folioMap[rowId] : 'Folio list'
       }
       if (!details[type]) {
         details[type] = []
       }
-     details[type].push({name, val})
+      details[type].push({ name, val })
     }
   }
   views['total'] = total
@@ -114,24 +112,24 @@ async function getProjectDownloads(projectId, matrixMap, documentMap) {
     views[type] += val
     total += val
     // get view details for specific view types
-    const typeWithDetails = ["X", "M", "D"]
+    const typeWithDetails = ['X', 'M', 'D']
     if (typeWithDetails.includes(type)) {
       const rowId = rows[i]['row_id']
-      let name = ""
+      let name = ''
       switch (type) {
-        case "X":
+        case 'X':
           name = matrixMap[rowId]
           break
-        case "M":
-          name = "M" + rowId
+        case 'M':
+          name = 'M' + rowId
           break
-        case "D":
+        case 'D':
           name = documentMap[rowId]
       }
       if (!details[type]) {
         details[type] = []
       }
-     details[type].push({name, val})
+      details[type].push({ name, val })
     }
   }
   views['total'] = total
@@ -148,7 +146,11 @@ async function getProjectOverview(projectId, matrixMap, folioMap, documentMap) {
   const image_props = await mediaService.getImageProps(projectId, 'small')
   const insts = await institutionService.fetchInstitutions(projectId)
   const project_views = await getProjectViews(projectId, matrixMap, folioMap)
-  const project_downloads = await getProjectDownloads(projectId, matrixMap, documentMap)
+  const project_downloads = await getProjectDownloads(
+    projectId,
+    matrixMap,
+    documentMap
+  )
   const members = await membersService.getMembersList(projectId)
 
   const result = {
@@ -184,7 +186,12 @@ async function getProjectSummary(projectId) {
 
 async function getProjectDetails(projectId, matrixMap, folioMap, documentMap) {
   try {
-    const overview = await getProjectOverview(projectId, matrixMap, folioMap, documentMap)
+    const overview = await getProjectOverview(
+      projectId,
+      matrixMap,
+      folioMap,
+      documentMap
+    )
     const taxa_details = await taxaService.getTaxaDetails(projectId)
     const partitions = await partitionService.getPartitions(projectId)
     const bibliography = await bibService.getBibliography(projectId)
