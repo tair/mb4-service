@@ -28,7 +28,7 @@ async function getTaxaStatsByMatrixId(projectId, matrixId) {
     `SELECT 
       taxon_id, taxon_name, unscored_cells, scored_cells,
       cell_warnings, npa_cells,
-      not_cells, cell_images, cell_image_labels
+      not_cells, cell_images, cell_image_labels, last_modified_on
     FROM stats_taxa_overview
     WHERE project_id = ? AND matrix_id = ?
     ORDER BY taxon_number`,
