@@ -8,6 +8,7 @@ import publicStatsRouter from './routes/public/stats-route.js'
 import authRouter from './routes/auth-route.js'
 import taskRouter from './routes/tasks-route.js'
 import userRouter from './routes/user-route.js'
+import emailRouter from './routes/email-route.js'
 
 const app = express()
 
@@ -23,6 +24,8 @@ app.use((req, res, next) => {
 })
 
 app.use(cors())
+app.use('/email', express.json({ limit: '10mb' }))
+app.use('/email', emailRouter)
 app.use(express.json())
 app.use(cookieParser())
 app.use(

@@ -53,7 +53,7 @@ export async function authorizeProject(req, res, next) {
     }
     switch (projectUser.membership_type) {
       case 0: // Full User
-        permissions.push('edit')
+        permissions.push('edit', 'view')
         break
       default: // Observer, Character Annonator, Bibliography maintainer
         permissions.push('view')
