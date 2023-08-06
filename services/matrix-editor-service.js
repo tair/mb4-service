@@ -1437,7 +1437,14 @@ export default class MatrixEditorService {
       throw new UserError('Media is not a part of this project')
     }
 
-    await taxaMedia.destroy()
+    const transaction = await sequelizeConn.transaction()
+    await taxaMedia.destroy({
+      transaction: transaction,
+      individualHooks: true,
+      user: this.user,
+    })
+
+    await transaction.commit()
     return { link_id: linkId }
   }
 
