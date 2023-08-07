@@ -63,22 +63,24 @@ async function dataDump(req, res) {
     )
     console.log('Dumped project list data - DONE!')
 
-    ///////////////////////////////////////////////
-    res.status(200).json('done!')
-    return
-    ///////////////////////////////////////////////
-
     utilService.createDir(`${dir}/${mediaDir}`)
     utilService.createDir(`${dir}/${detailDir}`)
 
     console.log('Start dumping project details...')
+
+    const matrixMap = await projectDetailService.getMatrixMap()
+    const folioMap = await projectDetailService.getFolioMap()
+    const documentMap = await projectDetailService.getDocumentMap()
 
     for (let i = 0; i < projects.length; i++) {
       const project = projects[i]
       const projectId = project.project_id
       const media_files = await mediaService.getMediaFiles(projectId)
       const project_details = await projectDetailService.getProjectDetails(
-        projectId
+        projectId,
+        matrixMap,
+        folioMap,
+        documentMap
       )
 
       await utilService.writeToFile(
