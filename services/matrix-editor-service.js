@@ -1456,7 +1456,7 @@ export default class MatrixEditorService {
         'One or more of the media do not belong to the project'
       )
     }
-  
+
     const transaction = await sequelizeConn.transaction()
     const taxaMedia = []
     const creationTime = time()

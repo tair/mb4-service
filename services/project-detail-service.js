@@ -143,7 +143,11 @@ async function getProjectOverview(projectId, matrixMap, folioMap, documentMap) {
   const matrices = await matrixService.getMatrices(projectId)
   const taxas = await taxaService.buildTaxa(projectId, matrices)
   const prj_stats = await statsService.getProjectStats(projectId)
-  const image_props = await mediaService.getImageProps(projectId, 'small')
+  const image_props = await mediaService.getImageProps(
+    projectId,
+    'small',
+    summary.exemplar_media_id
+  )
   const insts = await institutionService.fetchInstitutions(projectId)
   const project_views = await getProjectViews(projectId, matrixMap, folioMap)
   const project_downloads = await getProjectDownloads(
@@ -175,7 +179,7 @@ async function getProjectSummary(projectId) {
           journal_title, journal_url, journal_volume, journal_number,
           journal_cover, journal_year, article_authors, article_title,
           article_pp, group_id, published_on, exemplar_media_id,
-          partition_published_on, article_doi, project_doi
+          partition_published_on, article_doi, project_doi, nsf_funded
       FROM projects
       WHERE project_id = ?`,
     { replacements: [projectId] }
