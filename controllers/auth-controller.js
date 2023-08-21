@@ -147,14 +147,17 @@ async function authenticateORCID(req, res) {
       // flag to instruct frontend whether to redirect to profile page
       let redirectToProfile = false
 
-      // in case the orcid user and the logged in user is not the same account - happens if two users try to 
+      // in case the orcid user and the logged in user is not the same account - happens if two users try to
       // link the same ORCID profile
       if (
         userWithOrcid &&
         loggedInUser &&
         loggedInUser.user_id != userWithOrcid.user_id
       ) {
-        res.status(400).json({'message': 'Another user with the same ORCID already exists in our system.'})
+        res.status(400).json({
+          message:
+            'Another user with the same ORCID already exists in our system.',
+        })
         return
       }
 
@@ -164,7 +167,10 @@ async function authenticateORCID(req, res) {
           // in case current user's orcid is different - shall not happen since we do not display link option
           // for users who already have ORCID
           if (loggedInUser.orcid != orcid) {
-            res.status(400).json({'message': 'The ORCID you linked is different from the ORCID of the current user.'})
+            res.status(400).json({
+              message:
+                'The ORCID you linked is different from the ORCID of the current user.',
+            })
             return
           }
         } else {
