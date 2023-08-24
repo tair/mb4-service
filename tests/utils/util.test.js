@@ -19,7 +19,9 @@ describe('Util Tests', () => {
   test('Test symmetic difference', () => {
     const array1 = [1, 2, 3]
     const array2 = [3, 4, 5]
-    expect(util.array_symmetric_difference(array1, array2)).toStrictEqual([1, 2, 4, 5])
+    expect(util.array_symmetric_difference(array1, array2)).toStrictEqual([
+      1, 2, 4, 5,
+    ])
   })
 
   test('Test unique', () => {
