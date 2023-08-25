@@ -4,7 +4,7 @@ async function getImageProps(projectId, type, exemplarMediaId) {
   let rows = []
   // from the current observation, all publised project does have a exemplarMediaId
   if (exemplarMediaId) {
-    [rows] = await sequelizeConn.query(
+    ;[rows] = await sequelizeConn.query(
       `
       SELECT m.media, t.*, s.reference_source, s.institution_code, s.collection_code, s.catalog_number, v.name as view_name
       FROM media_files m
@@ -19,7 +19,7 @@ async function getImageProps(projectId, type, exemplarMediaId) {
     )
   } else {
     // in case the exemplarMediaId does not exist, select the first media file
-    [rows] = await sequelizeConn.query(
+    ;[rows] = await sequelizeConn.query(
       `
       SELECT m.media, t.*, s.reference_source, s.institution_code, s.collection_code, s.catalog_number, v.name as view_name
       FROM media_files m
