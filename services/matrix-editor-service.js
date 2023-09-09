@@ -1132,6 +1132,9 @@ export default class MatrixEditorService {
 
   async addTaxaToMatrix(taxaIds, afterTaxonId) {
     await this.checkCanDo('addTaxon', 'You are not allowed to add taxa')
+    if (taxaIds.length == 0) {
+      throw new UserError('No taxa was specified')
+    }
 
     // Ensure that all of the taxa belongs to this project. This ensures that
     // the user is not passing in invalid taxa.
