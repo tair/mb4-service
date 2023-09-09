@@ -1819,70 +1819,74 @@ export default class MatrixEditorService {
       transaction: transaction,
     })
 
-    for (const state of states) {
-      let characterState
-      if (state.id > 0) {
-        characterState = await models.CharacterState.findByPk(state.id)
-        if (characterState.character_id != characterId) {
-          throw new UserError('State is not part of this character')
+    let deletedStateIds = []
+    if (states.length) {
+      for (const state of states) {
+        let characterState
+        if (state.id > 0) {
+          characterState = await models.CharacterState.findByPk(state.id)
+          if (characterState.character_id != characterId) {
+            throw new UserError('State is not part of this character')
+          }
+        } else {
+          characterState = await models.CharacterState.build({
+            character_id: characterId,
+            user_id: this.user.user_id,
+          })
         }
-      } else {
-        characterState = await models.CharacterState.build({
-          character_id: characterId,
-          user_id: this.user.user_id,
+        characterState.num = state.r
+        characterState.name = state.n
+        await characterState.save({
+          user: this.user,
+          is_minor_edit: isMinorEdit,
+          transaction: transaction,
         })
-      }
-      characterState.num = state.r
-      characterState.name = state.n
-      await characterState.save({
-        user: this.user,
-        is_minor_edit: isMinorEdit,
-        transaction: transaction,
-      })
 
-      // Add the state id to the response so that the client can identify them.
-      state.id = parseInt(characterState.state_id)
-    }
-
-    // Remove states that exist in database but are not in request.
-    const stateIds = states.map((state) => state.id)
-    const [rows] = await sequelizeConn.query(
-      `
-        SELECT DISTINCT state_id
-        FROM character_states
-        WHERE character_id = ? AND state_id NOT IN (?)`,
-      {
-        replacements: [characterId, stateIds],
-        transaction: transaction,
+        // Add the state id to the response so that the client can identify
+        // them.
+        state.id = parseInt(characterState.state_id)
       }
-    )
-    const deletedStateIds = rows.map((row) => parseInt(row.state_id))
-    if (deletedStateIds.length > 0) {
-      // TODO(kenzley): Consider moving this into a deletion hook which finds
-      //                all referenced tables and deletes them.
-      await sequelizeConn.query(
+
+      // Remove states that exist in database but are not in request.
+      const stateIds = states.map((state) => state.id)
+      const [rows] = await sequelizeConn.query(
         `
-        DELETE FROM media_labels
-        WHERE table_num = 16 AND link_id IN
-        (
-          SELECT link_id
-          FROM characters_x_media
-          WHERE state_id IN (?)
-        )`,
+          SELECT DISTINCT state_id
+          FROM character_states
+          WHERE character_id = ? AND state_id NOT IN (?)`,
         {
-          replacements: [deletedStateIds],
+          replacements: [characterId, stateIds],
           transaction: transaction,
         }
       )
-      await models.CharacterState.destroy({
-        where: {
-          state_id: deletedStateIds,
-        },
-        transaction: transaction,
-        individualHooks: true,
-        user: this.user,
-        is_minor_edit: isMinorEdit,
-      })
+      deletedStateIds = rows.map((row) => parseInt(row.state_id))
+      if (deletedStateIds.length > 0) {
+        // TODO(kenzley): Consider moving this into a deletion hook which finds
+        //                all referenced tables and deletes them.
+        await sequelizeConn.query(
+          `
+          DELETE FROM media_labels
+          WHERE table_num = 16 AND link_id IN
+          (
+            SELECT link_id
+            FROM characters_x_media
+            WHERE state_id IN (?)
+          )`,
+          {
+            replacements: [deletedStateIds],
+            transaction: transaction,
+          }
+        )
+        await models.CharacterState.destroy({
+          where: {
+            state_id: deletedStateIds,
+          },
+          transaction: transaction,
+          individualHooks: true,
+          user: this.user,
+          is_minor_edit: isMinorEdit,
+        })
+      }
     }
 
     await transaction.commit()
