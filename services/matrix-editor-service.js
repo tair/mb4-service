@@ -6140,7 +6140,7 @@ export default class MatrixEditorService {
         (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id IS NULL OR mto.user_id = pxu.user_id) AND
         cxm.taxon_id IN (?) AND cxm.character_id IN (?)`,
       {
-        replacement: [
+        replacements: [
           this.user.user_id,
           this.matrix.matrix_id,
           taxaIds,
@@ -6166,7 +6166,7 @@ export default class MatrixEditorService {
       WHERE
         mco.matrix_id = ? AND mto.taxon_id IN (?) AND mco.character_id IN (?) AND
         cl.is_npa = 0 AND cl.state_id IS NOT NULL`,
-      { replacement: [this.matrix.matrix_id, taxaIds, characterIds] }
+      { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
     )
     goodCellMedia.push(...scoredCellsRows)
 
@@ -6189,7 +6189,7 @@ export default class MatrixEditorService {
           INNER JOIN character_rule_actions AS cra ON cr.rule_id = cra.rule_id AND cra.action = 'ADD_MEDIA'
           INNER JOIN matrix_character_order AS mcoa ON mcoa.character_id = cra.character_id AND mcoa.matrix_id = mco.matrix_id
           WHERE mco.matrix_id = ? AND mto.taxon_id IN (?) AND mco.character_id IN (?)`,
-        { replacement: [this.matrix.matrix_id, taxaIds, characterIds] }
+        { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
       )
       goodCellMedia.push(...ontologyRulesRows)
     }
@@ -6206,7 +6206,7 @@ export default class MatrixEditorService {
       INNER JOIN taxa_x_specimens AS txs ON txs.taxon_id = mto.taxon_id
       INNER JOIN media_files AS mf ON mf.view_id = mf2v.view_id AND mf.specimen_id = txs.specimen_id AND m.project_id = mf.project_id
       WHERE mco.matrix_id = ? AND mto.taxon_id IN (?) AND mco.character_id IN (?) AND cl.cell_id IS NULL`,
-      { replacement: [this.matrix.matrix_id, taxaIds, characterIds] }
+      { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
     )
     goodCellMedia.push(...unscoredCellsRows)
 
@@ -6227,7 +6227,7 @@ export default class MatrixEditorService {
         (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id IS NULL OR mto.user_id = ?) AND
         cxm.taxon_id IN (?) AND cxm.character_id IN (?)`,
       {
-        replacement: [
+        replacements: [
           this.user.user_id,
           this.matrix.matrix_id,
           this.user.user_id,
