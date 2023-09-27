@@ -1132,6 +1132,9 @@ export default class MatrixEditorService {
 
   async addTaxaToMatrix(taxaIds, afterTaxonId) {
     await this.checkCanDo('addTaxon', 'You are not allowed to add taxa')
+    if (taxaIds.length == 0) {
+      throw new UserError('No taxa was specified')
+    }
 
     // Ensure that all of the taxa belongs to this project. This ensures that
     // the user is not passing in invalid taxa.
@@ -1816,70 +1819,74 @@ export default class MatrixEditorService {
       transaction: transaction,
     })
 
-    for (const state of states) {
-      let characterState
-      if (state.id > 0) {
-        characterState = await models.CharacterState.findByPk(state.id)
-        if (characterState.character_id != characterId) {
-          throw new UserError('State is not part of this character')
+    let deletedStateIds = []
+    if (states.length) {
+      for (const state of states) {
+        let characterState
+        if (state.id > 0) {
+          characterState = await models.CharacterState.findByPk(state.id)
+          if (characterState.character_id != characterId) {
+            throw new UserError('State is not part of this character')
+          }
+        } else {
+          characterState = await models.CharacterState.build({
+            character_id: characterId,
+            user_id: this.user.user_id,
+          })
         }
-      } else {
-        characterState = await models.CharacterState.build({
-          character_id: characterId,
-          user_id: this.user.user_id,
+        characterState.num = state.r
+        characterState.name = state.n
+        await characterState.save({
+          user: this.user,
+          is_minor_edit: isMinorEdit,
+          transaction: transaction,
         })
-      }
-      characterState.num = state.r
-      characterState.name = state.n
-      await characterState.save({
-        user: this.user,
-        is_minor_edit: isMinorEdit,
-        transaction: transaction,
-      })
 
-      // Add the state id to the response so that the client can identify them.
-      state.id = parseInt(characterState.state_id)
-    }
-
-    // Remove states that exist in database but are not in request.
-    const stateIds = states.map((state) => state.id)
-    const [rows] = await sequelizeConn.query(
-      `
-        SELECT DISTINCT state_id
-        FROM character_states
-        WHERE character_id = ? AND state_id NOT IN (?)`,
-      {
-        replacements: [characterId, stateIds],
-        transaction: transaction,
+        // Add the state id to the response so that the client can identify
+        // them.
+        state.id = parseInt(characterState.state_id)
       }
-    )
-    const deletedStateIds = rows.map((row) => parseInt(row.state_id))
-    if (deletedStateIds.length > 0) {
-      // TODO(kenzley): Consider moving this into a deletion hook which finds
-      //                all referenced tables and deletes them.
-      await sequelizeConn.query(
+
+      // Remove states that exist in database but are not in request.
+      const stateIds = states.map((state) => state.id)
+      const [rows] = await sequelizeConn.query(
         `
-        DELETE FROM media_labels
-        WHERE table_num = 16 AND link_id IN
-        (
-          SELECT link_id
-          FROM characters_x_media
-          WHERE state_id IN (?)
-        )`,
+          SELECT DISTINCT state_id
+          FROM character_states
+          WHERE character_id = ? AND state_id NOT IN (?)`,
         {
-          replacements: [deletedStateIds],
+          replacements: [characterId, stateIds],
           transaction: transaction,
         }
       )
-      await models.CharacterState.destroy({
-        where: {
-          state_id: deletedStateIds,
-        },
-        transaction: transaction,
-        individualHooks: true,
-        user: this.user,
-        is_minor_edit: isMinorEdit,
-      })
+      deletedStateIds = rows.map((row) => parseInt(row.state_id))
+      if (deletedStateIds.length > 0) {
+        // TODO(kenzley): Consider moving this into a deletion hook which finds
+        //                all referenced tables and deletes them.
+        await sequelizeConn.query(
+          `
+          DELETE FROM media_labels
+          WHERE table_num = 16 AND link_id IN
+          (
+            SELECT link_id
+            FROM characters_x_media
+            WHERE state_id IN (?)
+          )`,
+          {
+            replacements: [deletedStateIds],
+            transaction: transaction,
+          }
+        )
+        await models.CharacterState.destroy({
+          where: {
+            state_id: deletedStateIds,
+          },
+          transaction: transaction,
+          individualHooks: true,
+          user: this.user,
+          is_minor_edit: isMinorEdit,
+        })
+      }
     }
 
     await transaction.commit()
@@ -6133,7 +6140,7 @@ export default class MatrixEditorService {
         (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id IS NULL OR mto.user_id = pxu.user_id) AND
         cxm.taxon_id IN (?) AND cxm.character_id IN (?)`,
       {
-        replacement: [
+        replacements: [
           this.user.user_id,
           this.matrix.matrix_id,
           taxaIds,
@@ -6159,7 +6166,7 @@ export default class MatrixEditorService {
       WHERE
         mco.matrix_id = ? AND mto.taxon_id IN (?) AND mco.character_id IN (?) AND
         cl.is_npa = 0 AND cl.state_id IS NOT NULL`,
-      { replacement: [this.matrix.matrix_id, taxaIds, characterIds] }
+      { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
     )
     goodCellMedia.push(...scoredCellsRows)
 
@@ -6182,7 +6189,7 @@ export default class MatrixEditorService {
           INNER JOIN character_rule_actions AS cra ON cr.rule_id = cra.rule_id AND cra.action = 'ADD_MEDIA'
           INNER JOIN matrix_character_order AS mcoa ON mcoa.character_id = cra.character_id AND mcoa.matrix_id = mco.matrix_id
           WHERE mco.matrix_id = ? AND mto.taxon_id IN (?) AND mco.character_id IN (?)`,
-        { replacement: [this.matrix.matrix_id, taxaIds, characterIds] }
+        { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
       )
       goodCellMedia.push(...ontologyRulesRows)
     }
@@ -6199,7 +6206,7 @@ export default class MatrixEditorService {
       INNER JOIN taxa_x_specimens AS txs ON txs.taxon_id = mto.taxon_id
       INNER JOIN media_files AS mf ON mf.view_id = mf2v.view_id AND mf.specimen_id = txs.specimen_id AND m.project_id = mf.project_id
       WHERE mco.matrix_id = ? AND mto.taxon_id IN (?) AND mco.character_id IN (?) AND cl.cell_id IS NULL`,
-      { replacement: [this.matrix.matrix_id, taxaIds, characterIds] }
+      { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
     )
     goodCellMedia.push(...unscoredCellsRows)
 
@@ -6220,7 +6227,7 @@ export default class MatrixEditorService {
         (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id IS NULL OR mto.user_id = ?) AND
         cxm.taxon_id IN (?) AND cxm.character_id IN (?)`,
       {
-        replacement: [
+        replacements: [
           this.user.user_id,
           this.matrix.matrix_id,
           this.user.user_id,
