@@ -1220,6 +1220,10 @@ export default class MatrixEditorService {
       )
     }
 
+    if (taxaIds.length == 0) {
+      throw new UserError('Please select taxa to remove')
+    }
+
     const transaction = await sequelizeConn.transaction()
 
     // Delete all references to the cells related to the taxa.
@@ -1498,7 +1502,7 @@ export default class MatrixEditorService {
     const mediaIds = []
 
     if (search) {
-      //TODO(kenzley): Implement search functionality using Elastic Search.
+      // TODO(kenzley): Implement search functionality using Elastic Search.
     } else {
       const replacements = [this.project.project_id]
       let clause = ''
@@ -1526,8 +1530,7 @@ export default class MatrixEditorService {
           INNER JOIN specimens AS s ON s.specimen_id = mf.specimen_id
           INNER JOIN taxa_x_specimens AS txs ON s.specimen_id = txs.specimen_id
           INNER JOIN taxa AS t ON txs.taxon_id = t.taxon_id
-          WHERE
-            mf.project_id = ? AND mf.cataloguing_status = 0 ${clause}
+          WHERE mf.project_id = ? AND mf.cataloguing_status = 0 ${clause}
           ORDER BY mf.media_id`,
         { replacements: replacements }
       )
@@ -1549,7 +1552,7 @@ export default class MatrixEditorService {
         `
         SELECT media_id, MAX(created_on) AS created_on
         FROM cells_x_media
-        WHERE matrix_id = ? AND user_id = ? AND media_id IN(?)
+        WHERE matrix_id = ? AND user_id = ? AND media_id IN (?)
         GROUP BY media_id`,
         { replacements: [this.matrix.matrix_id, this.user.user_id, mediaIds] }
       )
@@ -4427,7 +4430,7 @@ export default class MatrixEditorService {
       },
       { user: this.user, transaction: transaction }
     )
-    await transaction.commit()
+
     for (const taxonId of taxaIds) {
       await models.TaxaXPartition.create(
         {
@@ -4504,6 +4507,10 @@ export default class MatrixEditorService {
       'You are not allowed to add characters to partitions'
     )
 
+    if (characterIds.length == 0) {
+      throw new UserError('Please specify characters')
+    }
+
     const partition = await models.Partition.findByPk(partitionId)
     if (!partition) {
       throw new UserError('Partition does not exist')
@@ -4542,6 +4549,10 @@ export default class MatrixEditorService {
       'You are not allowed to remove characters from partitions'
     )
 
+    if (characterIds.length == 0) {
+      throw new UserError('Please specify characters')
+    }
+
     const partition = await models.Partition.findByPk(partitionId)
     if (!partition) {
       throw new UserError('Partition does not exist')
@@ -4573,6 +4584,10 @@ export default class MatrixEditorService {
       'editPartition',
       'You are not allowed to add taxa to partitions'
     )
+
+    if (taxaIds.length == 0) {
+      throw new UserError('Please specify taxa')
+    }
 
     const partition = await models.Partition.findByPk(partitionId)
     if (!partition) {
@@ -4611,6 +4626,10 @@ export default class MatrixEditorService {
       'editPartition',
       'You are not allowed to remove taxa from partitions'
     )
+
+    if (taxaIds.length == 0) {
+      throw new UserError('Please specify taxa')
+    }
 
     const partition = await models.Partition.findByPk(partitionId)
     if (!partition) {
