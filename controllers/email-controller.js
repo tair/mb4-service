@@ -2,6 +2,8 @@ import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses'
 import { validationResult } from 'express-validator'
 import { config } from 'dotenv'
 import path from 'path'
+import process from 'node:process'
+import { Buffer } from 'node:buffer'
 
 config({ path: path.join(process.cwd(), '../.env') })
 

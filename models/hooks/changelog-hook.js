@@ -1,5 +1,6 @@
 import sequelizeConn from '../../util/db.js'
 import { DataTypes, QueryTypes } from 'sequelize'
+import { Datamodel } from '../../lib/datamodel/datamodel.js'
 import { time } from '../../util/util.js'
 import { getTableNumber } from '../../lib/table-number.js'
 
@@ -14,7 +15,8 @@ export async function logChange(model, type, options) {
     throw new Error('User ID is not defined and cannot be logged')
   }
 
-  const primaryKeys = getPrimaryKey(model)
+  const datamodel = Datamodel.getInstance()
+  const primaryKeys = datamodel.getPrimaryKey(model)
   if (primaryKeys.length != 1) {
     throw new Error(
       'Model does not have a single primary key cannot have logged'
@@ -63,16 +65,6 @@ export async function logChange(model, type, options) {
       transaction: options.transaction,
     }
   )
-}
-
-function getPrimaryKey(model) {
-  const primaryKeys = []
-  for (const [field, attributes] of Object.entries(model.rawAttributes)) {
-    if (attributes.primaryKey) {
-      primaryKeys.push(field)
-    }
-  }
-  return primaryKeys
 }
 
 function shouldLogAttributes(attributes) {
