@@ -11,7 +11,6 @@ const statsDir = 'stats'
 
 async function statsDump(req, res) {
   try {
-    const start = Date.now()
     console.log('Start dumping stats data...')
 
     const projectViewsForLast30Days =

@@ -2,6 +2,7 @@ import config from '../../config.js'
 import crypto from 'crypto'
 import { models } from '../init-models.js'
 import { normalizeJson } from '../../util/json.js'
+import { Datamodel } from '../../lib/datamodel/datamodel.js'
 
 /**
  * This function is run as a sequelize hook such that if the model is changed
@@ -41,7 +42,8 @@ export async function fileDeleted(model, options) {
 }
 
 function getRowId(model) {
-  const primaryKeys = getPrimaryKey(model)
+  const datamodel = Datamodel.getInstance()
+  const primaryKeys = datamodel.getPrimaryKey(model)
   if (primaryKeys.length != 1) {
     throw 'Model does not have a single primary key cannot have logged'
   }
@@ -51,18 +53,6 @@ function getRowId(model) {
     throw 'Row Id is not defined and cannot be logged'
   }
   return rowId
-}
-
-// TODO(kenzley): Consolidate this method across the hooks when the data model
-//    logic has been implemeneted.
-function getPrimaryKey(model) {
-  const primaryKeys = []
-  for (const [field, attributes] of Object.entries(model.rawAttributes)) {
-    if (attributes.primaryKey) {
-      primaryKeys.push(field)
-    }
-  }
-  return primaryKeys
 }
 
 /**
