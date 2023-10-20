@@ -43,11 +43,11 @@ export default class BibliographicReference extends Model {
           allowNull: false,
         },
         authors: {
-          type: DataTypes.TEXT,
+          type: DataTypes.JSON,
           allowNull: false,
         },
         editors: {
-          type: DataTypes.TEXT,
+          type: DataTypes.JSON,
           allowNull: false,
         },
         vol: {
@@ -84,7 +84,7 @@ export default class BibliographicReference extends Model {
           allowNull: false,
         },
         secondary_authors: {
-          type: DataTypes.TEXT,
+          type: DataTypes.JSON,
           allowNull: false,
         },
         article_secondary_title: {

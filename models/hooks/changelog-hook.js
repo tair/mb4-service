@@ -5,6 +5,11 @@ import { time } from '../../util/util.js'
 import { getTableNumber } from '../../lib/table-number.js'
 
 export async function logChange(model, type, options) {
+  const shouldLogChange = options.shouldSkipLogChange
+  if (shouldLogChange) {
+    return
+  }
+
   const user = options.user
   if (user == null) {
     throw new Error('User is not defined so cannot generate logs')
