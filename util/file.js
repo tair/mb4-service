@@ -24,7 +24,6 @@ export async function getDirectoryHash(basePath, id) {
   let path = basePath
   for (const subdirectory of subdirectories) {
     path += '/' + subdirectory
-    console.log('creating', path)
     await mkdir(path, { recursive: true })
   }
 
