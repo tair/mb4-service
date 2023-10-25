@@ -198,7 +198,9 @@ async function getProjectDetails(projectId, matrixMap, folioMap, documentMap) {
     )
     const taxa_details = await taxaService.getTaxaDetails(projectId)
     const partitions = await partitionService.getPartitions(projectId)
-    const bibliography = await bibService.getBibliography(projectId)
+    const bibliography = await bibService.getBibliographiesByProjectId(
+      projectId
+    )
     const docs = await docsService.getDocuments(projectId)
     const specimen_details = await specimenService.getSpecimenDetails(projectId)
     const media_views = await mediaService.getMediaViews(projectId)

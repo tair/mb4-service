@@ -3,7 +3,6 @@ import { CELL_BATCH_TYPES } from '../util/cells.js'
 import { MATRIX_OPTIONS } from '../util/matrix.js'
 import { Table } from '../util/table.js'
 import { array_difference, array_intersect, time } from '../util/util.js'
-import { getTextForBibliographicReference } from './bibliography-service.js'
 import { getCitationText } from '../util/citation.js'
 import { getMedia } from '../util/media.js'
 import { getRoles } from '../services/user-roles-service.js'
@@ -657,7 +656,7 @@ export default class MatrixEditorService {
       citation_id: citationId,
       pp: pp,
       notes: notes,
-      name: await getTextForBibliographicReference(citation),
+      name: await getCitationText(citation),
     }
   }
 
@@ -732,7 +731,7 @@ export default class MatrixEditorService {
         citation_id: citationId,
         pp: pp,
         notes: notes,
-        name: await getTextForBibliographicReference(citation),
+        name: await getCitationText(citation),
       },
     }
   }

@@ -1,5 +1,6 @@
 import express from 'express'
 
+import bibliographyRouter from './bibliography-route.js'
 import characterRouter from './characters-route.js'
 import documentRouter from './document-route.js'
 import matrixRouter from './matrix-route.js'
@@ -20,6 +21,7 @@ projectsRouter.use('/:projectId/', projectRouter)
 projectRouter.use(authorizeUser)
 projectRouter.use(authorizeProject)
 
+projectRouter.use('/bibliography', bibliographyRouter)
 projectRouter.use('/characters', characterRouter)
 projectRouter.use('/documents', documentRouter)
 projectRouter.use('/matrices', matrixRouter)
