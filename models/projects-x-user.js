@@ -98,7 +98,7 @@ export default class ProjectsXUser extends Model {
   }
 
   getVar(key) {
-    return this.vars[key]
+    return this.var ? this.vars[key] : null
   }
 
   setVar(key, value) {
@@ -112,7 +112,7 @@ export default class ProjectsXUser extends Model {
   getPreferences(preference) {
     preference = preference.toLowerCase()
     const preferences = this.getVar('_project_preferences')
-    if (preference in preferences) {
+    if (preferences && preference in preferences) {
       return preferences[preference]
     }
     return null
