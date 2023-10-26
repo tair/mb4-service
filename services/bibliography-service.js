@@ -1,11 +1,9 @@
 import sequelizeConn from '../util/db.js'
-import { getCitationText } from '../util/citation.js'
 
-async function getBibliography(projectId) {
+export async function getBibliographiesByProjectId(projectId) {
   const [rows] = await sequelizeConn.query(
     `
-      SELECT reference_id, article_title, journal_title, authors, vol, pubyear,
-          collation
+      SELECT *
       FROM bibliographic_references
       WHERE project_id = ? `,
     { replacements: [projectId] }
@@ -13,34 +11,25 @@ async function getBibliography(projectId) {
   return rows
 }
 
-async function getBibliographicAuthorsForId(referenceId, typeCode) {
+export async function getBibliographiesByGroupId(groupId) {
   const [rows] = await sequelizeConn.query(
-    `SELECT * FROM bibliographic_authors WHERE reference_id = ? AND typecode IN (?)`,
-    { replacements: [referenceId, typeCode] }
+    `
+      SELECT br.*
+      FROM bibliographic_references AS br
+      INNER JOIN projects AS p ON p.project_id = br.project_id
+      WHERE p.group_id = ?`,
+    { replacements: [groupId] }
   )
   return rows
 }
 
-async function getTextForBibliographicReference(citation) {
-  const authors = []
-  const editors = []
-  const people = await getBibliographicAuthorsForId(
-    citation.reference_id,
-    [0, 1, 2]
+export async function getBibliographiesByIds(referenceIds) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT *
+      FROM bibliographic_references
+      WHERE reference_id IN (?) `,
+    { replacements: [referenceIds] }
   )
-  for (const author of people) {
-    if (author.typecode == 0 || author.typecode == 1) {
-      authors.push(author)
-    } else if (author.typecode == 2) {
-      editors.push(author)
-    }
-  }
-
-  return getCitationText(citation, authors, editors)
-}
-
-export {
-  getTextForBibliographicReference,
-  getBibliographicAuthorsForId,
-  getBibliography,
+  return rows
 }

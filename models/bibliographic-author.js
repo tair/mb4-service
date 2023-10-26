@@ -1,6 +1,10 @@
 import _sequelize from 'sequelize'
 const { Model } = _sequelize
 
+// TODO(kenzley): This table is no longer needed. This is a parsed values of the
+//     columns authors, secondary_authors, editors in the table
+//     bibliographic_references. An alternate solution would be to remove this table
+//     and set columns as JSON OR delete those columns in favor of this table.
 export default class BibliographicAuthor extends Model {
   static init(sequelize, DataTypes) {
     return super.init(
