@@ -114,10 +114,8 @@ export function retryFailedTask(taskId, transaction) {
 }
 
 export async function resetAllFailedTasks() {
-  await sequelizeConn.query(
-    `
+  await sequelizeConn.query(`
     UPDATE ca_task_queue
     SET completed_on = NULL, status = 0, error_code = 0, notes = ''
-    WHERE status = 3`
-  )
+    WHERE status = 3`)
 }
