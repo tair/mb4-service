@@ -69,6 +69,10 @@ export default class Taxon extends Model {
         scientific_name_year: {
           type: DataTypes.SMALLINT.UNSIGNED,
           allowNull: true,
+          defaultValue: null,
+          set(value) {
+            this.setDataValue('scientific_name_year', value ? value : null)
+          },
         },
         supraspecific_clade: {
           type: DataTypes.STRING(255),

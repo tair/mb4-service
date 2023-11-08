@@ -91,7 +91,7 @@ export async function getTaxaInProject(projectId) {
           higher_taxon_cohort,
           higher_taxon_infraclass,
           user_id,
-          is_extinct, use_parens_for_author, notes,
+          is_extinct, use_parens_for_author, notes, access,
           scientific_name_author,
           scientific_name_year,
           created_on, last_modified_on
