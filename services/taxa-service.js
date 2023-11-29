@@ -101,3 +101,26 @@ export async function getTaxaInProject(projectId) {
   )
   return rows
 }
+
+export async function isTaxaInProject(taxaIds, projectId) {
+  const [[{ count }]] = await sequelizeConn.query(
+    `
+    SELECT COUNT(taxon_id) AS count
+    FROM taxa
+    WHERE project_id = ? AND taxon_id IN (?)`,
+    {
+      replacements: [projectId, taxaIds],
+    }
+  )
+  return count == taxaIds.length
+}
+
+export async function getMatrixIds(taxaIds) {
+  const [rows] = await sequelizeConn.query(
+    'SELECT taxon_id, matrix_id FROM matrix_taxa_order WHERE taxon_id IN (?)',
+    {
+      replacements: [taxaIds],
+    }
+  )
+  return rows
+}
