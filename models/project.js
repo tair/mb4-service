@@ -108,6 +108,7 @@ export default class Project extends Model {
           type: DataTypes.STRING(60),
           allowNull: true,
         },
+        // TODO(kenzley); Delete this field when we move over to V4.
         group_id: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
