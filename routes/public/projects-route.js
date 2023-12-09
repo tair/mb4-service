@@ -1,5 +1,5 @@
 import express from 'express'
-import * as projectsController from '../../controllers/projects-controller.js'
+import * as projectsController from '../../controllers/published-projects-controller.js'
 import * as mediaController from '../../controllers/media-controller.js'
 import * as dataDumpController from '../../controllers/datadump-controller.js'
 
