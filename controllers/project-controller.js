@@ -59,18 +59,24 @@ export async function getProjects(req, res) {
 
 export async function getOverview(req, res) {
   const projectId = req.params.projectId
+  const userId = req.user?.user_id
   const summary = await projectService.getProject(projectId)
+  // TODO(kenzley): Change this to output the media with the util/media.ts:getMedia method.
   const image_props = await mediaService.getImageProps(
     projectId,
     'small',
     summary.exemplar_media_id
   )
   const projectStats = await projectStatsService.getProjectStats(projectId)
+  const recentChangesStats = userId
+    ? await projectStatsService.getRecentChangesStats(projectId, userId)
+    : null
   const taxa = await projectStatsService.getTaxaStats(projectId)
   const members = await projectStatsService.getMembersStats(projectId)
   const overview = {
     ...summary,
     stats: projectStats,
+    recent_changes: recentChangesStats,
     image_props,
     taxa,
     members,

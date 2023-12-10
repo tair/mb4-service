@@ -86,3 +86,20 @@ export async function getMembersStats(projectId) {
   )
   return rows
 }
+
+export async function getRecentChangesStats(projectId, userId) {
+  const [rows] = await sequelizeConn.query(
+    `
+    SELECT
+      temporal_type, taxa, specimens, media, characters, character_comments,
+      character_notes, character_media, character_media_labels, cell_scorings,
+      cell_comments, cell_notes, rules, documents, citations
+    FROM stats_user_overview
+    WHERE
+      project_id = ? AND
+      user_id = ?
+    ORDER BY temporal_type`,
+    { replacements: [projectId, userId] }
+  )
+  return rows
+}
