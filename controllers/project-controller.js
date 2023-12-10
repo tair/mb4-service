@@ -1,6 +1,7 @@
 import sequelizeConn from '../util/db.js'
 import { getMedia } from '../util/media.js'
 import { models } from '../models/init-models.js'
+import * as institutionService from '../services/institution-service.js'
 import * as projectService from '../services/projects-service.js'
 import * as projectStatsService from '../services/project-stats-service.js'
 import * as projectUserService from '../services/project-user-service.js'
@@ -71,12 +72,14 @@ export async function getOverview(req, res) {
   const recentChangesStats = userId
     ? await projectStatsService.getRecentChangesStats(projectId, userId)
     : null
+  const institutions = await institutionService.fetchInstitutions(projectId)
   const taxa = await projectStatsService.getTaxaStats(projectId)
   const members = await projectStatsService.getMembersStats(projectId)
   const overview = {
     ...summary,
     stats: projectStats,
     recent_changes: recentChangesStats,
+    institutions: institutions,
     image_props,
     taxa,
     members,
