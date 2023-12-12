@@ -189,6 +189,10 @@ export default class User extends Model {
     return parseInt(lastLogout)
   }
 
+  static getName(fname, lname) {
+    return fname + ' ' + lname
+  }
+
   static md5HashPassword(password) {
     return crypto.createHash('md5').update(password).digest('hex')
   }

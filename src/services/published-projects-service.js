@@ -1,7 +1,7 @@
 import sequelizeConn from '../util/db.js'
 import axios from 'axios'
 import * as mediaService from './media-service.js'
-import * as statsService from './published-stats-service.js'
+import { getProjectStats } from './project-stats-service.js'
 
 export async function getProjects() {
   const start = new Date().getTime()
@@ -21,7 +21,7 @@ export async function getProjects() {
       row.has_continuous_char = 1
     }
 
-    row.project_stats = await statsService.getProjectStats(projectId)
+    row.project_stats = await getProjectStats(projectId)
     row.image_props = await mediaService.getImageProps(projectId, 'preview')
     await setJournalCoverUrl(row)
   }
