@@ -44,7 +44,7 @@ export class Multimap {
       this.map.set(key, new Set())
     }
     const set = this.map.get(key)
-    for (const value of set) {
+    for (const value of values) {
       set.add(value)
     }
   }
@@ -55,5 +55,21 @@ export class Multimap {
 
   containsValue(key, value) {
     return this.map.has(key) && this.map.get(key).has(value)
+  }
+
+  [Symbol.iterator]() {
+    return this.map[Symbol.iterator]()
+  }
+
+  entries() {
+    return this.map.entries()
+  }
+
+  keys() {
+    return this.map.keys()
+  }
+
+  values() {
+    return this.map.values()
   }
 }

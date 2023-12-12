@@ -15,12 +15,14 @@ import { authorizeUser } from './user-interceptor.js'
 // This route focuses on /projects
 const projectsRouter = express.Router({ mergeParams: true })
 projectsRouter.use(authenticateToken)
+projectsRouter.use(authorizeUser)
+
+projectsRouter.get('/', controller.getProjects)
 
 // This is a sub-route focused on /projects/<ID>
 const projectRouter = express.Router({ mergeParams: true })
 projectsRouter.use('/:projectId/', projectRouter)
 
-projectRouter.use(authorizeUser)
 projectRouter.use(authorizeProject)
 
 projectRouter.use('/bibliography', bibliographyRouter)
@@ -30,6 +32,8 @@ projectRouter.use('/matrices', matrixRouter)
 projectRouter.use('/taxa', taxaRouter)
 projectRouter.use('/users', projectUsersRouter)
 projectRouter.use('/views', mediaViewsRouter)
+
+projectRouter.get('/overview', controller.getOverview)
 
 projectRouter.post('/copyright', controller.setCopyright)
 

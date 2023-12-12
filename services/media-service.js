@@ -1,7 +1,20 @@
 import sequelizeConn from '../util/db.js'
 
-async function getImageProps(projectId, type, exemplarMediaId) {
-  // from the current observation, all publised project does have a exemplarMediaId
+export async function getMediaByIds(mediaIds) {
+  const [media] = await sequelizeConn.query(
+    `
+    SELECT project_id, media_id, media
+    FROM media_files
+    WHERE media_id IN (?)`,
+    {
+      replacements: [mediaIds],
+    }
+  )
+  return media
+}
+
+export async function getImageProps(projectId, type, exemplarMediaId) {
+  // From the current observation, all published project does have a exemplarMediaId
   const [rows] = exemplarMediaId
     ? await sequelizeConn.query(
         `
@@ -46,13 +59,13 @@ async function getImageProps(projectId, type, exemplarMediaId) {
       }
       return obj
     }
-    return null
+    return {}
   } catch (e) {
     console.log('getImageProp: ' + rows[0].media)
   }
 }
 
-async function getMediaFiles(projectId) {
+export async function getMediaFiles(projectId) {
   const [rows] = await sequelizeConn.query(
     "SELECT * FROM media_files WHERE project_id = ? AND media != ''",
     { replacements: [projectId] }
@@ -68,19 +81,6 @@ async function getMediaFiles(projectId) {
   }
 
   return rows
-}
-
-async function getMediaViews(projectId) {
-  let [rows] = await sequelizeConn.query(
-    'SELECT name FROM media_views WHERE project_id = ? ',
-    { replacements: [projectId] }
-  )
-
-  let res = []
-  for (var i in rows) {
-    res.push(rows[i].name)
-  }
-  return res
 }
 
 function getSpecimenName(row) {
@@ -174,5 +174,3 @@ function getSpecimenName(row) {
 function capitalizeFirstLetter(str) {
   return str.charAt(0).toUpperCase() + str.slice(1)
 }
-
-export { getImageProps, getMediaFiles, getMediaViews }
