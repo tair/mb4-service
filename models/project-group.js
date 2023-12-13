@@ -1,6 +1,11 @@
 import _sequelize from 'sequelize'
 const { Model } = _sequelize
 
+// TODO(kenzley: Delete this table since Project Groups was never fully
+//     implemented and requires more work to support. Morphobank V3 only
+//     supported sharing bibliographic references. However, only a few projects
+//     are grouped and it's a few citations. We can just copy the citations
+//     over and delete this concept from the database.
 export default class ProjectGroup extends Model {
   static init(sequelize, DataTypes) {
     return super.init(

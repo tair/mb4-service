@@ -136,6 +136,24 @@ export async function getCounts(matrixIds) {
   }
 }
 
+export async function getTaxaInMatrices(matrixIds) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT matrix_id, taxon_id 
+      FROM matrix_taxa_order
+      WHERE matrix_id IN (?)`,
+    { replacements: [matrixIds] }
+  )
+  const map = new Map()
+  for (const row of rows) {
+    if (!map.has(row.matrix_id)) {
+      map.set(row.matrix_id, [])
+    }
+    map.get(row.matrix_id).push(row.taxon_id)
+  }
+  return map
+}
+
 export async function getTaxaInMatrix(matrixId, partitionId = undefined) {
   const replacements = [matrixId]
   let join = ''

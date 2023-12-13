@@ -73,3 +73,13 @@ export function array_symmetric_difference(arr1, arr2) {
     .filter((x) => !arr2.includes(x))
     .concat(arr2.filter((x) => !arr1.includes(x)))
 }
+
+export function set_intersect(set1, set2) {
+  const results = new Set()
+  for (const value of set2) {
+    if (set1.has(value)) {
+      results.add(value)
+    }
+  }
+  return results
+}

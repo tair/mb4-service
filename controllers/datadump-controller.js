@@ -1,5 +1,5 @@
-import * as projectsService from '../services/projects-service.js'
-import * as statsService from '../services/stats-service.js'
+import * as projectsService from '../services/published-projects-service.js'
+import * as statsService from '../services/published-stats-service.js'
 import * as mediaService from '../services/media-service.js'
 import * as utilService from '../util/util.js'
 import * as projectDetailService from '../services/project-detail-service.js'
