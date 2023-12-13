@@ -1,6 +1,18 @@
 import sequelizeConn from '../util/db.js'
 
-async function getSpecimenDetails(projectId) {
+export async function getProjectSpecimens(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT s.*, ts.taxon_id
+      FROM specimens AS s
+      LEFT JOIN taxa_x_specimens AS ts ON s.specimen_id = ts.specimen_id
+      WHERE s.project_id = ?`,
+    { replacements: [projectId] }
+  )
+  return rows
+}
+
+export async function getSpecimenDetails(projectId) {
   const [rows] = await sequelizeConn.query(
     `
       SELECT s.reference_source, s.institution_code,s.user_id,
@@ -14,5 +26,3 @@ async function getSpecimenDetails(projectId) {
   )
   return rows
 }
-
-export { getSpecimenDetails }
