@@ -1,8 +1,8 @@
-import * as StatsService from '../services/stats-service.js'
+import * as statsService from '../services/published-stats-service.js'
 
-async function getProjectViewsForLast30Days(req, res) {
+export async function getProjectViewsForLast30Days(req, res) {
   try {
-    const result = await StatsService.getProjectViewsForLast30Days()
+    const result = await statsService.getProjectViewsForLast30Days()
     res.status(200).json(result)
   } catch (e) {
     console.error(
@@ -15,9 +15,9 @@ async function getProjectViewsForLast30Days(req, res) {
   }
 }
 
-async function getMediaViewsForLast30Days(req, res) {
+export async function getMediaViewsForLast30Days(req, res) {
   try {
-    const result = await StatsService.getMediaViewsForLast30Days()
+    const result = await statsService.getMediaViewsForLast30Days()
     res.status(200).json(result)
   } catch (e) {
     console.error(
@@ -30,9 +30,9 @@ async function getMediaViewsForLast30Days(req, res) {
   }
 }
 
-async function getMatrixDownloadsForLast30Days(req, res) {
+export async function getMatrixDownloadsForLast30Days(req, res) {
   try {
-    const result = await StatsService.getMatrixDownloadsForLast30Days()
+    const result = await statsService.getMatrixDownloadsForLast30Days()
     res.status(200).json(result)
   } catch (e) {
     console.error(
@@ -45,9 +45,9 @@ async function getMatrixDownloadsForLast30Days(req, res) {
   }
 }
 
-async function getDocDownloadsForLast30Days(req, res) {
+export async function getDocDownloadsForLast30Days(req, res) {
   try {
-    const result = await StatsService.getDocDownloadsForLast30Days()
+    const result = await statsService.getDocDownloadsForLast30Days()
     res.status(200).json(result)
   } catch (e) {
     console.error(
@@ -58,11 +58,4 @@ async function getDocDownloadsForLast30Days(req, res) {
       message: 'Error while fetching Doc downloads For Last 30 Days.',
     })
   }
-}
-
-export {
-  getProjectViewsForLast30Days,
-  getMediaViewsForLast30Days,
-  getMatrixDownloadsForLast30Days,
-  getDocDownloadsForLast30Days,
 }

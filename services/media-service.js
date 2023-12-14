@@ -3,8 +3,21 @@ import MediaFile from '../models/media-file.js'
 import User from '../models/user.js'
 import BibliographicReference from '../models/bibliographic-reference.js'
 
-async function getImageProps(projectId, type, exemplarMediaId) {
-  // from the current observation, all publised project does have a exemplarMediaId
+export async function getMediaByIds(mediaIds) {
+  const [media] = await sequelizeConn.query(
+    `
+    SELECT project_id, media_id, media
+    FROM media_files
+    WHERE media_id IN (?)`,
+    {
+      replacements: [mediaIds],
+    }
+  )
+  return media
+}
+
+export async function getImageProps(projectId, type, exemplarMediaId) {
+  // From the current observation, all published project does have a exemplarMediaId
   const [rows] = exemplarMediaId
     ? await sequelizeConn.query(
         `
@@ -47,14 +60,14 @@ async function getImageProps(projectId, type, exemplarMediaId) {
       }
       return obj
     }
-    return null
+    return {}
   } catch (e) {
     console.log('getImageProp error: ')
     console.log(e)
   }
 }
 
-async function getMediaFiles(projectId) {
+export async function getMediaFiles(projectId) {
   const [rows] = await sequelizeConn.query(
     `
       SELECT m.media_id, m.media, s.specimen_id, s.description, s.reference_source,
@@ -418,5 +431,3 @@ async function getPublishedDownloadsMap(projectId) {
 function capitalizeFirstLetter(str) {
   return str.charAt(0).toUpperCase() + str.slice(1)
 }
-
-export { getImageProps, getMediaFiles, getMediaViews }

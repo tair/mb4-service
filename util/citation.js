@@ -1,4 +1,4 @@
-export function getCitationText(record, authors, editors) {
+export function getCitationText(record) {
   const articleTitle = record.article_title ? record.article_title.trim() : ''
   const journalTitle = record.journal_title ? record.journal_title.trim() : ''
 
@@ -18,6 +18,10 @@ export function getCitationText(record, authors, editors) {
 
   let citation = ''
 
+  const authors = []
+  if (record.authors && record.authors.length) {
+    authors.push(...record.authors)
+  }
   if (authors) {
     const authorNames = getAuthors(authors)
     citation += authorNames + '. '
@@ -65,6 +69,10 @@ export function getCitationText(record, authors, editors) {
     citation += collation
   }
 
+  const editors = []
+  if (record.editors && record.editors.length) {
+    editors.push(...record.editors)
+  }
   if (editors) {
     const editorNames = getAuthors(editors)
     citation += (collation ? ', ' : ' in ') + editorNames + ' <i>ed</i>'
