@@ -4,7 +4,7 @@ import User from '../models/user.js'
 import BibliographicReference from '../models/bibliographic-reference.js'
 
 export async function getMediaByIds(mediaIds) {
-  if (!mediaIds) return []
+  if (!mediaIds || mediaIds.length == 0) return []
   const [media] = await sequelizeConn.query(
     `
     SELECT project_id, media_id, media
