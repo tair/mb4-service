@@ -137,6 +137,11 @@ export async function getCounts(matrixIds) {
 }
 
 export async function getTaxaInMatrices(matrixIds) {
+  const map = new Map()
+  if (matrixIds.length == 0) {
+    return map
+  }
+
   const [rows] = await sequelizeConn.query(
     `
       SELECT matrix_id, taxon_id 
@@ -144,7 +149,6 @@ export async function getTaxaInMatrices(matrixIds) {
       WHERE matrix_id IN (?)`,
     { replacements: [matrixIds] }
   )
-  const map = new Map()
   for (const row of rows) {
     if (!map.has(row.matrix_id)) {
       map.set(row.matrix_id, [])

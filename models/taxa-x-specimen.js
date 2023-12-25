@@ -1,6 +1,10 @@
 import _sequelize from 'sequelize'
 const { Model } = _sequelize
 
+// TODO(kenzley): We do not need this table. We can include the taxon_id
+//     directly into the specimens table since there should be a one-to-one
+//     mapping between specimen and their taxon. There are a few instances of
+//     one-to-many taxa but we can de-duplicate them and remove them.
 export default class TaxaXSpecimen extends Model {
   static init(sequelize, DataTypes) {
     return super.init(

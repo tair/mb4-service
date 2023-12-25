@@ -6,7 +6,7 @@ export async function getProjectStats(projectId) {
     'SELECT * FROM stats_projects_overview WHERE project_id = ?',
     { replacements: [projectId] }
   )
-  return rows[0]
+  return rows.length ? rows[0] : []
 }
 
 export async function getTaxaStats(projectId) {
