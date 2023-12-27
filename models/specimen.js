@@ -80,8 +80,11 @@ export default class Specimen extends Model {
             ],
           },
         },
+        // TODO(kenzley): This was used as the UUID for an import but it is not
+        //     used anymore. We should consider deleting this from the databse.
         uuid: {
           type: DataTypes.STRING(255),
+          defaultValue: '',
           allowNull: false,
         },
         occurrence_id: {
