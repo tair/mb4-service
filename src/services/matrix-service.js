@@ -1,5 +1,5 @@
 import sequelizeConn from '../util/db.js'
-import { Table } from '../util/table.js'
+import { Table } from '../lib/table.js'
 import { models } from '../models/init-models.js'
 
 export async function getMatrix(matrixId) {
