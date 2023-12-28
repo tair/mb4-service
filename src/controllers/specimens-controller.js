@@ -71,7 +71,33 @@ export async function createSpecimen(req, res) {
 }
 
 export async function createSpecimens(req, res) {
-  res.status(200).json({ message: 'Not yet implemented' })
+  const specimens = req.body.specimens
+
+  try {
+    const transaction = await sequelizeConn.transaction()
+    for (const values of taxa) {
+      const taxon = models.Taxon.build(values)
+      taxon.set({
+        project_id: req.project.project_id,
+        user_id: req.user.user_id,
+      })
+      await taxon.save({
+        transaction,
+        user: req.user,
+      })
+      results.push(taxon)
+    }
+    await transaction.commit()
+    res.status(200).json({
+      taxa: taxa,
+      specimens: specimens
+    })
+  } catch (e) {
+    console.log(e)
+    res
+      .status(500)
+      .json({ message: 'Failed to create taxon with server error' })
+  }
 }
 
 export async function deleteSpecimens(req, res) {
