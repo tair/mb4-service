@@ -5,9 +5,9 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon --ignore data/ --ignore db-dev/ server.js",
-    "debug": "nodemon --inspect=0.0.0.0:9229 --ignore data/ --ignore db-dev/ --trace-uncaught server.js",
+    "start": "node src/server.js",
+    "dev": "nodemon --ignore data/ --ignore db-dev/ src/server.js",
+    "debug": "nodemon --inspect=0.0.0.0:9229 --ignore data/ --ignore db-dev/ --trace-uncaught src/server.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:one": "node --experimental-vm-modules node_modules/jest/bin/jest.js -t",
     "lint": "eslint . --ext .js",
