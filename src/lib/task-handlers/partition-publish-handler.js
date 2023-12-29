@@ -1,6 +1,6 @@
 import { Handler, HandlerErrors } from './handler.js'
 import { models } from '../../models/init-models.js'
-import { PartitionProjectPublisher } from '../PartitionProjectPublisher.js'
+import { PartitionProjectPublisher } from '../partition-project-publisher.js'
 
 export class PartitionPublishHandler extends Handler {
     constructor() {
