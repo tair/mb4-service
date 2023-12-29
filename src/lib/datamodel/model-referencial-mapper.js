@@ -247,11 +247,7 @@ class SpecimensConfig {
   }
 
   getModels() {
-    return [
-      models.SpecimensXBibliographicReference,
-      models.TaxaXSpecimen,
-      models.MediaFile,
-    ]
+    return [models.SpecimensXBibliographicReference, models.MediaFile]
   }
 
   getReferencedModels() {
@@ -274,8 +270,6 @@ class SpecimensConfig {
     switch (model) {
       case models.SpecimensXBibliographicReference:
         return 'reference_id'
-      case models.TaxaXSpecimen:
-        return 'taxon_id'
       default:
         return null
     }
