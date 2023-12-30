@@ -1,9 +1,10 @@
 import { Datamodel } from "./datamodel/datamodel";
 import sequelizeConn from '../util/db.js'
 import { UserError } from "./user-errors";
+import { BaseModelDuplicator } from "./base-model-duplicator";
 
 
-export class PartitionProjectPublisher {
+export class PartitionProjectPublisher extends BaseModelDuplicator {
     
     constructor(mainTableName, itemId, partitionId) {
         super(mainTableName, itemId);
