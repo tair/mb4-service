@@ -1,6 +1,8 @@
 import sequelizeConn from '../util/db.js'
 import * as specimenService from '../services/specimen-service.js'
+import * as taxaService from '../services/taxa-service.js'
 import { models } from '../models/init-models.js'
+import { getTaxonHash } from '../models/taxon.js'
 import {
   ModelRefencialMapper,
   ModelReferencialConfig,
@@ -71,27 +73,85 @@ export async function createSpecimen(req, res) {
 }
 
 export async function createSpecimens(req, res) {
-  const specimens = req.body.specimens
-
+  const projectId = req.project.project_id
+  const taxaMap = new Map()
   try {
+    const results = {
+      taxa: [],
+      specimens: [],
+    }
     const transaction = await sequelizeConn.transaction()
-    for (const values of taxa) {
+    // Create the values from the user and store the hash so that they can be
+    // referenced later.
+    const hashes = []
+    for (const [key, values] of Object.entries(req.body.taxa)) {
       const taxon = models.Taxon.build(values)
+      const hash = getTaxonHash(taxon)
       taxon.set({
+        project_id: projectId,
+        user_id: req.user.user_id,
+        taxon_hash: hash,
+      })
+      taxaMap.set(key, taxon)
+      hashes.push(hash)
+    }
+
+    // Search the database for the taxon hashes so that we can use a
+    // pre-existing taxon instead of a creating a new taxon. If there is no
+    // record in the database, we'll create a new taxon and return the values
+    // to the user.
+    const hashToTaxonIds = await taxaService.getTaxonIdsByHash(
+      projectId,
+      hashes
+    )
+    const hashToTaxonIdMap = new Map(
+      hashToTaxonIds.map((row) => [row.taxon_hash, row.taxon_id])
+    )
+    for (const taxon of taxaMap.values()) {
+      if (hashToTaxonIdMap.has(taxon.taxon_hash)) {
+        const taxonId = hashToTaxonIdMap.get(taxon.taxon_hash)
+        taxon.taxon_id = taxonId
+      } else {
+        await taxon.save({
+          transaction,
+          user: req.user,
+        })
+        // Insert the hash into the map so that other entries which have the
+        // same hash will not create new elements.
+        hashToTaxonIdMap.set(taxon.taxon_hash, taxon.taxon_id)
+        results.taxa.push(taxon)
+      }
+    }
+
+    for (const values of req.body.specimens) {
+      const specimen = models.Specimen.build(values)
+      specimen.set({
         project_id: req.project.project_id,
         user_id: req.user.user_id,
       })
-      await taxon.save({
+      await specimen.save({
         transaction,
         user: req.user,
       })
-      results.push(taxon)
+      let taxonId = undefined
+      if (values.taxon_hash) {
+        taxonId = taxaMap.get(values.taxon_hash).taxon_id
+        await models.TaxaXSpecimen.create(
+          {
+            taxon_id: taxonId,
+            specimen_id: specimen.specimen_id,
+            user_id: req.user.user_id,
+          },
+          {
+            transaction,
+            user: req.user,
+          }
+        )
+      }
+      results.specimens.push(convertSpecimenResponse(specimen, taxonId))
     }
     await transaction.commit()
-    res.status(200).json({
-      taxa: taxa,
-      specimens: specimens
-    })
+    res.status(200).json(results)
   } catch (e) {
     console.log(e)
     res
