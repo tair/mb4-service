@@ -7,6 +7,7 @@ bibliographyRouter.get('/', controller.getBibliographies)
 bibliographyRouter.post('/create', controller.createBibliographies)
 bibliographyRouter.post('/delete', controller.deleteBibliographies)
 bibliographyRouter.post('/edit', controller.editBibliographies)
+bibliographyRouter.post('/search', controller.search)
 
 bibliographyRouter.get('/:referenceId', controller.getBibliography)
 bibliographyRouter.post('/:referenceId/edit', controller.editBibliography)

@@ -137,6 +137,19 @@ export async function editBibliography(req, res) {
   })
 }
 
+export async function search(req, res) {
+  // TODO(kenzley): Implement a real search instead of a random selection.
+  const projectId = req.project.project_id
+  const bibliographies = await service.getBibliographiesByProjectId(projectId)
+  const bibliographyIds = bibliographies
+    .map((b) => b.reference_id)
+    .sort(() => 0.5 - Math.random())
+    .splice(0, 15)
+  res.status(200).json({
+    results: bibliographyIds,
+  })
+}
+
 function sanitizeBibliographyRequest(body) {
   const obj = {}
   const attributes = models.BibliographicReference.getAttributes()

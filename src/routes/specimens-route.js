@@ -12,4 +12,12 @@ specimenRouter.post('/search', controller.search)
 
 specimenRouter.post('/:specimenId/edit', controller.editSpecimen)
 
+specimenRouter.get('/:specimenId/citations', controller.getCitations)
+specimenRouter.post('/:specimenId/citations/create', controller.createCitation)
+specimenRouter.post(
+  '/:specimenId/citations/:citationId/edit',
+  controller.editCitation
+)
+specimenRouter.post('/:specimenId/citations/delete', controller.deleteCitations)
+
 export default specimenRouter
