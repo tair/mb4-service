@@ -43,8 +43,9 @@ export async function getProjects(req, res) {
 
   const media = await mediaService.getMediaByIds(mediaIds)
   for (const row of media) {
-    const projectId = row.project_id
-    resultMap.get(projectId).media = getMedia(row.media, 'thumbnail')
+    if (row.media) {
+      resultMap.get(row.project_id).media = getMedia(row.media, 'thumbnail')
+    }
   }
 
   const projectUsers = await projectUserService.getUsersInProjects(projectIds)
