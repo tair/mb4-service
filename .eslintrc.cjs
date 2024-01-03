@@ -17,6 +17,10 @@ module.exports = {
     "plugins": [
         "@typescript-eslint"
     ],
+    "ignorePatterns": [
+      "dist/*",
+      "migrations/*"
+    ],
     "rules": {
     }
 }

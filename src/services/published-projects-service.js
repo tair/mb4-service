@@ -87,9 +87,9 @@ function getCoverUrlByJournalTitle(journalTitle) {
   if (journalTitle) {
     const cleanTitle = journalTitle
       .replace(/\s/g, '_')
-      .replace(/\:/g, '')
+      .replace(/:/g, '')
       .replace(/\./g, '')
-      .replace(/\&/g, 'and')
+      .replace(/&/g, 'and')
       .toLowerCase()
     const urlByTitle = `https://morphobank.org/themes/default/graphics/journalIcons/${cleanTitle}.jpg`
     return urlByTitle

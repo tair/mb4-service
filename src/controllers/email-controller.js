@@ -16,7 +16,7 @@ const ses = new SESClient({
   },
 })
 
-async function sendContactUsForm(req, res, next) {
+export async function sendContactUsForm(req, res) {
   const errors = validationResult(req.body)
   if (!errors.isEmpty()) {
     const error = new Error('Validation failed.')
@@ -163,5 +163,3 @@ ${emailBody}
     console.error('Failed to send failure notification email', error)
   }
 }
-
-export { sendContactUsForm }
