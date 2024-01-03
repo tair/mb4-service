@@ -1,7 +1,8 @@
 import sequelizeConn from '../util/db.js'
 import { CELL_BATCH_TYPES } from '../util/cells.js'
 import { MATRIX_OPTIONS } from '../util/matrix.js'
-import { Table } from '../util/table.js'
+import { Table } from '../lib/table.js'
+import { HyperTable } from '../lib/hyper-table.js'
 import { array_difference, array_intersect, time } from '../util/util.js'
 import { getCitationText } from '../util/citation.js'
 import { getMedia } from '../util/media.js'
@@ -120,13 +121,13 @@ export default class MatrixEditorService {
       GROUP BY cxm.character_id, cxm.taxon_id, cxm.media_id`,
       { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
     )
-    const labelCountMap = new Table()
+    const labelCounts = new HyperTable()
     for (const row of labelCountRows) {
       const mediaId = parseInt(row.media_id)
       const taxonId = parseInt(row.taxon_id)
       const characterId = parseInt(row.character_id)
       const labelCount = parseInt(row.label_count)
-      labelCountMap.set(taxonId, characterId, mediaId, labelCount)
+      labelCounts.set(taxonId, characterId, mediaId, labelCount)
     }
 
     const [mediaRows] = await sequelizeConn.query(
@@ -158,7 +159,7 @@ export default class MatrixEditorService {
         character_id: characterId,
         tiny: getMedia(row.media, 'tiny'),
         icon: getMedia(row.media, 'icon'),
-        label_count: labelCountMap.get(taxonId, characterId, mediaId) ?? 0,
+        label_count: labelCounts.get(taxonId, characterId, mediaId) ?? 0,
       })
     }
 
@@ -402,7 +403,7 @@ export default class MatrixEditorService {
       { replacements: [this.matrix.matrix_id] }
     )
 
-    const labelCounts = new Table()
+    const labelCounts = new HyperTable()
     for (const row of labelCountRows) {
       const taxonId = parseInt(row.taxon_id)
       const characterId = parseInt(row.character_id)
@@ -4854,7 +4855,7 @@ export default class MatrixEditorService {
       GROUP BY cxm.character_id, cxm.taxon_id, cxm.media_id`,
       { replacements: [this.matrix.matrix_id, this.user.user_id, changedTime] }
     )
-    const labelCounts = new Table()
+    const labelCounts = new HyperTable()
     for (const row of labelCountsRows) {
       const taxonId = parseInt(row.taxon_id)
       const characterId = parseInt(row.character_id)
@@ -5516,7 +5517,7 @@ export default class MatrixEditorService {
   }
 
   async getCellsStates(taxaIds, characterIds) {
-    const stateIds = new Table()
+    const stateIds = new HyperTable()
     if (taxaIds.length == 0 || characterIds.length == 0) {
       return stateIds
     }

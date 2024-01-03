@@ -1,5 +1,5 @@
 import sequelizeConn from '../util/db.js'
-import { Multimap } from '../util/multimap.js'
+import { Multimap } from '../lib/multimap.js'
 
 export async function getProjectStats(projectId) {
   const [rows] = await sequelizeConn.query(
