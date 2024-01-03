@@ -44,9 +44,9 @@ export async function getVoucheredSpecimen(taxonId) {
   const [rows] = await sequelizeConn.query(
     `
     SELECT s.specimen_id
-	  FROM specimen AS s
-		INNER JOIN taxa_x_specimens AS txs ON s.specimen_id = txs.specimen_id
-		WHERE s.reference_source = 1 AND t.taxon_id = ?`,
+    FROM specimen AS s
+    INNER JOIN taxa_x_specimens AS txs ON s.specimen_id = txs.specimen_id
+    WHERE s.reference_source = 1 AND t.taxon_id = ?`,
     { replacements: [taxonId] }
   )
   return rows.map((r) => r.specimen_id)
@@ -61,9 +61,9 @@ export async function getUnvoucheredSpecimen(
   const [rows] = await sequelizeConn.query(
     `
     SELECT s.specimen_id
-		FROM specimens s
-		INNER JOIN taxa_x_specimens AS txs ON s.specimen_id = txs.specimen_id
-		WHERE
+    FROM specimens s
+    INNER JOIN taxa_x_specimens AS txs ON s.specimen_id = txs.specimen_id
+    WHERE
       s.reference_source = 0 AND
       s.institution_code = ? AND
       s.collection_code = ?  AND
@@ -71,4 +71,36 @@ export async function getUnvoucheredSpecimen(
     { replacements: [taxonId, institutionCode, collectionCode, catalogNumber] }
   )
   return rows.map((r) => r.specimen_id)
+}
+
+export async function getSpecimenCitations(projectId, specimenId) {
+  const [rows] = await sequelizeConn.query(
+    `
+    SELECT
+      sxbr.link_id, sxbr.reference_id, sxbr.specimen_id, sxbr.pp, sxbr.notes,
+      sxbr.user_id
+    FROM specimens_x_bibliographic_references AS sxbr
+    INNER JOIN specimens AS s ON s.specimen_id = sxbr.specimen_id
+    WHERE s.project_id = ? AND s.specimen_id = ?`,
+    { replacements: [projectId, specimenId] }
+  )
+  return rows
+}
+
+export async function isSpecimenCitationsInProject(
+  projectId,
+  specimenId,
+  citationIds
+) {
+  const [[{ count }]] = await sequelizeConn.query(
+    `
+    SELECT COUNT(*) AS count
+    FROM specimens_x_bibliographic_references AS sxbr
+    INNER JOIN specimens AS s ON s.specimen_id = sxbr.specimen_id
+    WHERE s.project_id = ? AND s.specimen_id = ? AND sxbr.link_id IN (?)`,
+    {
+      replacements: [projectId, specimenId, citationIds],
+    }
+  )
+  return count == citationIds.length
 }
