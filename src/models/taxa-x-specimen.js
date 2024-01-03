@@ -36,6 +36,7 @@ export default class TaxaXSpecimen extends Model {
         notes: {
           type: DataTypes.TEXT,
           allowNull: false,
+          defaultValue: '',
         },
         user_id: {
           type: DataTypes.INTEGER.UNSIGNED,
