@@ -1,6 +1,6 @@
 import { FileUploader } from '../file-uploader.js'
 import { TAXA_FIELD_NAMES } from '../../util/taxa.js'
-import { Table } from '../../util/table.js'
+import { Table } from '../table.js'
 import { models } from '../../models/init-models.js'
 import { getCells, getCellNotes } from '../../services/matrix-service.js'
 import { getMaxCharacterPositionForMatrix } from '../../services/matrix-character-order-service.js'

@@ -1,5 +1,5 @@
 import { BaseModelScanner } from './base-model-scanner.js'
-import { Table } from '../util/table.js'
+import { Table } from './table.js'
 import { QueryTypes } from 'sequelize'
 import { getDirectoryHash, getMagicNumber } from '../util/file.js'
 import { normalizeJson } from '../util/json.js'

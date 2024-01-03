@@ -345,10 +345,10 @@ export default class Taxon extends Model {
         ],
         hooks: {
           beforeCreate: (record) => {
-            record.dataValues.taxon_hash = getColumnHash(record)
+            record.dataValues.taxon_hash = getTaxonHash(record)
           },
           beforeUpdate: (record) => {
-            record.dataValues.taxon_hash = getColumnHash(record)
+            record.dataValues.taxon_hash = getTaxonHash(record)
           },
         },
       }
@@ -356,7 +356,7 @@ export default class Taxon extends Model {
   }
 }
 
-function getColumnHash(record) {
+export function getTaxonHash(record) {
   const columns = []
   for (const fieldName of TAXA_FIELD_NAMES) {
     if (record[fieldName]) {
