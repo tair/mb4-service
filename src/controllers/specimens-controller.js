@@ -1,8 +1,12 @@
 import sequelizeConn from '../util/db.js'
 import * as specimenService from '../services/specimen-service.js'
+<<<<<<< HEAD
 import * as taxaService from '../services/taxa-service.js'
 import { models } from '../models/init-models.js'
 import { getTaxonHash } from '../models/taxon.js'
+=======
+import { models } from '../models/init-models.js'
+>>>>>>> main
 import {
   ModelRefencialMapper,
   ModelReferencialConfig,
@@ -73,6 +77,7 @@ export async function createSpecimen(req, res) {
 }
 
 export async function createSpecimens(req, res) {
+<<<<<<< HEAD
   const projectId = req.project.project_id
   const taxaMap = new Map()
   try {
@@ -158,6 +163,9 @@ export async function createSpecimens(req, res) {
       .status(500)
       .json({ message: 'Failed to create taxon with server error' })
   }
+=======
+  res.status(200).json({ message: 'Not yet implemented' })
+>>>>>>> main
 }
 
 export async function deleteSpecimens(req, res) {
