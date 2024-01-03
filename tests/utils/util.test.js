@@ -1,6 +1,6 @@
 import { describe, expect, test } from '@jest/globals'
 
-import * as util from '../../util/util'
+import * as util from 'util/util'
 
 describe('Util Tests', () => {
   test('Test intersection', () => {

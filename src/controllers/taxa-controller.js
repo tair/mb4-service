@@ -9,7 +9,7 @@ import {
   ModelReferencialConfig,
 } from '../lib/datamodel/model-referencial-mapper.js'
 import { array_difference, set_intersect } from '../util/util.js'
-import { Multimap } from '../util/multimap.js'
+import { Multimap } from '../lib/multimap.js'
 
 export async function getTaxa(req, res) {
   const projectId = req.params.projectId

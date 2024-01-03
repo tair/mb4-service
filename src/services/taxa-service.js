@@ -54,6 +54,17 @@ export async function getTaxaInProject(projectId) {
   return rows
 }
 
+export async function getTaxonIdsByHash(projectId, hashes) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT taxon_id, taxon_hash
+      FROM taxa
+      WHERE project_id = ? AND taxon_hash IN (?)`,
+    { replacements: [projectId, hashes] }
+  )
+  return rows
+}
+
 export async function isTaxaInProject(taxaIds, projectId) {
   const [[{ count }]] = await sequelizeConn.query(
     `

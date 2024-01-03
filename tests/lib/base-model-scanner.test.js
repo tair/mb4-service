@@ -1,7 +1,7 @@
 import { describe, expect, test } from '@jest/globals'
 
-import { BaseModelScanner } from '../../lib/base-model-scanner'
-import { models } from '../../models/init-models.js'
+import { BaseModelScanner } from 'lib/base-model-scanner'
+import { models } from 'models/init-models.js'
 
 describe('BaseModelScannerTests', () => {
   test('Test that correct tables are returned', () => {

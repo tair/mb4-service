@@ -1,8 +1,8 @@
 import { describe, expect, test } from '@jest/globals'
 
-import { Datamodel } from '../../../lib/datamodel/datamodel'
-import { TABLE_NUMBERS } from '../../../lib/table-number.js'
-import { models } from '../../../models/init-models.js'
+import { Datamodel } from 'lib/datamodel/datamodel'
+import { TABLE_NUMBERS } from 'lib/table-number.js'
+import { models } from 'models/init-models.js'
 
 describe('DatamodelTests', () => {
   test('Test getTableNames contains tables', () => {
@@ -23,8 +23,8 @@ describe('DatamodelTests', () => {
   test('Test getPrimaryKey', () => {
     const datamodel = Datamodel.getInstance()
 
-    expect(datamodel.getPrimaryKey(models.Cell)).toBe('cell_id')
-    expect(datamodel.getPrimaryKey(models.Taxon)).toBe('taxon_id')
+    expect(datamodel.getPrimaryKey(models.Cell)).toStrictEqual(['cell_id'])
+    expect(datamodel.getPrimaryKey(models.Taxon)).toStrictEqual(['taxon_id'])
   })
 
   test('Test getTableByName', () => {

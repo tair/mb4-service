@@ -1,6 +1,6 @@
 import { describe, expect, test } from '@jest/globals'
 
-import { PriorityQueue } from '../../lib/priority-queue'
+import { PriorityQueue } from 'lib/priority-queue'
 
 describe('PriorityQueueTests', () => {
   test('Test insert with reverse order', () => {
