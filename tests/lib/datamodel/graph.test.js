@@ -1,6 +1,6 @@
 import { describe, expect, test } from '@jest/globals'
 
-import { Graph } from '../../../lib/datamodel/graph'
+import { Graph } from 'lib/datamodel/graph'
 
 describe('Graph Tests', () => {
   test('hasNode', () => {

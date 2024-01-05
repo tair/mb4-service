@@ -66,7 +66,7 @@ export class Datamodel {
    * Returns field name of primary key for table
    *
    * @param {model} tableName The name of the table
-   * @return {string} The name of the primary key
+   * @return {Array<string>} A list of the names of the primary keys
    */
   getPrimaryKey(model) {
     const primaryKeys = []

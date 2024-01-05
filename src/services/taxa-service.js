@@ -54,6 +54,17 @@ export async function getTaxaInProject(projectId) {
   return rows
 }
 
+export async function getTaxonIdsByHash(projectId, hashes) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT taxon_id, taxon_hash
+      FROM taxa
+      WHERE project_id = ? AND taxon_hash IN (?)`,
+    { replacements: [projectId, hashes] }
+  )
+  return rows
+}
+
 export async function isTaxaInProject(taxaIds, projectId) {
   const [[{ count }]] = await sequelizeConn.query(
     `
@@ -75,4 +86,36 @@ export async function getMatrixIds(taxaIds) {
     }
   )
   return rows
+}
+
+export async function getTaxonCitations(projectId, taxonId) {
+  const [rows] = await sequelizeConn.query(
+    `
+    SELECT
+      txbr.link_id, txbr.reference_id, txbr.taxon_id, txbr.pp, txbr.notes,
+      txbr.user_id
+    FROM taxa_x_bibliographic_references AS txbr
+    INNER JOIN taxa AS t ON t.taxon_id = txbr.taxon_id
+    WHERE t.project_id = ? AND t.taxon_id = ?`,
+    { replacements: [projectId, taxonId] }
+  )
+  return rows
+}
+
+export async function isTaxonCitationsInProject(
+  projectId,
+  taxonId,
+  citationIds
+) {
+  const [[{ count }]] = await sequelizeConn.query(
+    `
+    SELECT COUNT(*) AS count
+    FROM taxa_x_bibliographic_references AS txbr
+    INNER JOIN taxa AS t ON t.taxon_id = txbr.taxon_id
+    WHERE t.project_id = ? AND t.taxon_id = ? AND txbr.link_id IN (?)`,
+    {
+      replacements: [projectId, taxonId, citationIds],
+    }
+  )
+  return count == citationIds.length
 }

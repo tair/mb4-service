@@ -24,6 +24,7 @@ export default class Specimen extends Model {
         description: {
           type: DataTypes.TEXT,
           allowNull: false,
+          defaultValue: '',
         },
         institution_code: {
           type: DataTypes.STRING(100),
@@ -71,6 +72,7 @@ export default class Specimen extends Model {
         reference_source: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          defaultValue: 0,
           validate: {
             isIn: [
               [
@@ -90,6 +92,7 @@ export default class Specimen extends Model {
         occurrence_id: {
           type: DataTypes.STRING(255),
           allowNull: false,
+          defaultValue: '',
         },
       },
       {

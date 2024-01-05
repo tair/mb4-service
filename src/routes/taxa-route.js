@@ -12,4 +12,9 @@ taxaRouter.post('/search', controller.search)
 
 taxaRouter.post('/:taxonId/edit', controller.editTaxon)
 
+taxaRouter.get('/:taxonId/citations', controller.getCitations)
+taxaRouter.post('/:taxonId/citations/create', controller.createCitation)
+taxaRouter.post('/:taxonId/citations/:citationId/edit', controller.editCitation)
+taxaRouter.post('/:taxonId/citations/delete', controller.deleteCitations)
+
 export default taxaRouter

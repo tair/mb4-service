@@ -66,7 +66,7 @@ export async function getDocDownloadsForLast30Days() {
   return rows
 }
 
-export async function getProjectViews(projectId, matrixMap, folioMap) {
+export async function getProjectViews(projectId) {
   const [rows] = await sequelizeConn.query(
     `
       SELECT hit_type, row_id, count(*) as count

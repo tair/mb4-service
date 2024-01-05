@@ -9,7 +9,7 @@ import {
   ModelReferencialConfig,
 } from '../lib/datamodel/model-referencial-mapper.js'
 import { array_difference, set_intersect } from '../util/util.js'
-import { Multimap } from '../util/multimap.js'
+import { Multimap } from '../lib/multimap.js'
 
 export async function getTaxa(req, res) {
   const projectId = req.params.projectId
@@ -259,4 +259,164 @@ export async function deleteTaxa(req, res) {
   })
   await transaction.commit()
   res.status(200).json({ taxon_ids: taxonIds })
+}
+
+export async function getCitations(req, res) {
+  const projectId = req.project.project_id
+  const taxonId = req.params.taxonId
+  const citations = await taxaService.getTaxonCitations(projectId, taxonId)
+  res.status(200).json({
+    citations,
+  })
+}
+
+export async function createCitation(req, res) {
+  const projectId = req.project.project_id
+  const taxonId = req.params.taxonId
+
+  const taxon = await models.Taxon.findByPk(taxonId)
+  if (taxon == null) {
+    res.status(404).json({ messeage: 'Unable to find taxon' })
+    return
+  }
+
+  if (taxon.project_id != projectId) {
+    res
+      .status(403)
+      .json({ messeage: 'Taxon is not assoicated with this project' })
+    return
+  }
+
+  const values = req.body.citation
+  const referenceId = req.body.citation.reference_id
+  const bibliography = await models.BibliographicReference.findByPk(referenceId)
+  if (bibliography == null) {
+    res.status(404).json({ messeage: 'Unable to find bibliography' })
+    return
+  }
+
+  if (bibliography.project_id != projectId) {
+    res
+      .status(403)
+      .json({ messeage: 'Bibliography is not assoicated with this project' })
+    return
+  }
+
+  const citation = await models.TaxaXBibliographicReference.build(values)
+  citation.set({
+    taxon_id: taxon.taxon_id,
+    reference_id: bibliography.reference_id,
+    user_id: req.user.user_id,
+  })
+
+  try {
+    const transaction = await sequelizeConn.transaction()
+    await citation.save({
+      transaction,
+      user: req.user,
+    })
+    await transaction.commit()
+  } catch (e) {
+    console.log(e)
+    res
+      .status(500)
+      .json({ message: 'Failed to create citation with server error' })
+    return
+  }
+
+  res.status(200).json({ citation })
+}
+
+export async function editCitation(req, res) {
+  const projectId = req.project.project_id
+  const taxonId = req.params.taxonId
+  const citationId = req.params.citationId
+
+  const taxon = await models.Taxon.findByPk(taxonId)
+  if (taxon == null) {
+    res.status(404).json({ messeage: 'Unable to find taxon' })
+    return
+  }
+
+  if (taxon.project_id != projectId) {
+    res
+      .status(403)
+      .json({ messeage: 'Taxon is not assoicated with this project' })
+    return
+  }
+
+  const citation = await models.TaxaXBibliographicReference.findByPk(citationId)
+  if (citation == null) {
+    res.status(404).json({ messeage: 'Unable to find citation' })
+    return
+  }
+
+  const values = req.body.citation
+  const referenceId = req.body.citation.reference_id
+  const bibliography = await models.BibliographicReference.findByPk(referenceId)
+  if (bibliography == null) {
+    res.status(404).json({ messeage: 'Unable to find bibliography' })
+    return
+  }
+
+  if (bibliography.project_id != projectId) {
+    res
+      .status(403)
+      .json({ messeage: 'Bibliography is not assoicated with this project' })
+    return
+  }
+
+  for (const key in values) {
+    citation.set(key, values[key])
+  }
+  try {
+    const transaction = await sequelizeConn.transaction()
+    await citation.save({
+      transaction,
+      user: req.user,
+    })
+    await transaction.commit()
+  } catch (e) {
+    console.log(e)
+    res
+      .status(500)
+      .json({ message: 'Failed to create citation with server error' })
+    return
+  }
+
+  res.status(200).json({ citation })
+}
+
+export async function deleteCitations(req, res) {
+  const projectId = req.project.project_id
+  const taxonId = req.params.taxonId
+  const citationIds = req.body.citation_ids
+
+  const inProject = await taxaService.isTaxonCitationsInProject(
+    projectId,
+    taxonId,
+    citationIds
+  )
+  if (!inProject) {
+    return res.status(400).json({
+      message: 'Not all taxa are in the specified project',
+    })
+  }
+  const transaction = await sequelizeConn.transaction()
+  try {
+    await models.TaxaXBibliographicReference.destroy({
+      where: {
+        link_id: citationIds,
+      },
+      transaction: transaction,
+      individualHooks: true,
+      user: req.user,
+    })
+    await transaction.commit()
+    res.status(200).json({ citation_ids: citationIds })
+  } catch (e) {
+    await transaction.rollback()
+    res.status(200).json({ message: "Error deleting taxa's citations" })
+    console.log('Error deleting citations', e)
+  }
 }
