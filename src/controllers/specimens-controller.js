@@ -10,9 +10,7 @@ import {
 
 export async function getSpecimens(req, res) {
   const projectId = req.params.projectId
-  const [specimens] = await Promise.all([
-    specimenService.getProjectSpecimens(projectId),
-  ])
+  const specimens = await specimenService.getProjectSpecimens(projectId)
   res.status(200).json({
     specimens: specimens.map((s) => convertSpecimenResponse(s, s.taxon_id)),
   })
@@ -360,14 +358,14 @@ export async function createCitation(req, res) {
 
   const specimen = await models.Specimen.findByPk(specimenId)
   if (specimen == null) {
-    res.status(404).json({ messeage: 'Unable to find specimen' })
+    res.status(404).json({ message: 'Unable to find specimen' })
     return
   }
 
   if (specimen.project_id != projectId) {
     res
       .status(403)
-      .json({ messeage: 'Specimen is not assoicated with this project' })
+      .json({ message: 'Specimen is not assoicated with this project' })
     return
   }
 
@@ -375,18 +373,18 @@ export async function createCitation(req, res) {
   const referenceId = req.body.citation.reference_id
   const bibliography = await models.BibliographicReference.findByPk(referenceId)
   if (bibliography == null) {
-    res.status(404).json({ messeage: 'Unable to find bibliography' })
+    res.status(404).json({ message: 'Unable to find bibliography' })
     return
   }
 
   if (bibliography.project_id != projectId) {
     res
       .status(403)
-      .json({ messeage: 'Bibliography is not assoicated with this project' })
+      .json({ message: 'Bibliography is not assoicated with this project' })
     return
   }
 
-  const citation = await models.SpecimensXBibliographicReference.build(values)
+  const citation = models.SpecimensXBibliographicReference.build(values)
   citation.set({
     specimen_id: specimen.specimen_id,
     reference_id: bibliography.reference_id,
@@ -418,22 +416,22 @@ export async function editCitation(req, res) {
 
   const specimen = await models.Specimen.findByPk(specimenId)
   if (specimen == null) {
-    res.status(404).json({ messeage: 'Unable to find specimen' })
+    res.status(404).json({ message: 'Unable to find specimen' })
     return
   }
 
   if (specimen.project_id != projectId) {
     res
       .status(403)
-      .json({ messeage: 'Specimen is not assoicated with this project' })
+      .json({ message: 'Specimen is not assoicated with this project' })
     return
   }
 
   const citation = await models.SpecimensXBibliographicReference.findByPk(
     citationId
   )
-  if (citation == null) {
-    res.status(404).json({ messeage: 'Unable to find citation' })
+  if (citation == null || citation.specimen_id != specimenId) {
+    res.status(404).json({ message: 'Unable to find citation' })
     return
   }
 
@@ -441,14 +439,14 @@ export async function editCitation(req, res) {
   const referenceId = req.body.citation.reference_id
   const bibliography = await models.BibliographicReference.findByPk(referenceId)
   if (bibliography == null) {
-    res.status(404).json({ messeage: 'Unable to find bibliography' })
+    res.status(404).json({ message: 'Unable to find bibliography' })
     return
   }
 
   if (bibliography.project_id != projectId) {
     res
       .status(403)
-      .json({ messeage: 'Bibliography is not assoicated with this project' })
+      .json({ message: 'Bibliography is not assoicated with this project' })
     return
   }
 

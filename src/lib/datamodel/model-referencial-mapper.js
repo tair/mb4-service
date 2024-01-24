@@ -247,11 +247,11 @@ class SpecimensConfig {
   }
 
   getModels() {
-    return [models.SpecimensXBibliographicReference, models.MediaFile]
+    return [models.SpecimensXBibliographicReference]
   }
 
   getReferencedModels() {
-    return []
+    return [models.MediaFile]
   }
 
   getNumericReferencedModels() {
@@ -307,6 +307,54 @@ class DocumentsConfig {
   }
 }
 
+class MediaConfig {
+  getBaseModel() {
+    return models.MediaFile
+  }
+
+  getModels() {
+    return [
+      models.MediaFilesXBibliographicReference,
+      models.MediaFilesXDocument,
+      models.FoliosXMediaFile,
+      models.CellsXMedium,
+      models.TaxaXMedium,
+      models.CharactersXMedium,
+    ]
+  }
+
+  getReferencedModels() {
+    return []
+  }
+
+  getNumericReferencedModels() {
+    return []
+  }
+
+  getBaseModelColumName() {
+    return 'media_id'
+  }
+
+  getModelColumnName(model) {
+    switch (model) {
+      case models.MediaFilesXBibliographicReference:
+        return 'reference_id'
+      case models.MediaFilesXDocument:
+        return 'document_id'
+      case models.FoliosXMediaFile:
+        return 'folio_id'
+      case models.TaxaXMedium:
+        return 'taxon_id'
+      case models.CharactersXMedium:
+        return 'character_id'
+      case models.CellsXMedium:
+        return 'taxon_id, character_id, matrix_id'
+      default:
+        return null
+    }
+  }
+}
+
 class InstitutionsConfig {
   getBaseModel() {
     return models.Institution
@@ -331,7 +379,7 @@ class InstitutionsConfig {
   getModelColumnName(model) {
     switch (model) {
       case models.InstitutionsXProject:
-        return 'media_id'
+        return 'project_id'
       case models.InstitutionsXUser:
         return 'user_id'
       default:
@@ -346,4 +394,5 @@ export const ModelReferencialConfig = {
   SPECIMEN: new SpecimensConfig(),
   DOCUMENTS: new DocumentsConfig(),
   INSTITUTIONS: new InstitutionsConfig(),
+  MEDIA: new MediaConfig(),
 }
