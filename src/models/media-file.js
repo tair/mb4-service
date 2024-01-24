@@ -38,6 +38,8 @@ export default class MediaFile extends Model {
           type: DataTypes.JSON,
           allowNull: true,
           media: true,
+          volume: 'media',
+          shouldLog: false,
         },
         notes: {
           type: DataTypes.TEXT,
@@ -108,11 +110,6 @@ export default class MediaFile extends Model {
           allowNull: false,
           defaultValue: '',
         },
-        needs_attention: {
-          type: DataTypes.TINYINT.UNSIGNED,
-          allowNull: false,
-          defaultValue: 0,
-        },
         access: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
@@ -144,42 +141,6 @@ export default class MediaFile extends Model {
         },
         url_description: {
           type: DataTypes.TEXT,
-          allowNull: false,
-        },
-        citation_article_title: {
-          type: DataTypes.TEXT,
-          allowNull: false,
-        },
-        citation_journal_title: {
-          type: DataTypes.TEXT,
-          allowNull: false,
-        },
-        citation_authors: {
-          type: DataTypes.TEXT,
-          allowNull: false,
-        },
-        citation_year: {
-          type: DataTypes.SMALLINT.UNSIGNED,
-          allowNull: true,
-        },
-        citation_volume: {
-          type: DataTypes.SMALLINT.UNSIGNED,
-          allowNull: true,
-        },
-        citation_number: {
-          type: DataTypes.SMALLINT.UNSIGNED,
-          allowNull: true,
-        },
-        citation_collation: {
-          type: DataTypes.STRING(255),
-          allowNull: false,
-        },
-        citation_journal_editors: {
-          type: DataTypes.TEXT,
-          allowNull: false,
-        },
-        citation_publisher: {
-          type: DataTypes.STRING(255),
           allowNull: false,
         },
         copyright_license: {
@@ -215,10 +176,6 @@ export default class MediaFile extends Model {
             ],
           },
         },
-        old_media_id: {
-          type: DataTypes.INTEGER.UNSIGNED,
-          allowNull: true,
-        },
         ancestor_media_id: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,
@@ -231,6 +188,7 @@ export default class MediaFile extends Model {
         cataloguing_status: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          defaultValue: 0,
           validate: {
             isIn: [
               [
@@ -245,7 +203,7 @@ export default class MediaFile extends Model {
         },
         eol_id: {
           type: DataTypes.TEXT,
-          allowNull: false,
+          allowNull: true,
         },
         media_type: {
           type: DataTypes.STRING(40),
@@ -253,7 +211,7 @@ export default class MediaFile extends Model {
         },
         uuid: {
           type: DataTypes.STRING(255),
-          allowNull: false,
+          allowNull: true,
         },
       },
       {
@@ -271,11 +229,6 @@ export default class MediaFile extends Model {
             name: 'i_user_id',
             using: 'BTREE',
             fields: [{ name: 'user_id' }],
-          },
-          {
-            name: 'i_old_media_id',
-            using: 'BTREE',
-            fields: [{ name: 'old_media_id' }],
           },
           {
             name: 'i_created_on',

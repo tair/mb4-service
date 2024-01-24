@@ -1,4 +1,5 @@
 import sequelizeConn from '../util/db.js'
+import { capitalizeFirstLetter } from '../util/util.js'
 
 export async function getMediaByIds(mediaIds) {
   const [media] = await sequelizeConn.query(
@@ -11,6 +12,65 @@ export async function getMediaByIds(mediaIds) {
     }
   )
   return media
+}
+
+export async function getMediaFiles(projectId) {
+  const [rows] = await sequelizeConn.query(
+    'SELECT * FROM media_files WHERE project_id = ?',
+    { replacements: [projectId] }
+  )
+
+  for (let i = 0; i < rows.length; i++) {
+    let mediaObj = rows[i]
+    if (mediaObj.media) {
+      const { medium, thumbnail } = mediaObj.media
+      mediaObj.media = { medium, thumbnail }
+      rows[i] = mediaObj
+    }
+  }
+
+  return rows
+}
+
+export async function isMediaInProject(mediaIds, projectId) {
+  const [[{ count }]] = await sequelizeConn.query(
+    `
+    SELECT COUNT(media_id) AS count
+    FROM media_files
+    WHERE project_id = ? AND media_id IN (?)`,
+    {
+      replacements: [projectId, mediaIds],
+    }
+  )
+  return count == mediaIds.length
+}
+
+export async function getCitations(projectId, mediaIds) {
+  const [rows] = await sequelizeConn.query(
+    `
+    SELECT
+      mxbr.link_id, mxbr.reference_id, mxbr.media_id, mxbr.pp, mxbr.notes,
+      mxbr.user_id
+    FROM media_files_x_bibliographic_references AS mxbr
+    INNER JOIN media_files AS m ON m.media_id = mxbr.media_id
+    WHERE m.project_id = ? AND m.media_id = ?`,
+    { replacements: [projectId, mediaIds] }
+  )
+  return rows
+}
+
+export async function isCitationInProject(projectId, mediaId, citationIds) {
+  const [[{ count }]] = await sequelizeConn.query(
+    `
+    SELECT COUNT(*) AS count
+    FROM media_files_x_bibliographic_references AS mxbr
+    INNER JOIN media_files AS m ON m.media_id = mxbr.media_id
+    WHERE m.project_id = ? AND m.media_id = ? AND mxbr.link_id IN (?)`,
+    {
+      replacements: [projectId, mediaId, citationIds],
+    }
+  )
+  return count == citationIds.length
 }
 
 export async function getImageProps(projectId, type, exemplarMediaId) {
@@ -63,24 +123,6 @@ export async function getImageProps(projectId, type, exemplarMediaId) {
   } catch (e) {
     console.log('getImageProp: ' + rows[0].media)
   }
-}
-
-export async function getMediaFiles(projectId) {
-  const [rows] = await sequelizeConn.query(
-    "SELECT * FROM media_files WHERE project_id = ? AND media != ''",
-    { replacements: [projectId] }
-  )
-
-  for (let i = 0; i < rows.length; i++) {
-    let mediaObj = rows[i]
-    if (mediaObj.media) {
-      const { medium, thumbnail } = mediaObj.media
-      mediaObj.media = { medium, thumbnail }
-      rows[i] = mediaObj
-    }
-  }
-
-  return rows
 }
 
 function getSpecimenName(row) {
@@ -169,8 +211,4 @@ function getSpecimenName(row) {
     name += ' (' + sourceLabel + ')'
   }
   return name
-}
-
-function capitalizeFirstLetter(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1)
 }
