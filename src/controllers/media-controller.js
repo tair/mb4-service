@@ -148,7 +148,7 @@ export async function deleteMediaFiles(req, res) {
     await models.MediaFile.destroy({
       where: {
         media_id: mediaIds,
-        project_id: mediaIds,
+        project_id: projectId,
       },
       transaction: transaction,
       individualHooks: true,
