@@ -144,6 +144,7 @@ export async function getUsage(req, res) {
   })
 }
 
+// TODO(kenzley): Implement a real search.
 export async function search(req, res) {
   const projectId = req.project.project_id
   const text = req.body.text
@@ -302,7 +303,7 @@ export async function createCitation(req, res) {
     return
   }
 
-  const citation = await models.TaxaXBibliographicReference.build(values)
+  const citation = models.TaxaXBibliographicReference.build(values)
   citation.set({
     taxon_id: taxon.taxon_id,
     reference_id: bibliography.reference_id,

@@ -32,6 +32,7 @@ export default class FoliosXMediaFile extends Model {
         notes: {
           type: DataTypes.TEXT,
           allowNull: false,
+          defaultValue: '',
         },
         position: {
           type: DataTypes.INTEGER.UNSIGNED,

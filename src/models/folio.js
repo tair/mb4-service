@@ -1,4 +1,6 @@
 import _sequelize from 'sequelize'
+import { time } from '../util/util.js'
+
 const { Model } = _sequelize
 
 export default class Folio extends Model {
@@ -45,6 +47,16 @@ export default class Folio extends Model {
               ],
             ],
           },
+        },
+        created_on: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: false,
+          defaultValue: time,
+        },
+        last_modified_on: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: false,
+          defaultValue: time,
         },
       },
       {

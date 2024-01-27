@@ -16,19 +16,17 @@ export async function getMediaByIds(mediaIds) {
 
 export async function getMediaFiles(projectId) {
   const [rows] = await sequelizeConn.query(
-    'SELECT * FROM media_files WHERE project_id = ?',
+    `SELECT * FROM media_files WHERE project_id = ? AND cataloguing_status = 0`,
     { replacements: [projectId] }
   )
+  return rows
+}
 
-  for (let i = 0; i < rows.length; i++) {
-    let mediaObj = rows[i]
-    if (mediaObj.media) {
-      const { medium, thumbnail } = mediaObj.media
-      mediaObj.media = { medium, thumbnail }
-      rows[i] = mediaObj
-    }
-  }
-
+export async function getUncuratedMediaFiles(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `SELECT * FROM media_files WHERE project_id = ? AND cataloguing_status = 1`,
+    { replacements: [projectId] }
+  )
   return rows
 }
 

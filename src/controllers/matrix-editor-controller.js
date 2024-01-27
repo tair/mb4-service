@@ -1,7 +1,12 @@
 import MatrixEditorService from '../services/matrix-editor-service.js'
 import { MatrixClients } from '../lib/matrix-clients.js'
 import { UserError } from '../lib/user-errors.js'
-import { time } from '../util/util.js'
+import {
+  parseIntArray,
+  parseNullableFloat,
+  parseNullableInt,
+  time,
+} from '../util/util.js'
 
 const clients = new MatrixClients()
 
@@ -854,22 +859,6 @@ export async function applyMatrix(req, res, func) {
     }
     return false
   }
-}
-
-function parseIntArray(array) {
-  if (Array.isArray(array)) {
-    const ints = array.filter((i) => i != null).map((i) => parseInt(i))
-    return Array.from(new Set(ints))
-  }
-  return []
-}
-
-function parseNullableInt(value) {
-  return value == null ? null : parseInt(value)
-}
-
-function parseNullableFloat(value) {
-  return value == null ? null : parseFloat(value)
 }
 
 function parseCharacterType(characterType) {

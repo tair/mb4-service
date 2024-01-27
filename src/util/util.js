@@ -83,3 +83,19 @@ export function set_intersect(set1, set2) {
   }
   return results
 }
+
+export function parseIntArray(array) {
+  if (Array.isArray(array)) {
+    const ints = array.filter((i) => i != null).map((i) => parseInt(i))
+    return Array.from(new Set(ints))
+  }
+  return []
+}
+
+export function parseNullableInt(value) {
+  return value == null ? null : parseInt(value)
+}
+
+export function parseNullableFloat(value) {
+  return value == null ? null : parseFloat(value)
+}
