@@ -446,6 +446,7 @@ function convertMediaResponse(row) {
     view_id: row.view_id ? parseInt(row.view_id) : undefined,
     specimen_id: row.specimen_id ? parseInt(row.specimen_id) : undefined,
     thumbnail: row.media ? getMedia(row.media, 'thumbnail') : undefined,
+    icon: row.media ? getMedia(row.media, 'icon') : undefined,
     notes: row.notes,
     published: row.published,
     is_sided: row.is_sided,
