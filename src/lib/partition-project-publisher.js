@@ -25,11 +25,12 @@ export class PartitionProjectPublisher extends BaseModelDuplicator {
 	 * which are include getting their values several ways.
 	 */
     async getAllIdsInTable(tableName) {
+		let [rows] = [];
         if (!(tableName in this.cacheTableIds)) {
             switch(tableName) {
                 case 'matrices':
                     [rows] = await sequelizeConn.query(
-                        `SELECT matrixId AS id
+                        `SELECT matrix_id AS id
 						FROM matrix_character_order
 						INNER JOIN characters_x_partitions USING(character_id)
 						WHERE characters_x_partitions.partition_id = ?
@@ -37,7 +38,7 @@ export class PartitionProjectPublisher extends BaseModelDuplicator {
 						SELECT matrix_id AS id
 						FROM matrix_taxa_order
 						INNER JOIN taxa_x_partitions USING(taxon_id)
-						WHERE taxa_x_partitions.partition_id = ?`,
+						WHERE taxa_x_partitions.partition_id = ?;`,
                         { replacements: [this.partitionId, this.partitionId] }
                     );
                     break;
