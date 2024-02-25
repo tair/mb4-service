@@ -1,6 +1,6 @@
 import sequelizeConn from '../util/db.js'
 
-async function getPartitions(projectId) {
+export async function getPartitions(projectId) {
   const [rows] = await sequelizeConn.query(
     `
       SELECT partition_id, name 
@@ -13,6 +13,11 @@ async function getPartitions(projectId) {
 }
 
 export async function getTaxaInPartitions(partitionIds) {
+  const map = new Map()
+  if (partitionIds.length == 0) {
+    return map
+  }
+
   const [rows] = await sequelizeConn.query(
     `
       SELECT partition_id, taxon_id 
@@ -20,7 +25,6 @@ export async function getTaxaInPartitions(partitionIds) {
       WHERE partition_id IN (?)`,
     { replacements: [partitionIds] }
   )
-  const map = new Map()
   for (const row of rows) {
     if (!map.has(row.partition_id)) {
       map.set(row.partition_id, [])
@@ -29,5 +33,3 @@ export async function getTaxaInPartitions(partitionIds) {
   }
   return map
 }
-
-export { getPartitions }
