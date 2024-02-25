@@ -6,8 +6,8 @@ import { BaseModelDuplicator } from "./base-model-duplicator";
 
 export class PartitionProjectPublisher extends BaseModelDuplicator {
     
-    constructor(mainTableName, itemId, partitionId) {
-        super(mainTableName, itemId);
+    constructor(mainTableName, modelId, partitionId) {
+        super(mainTableName, modelId);
 
         /** 
          * The partition to duplicate.
@@ -77,9 +77,9 @@ export class PartitionProjectPublisher extends BaseModelDuplicator {
 						FROM media_files
 						INNER JOIN media_files_x_documents USING(media_id)
 						INNER JOIN project_documents USING(document_id)
-						WHERE media_files.project_id = ?");
+						WHERE media_files.project_id = ?;
                         `,
-                        { replacements: [this.partitionId, this.partitionId, this.partitionId, this.masterItemId, this.masterItemId]}
+                        { replacements: [this.partitionId, this.partitionId, this.partitionId, this.mainModelId, this.mainModelId]}
                     );
                     break;
                 default:
