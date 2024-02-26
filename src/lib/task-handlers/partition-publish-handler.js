@@ -41,7 +41,7 @@ export class PartitionPublishHandler extends Handler {
             )
         }
 
-        const partitionId = parseInt(parameters.parition_id)
+        const partitionId = parseInt(parameters.partition_id)
         if (!partitionId) {
             return this.createError(
                 HandlerErrors.ILLEGAL_PARAMETER,
