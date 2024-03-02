@@ -17,6 +17,11 @@ export function normalizeJson(json) {
   }
 
   return Object.fromEntries(
-    Object.entries(json).map(([key, val]) => [key.toLowerCase(), val])
+    Object.entries(json).map(([key, val]) => {
+      if (typeof val === 'object') {
+        return [key.toLowerCase(), normalizeJson(val)]
+      }
+      return [key.toLowerCase(), val]
+    })
   )
 }

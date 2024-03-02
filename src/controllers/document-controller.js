@@ -1,7 +1,6 @@
-import config from '../config.js'
 import sequelizeConn from '../util/db.js'
 import { models } from '../models/init-models.js'
-import { getDocumentUrl } from '../util/document.js'
+import { getDocumentPath, getDocumentUrl } from '../util/document.js'
 import { normalizeJson } from '../util/json.js'
 import { FileUploader } from '../lib/file-uploader.js'
 
@@ -14,7 +13,7 @@ export async function getDocument(req, res) {
     return
   }
 
-  res.status(200).json(convertDocumentResponse(document))
+  res.status(200).json({ document: convertDocumentResponse(document) })
 }
 
 export async function getDocuments(req, res) {
@@ -71,7 +70,7 @@ export async function createDocument(req, res) {
     user: req.user,
   })
   await transaction.commit()
-  res.status(200).json(convertDocumentResponse(document))
+  res.status(200).json({ document: convertDocumentResponse(document) })
 }
 
 export async function deleteDocuments(req, res) {
@@ -136,7 +135,7 @@ export async function editDocument(req, res) {
     user: req.user,
   })
   await transaction.commit()
-  res.status(200).json({ document_id: documentId })
+  res.status(200).json({ document: convertDocumentResponse(document) })
 }
 
 export async function downloadDocument(req, res) {
@@ -155,8 +154,7 @@ export async function downloadDocument(req, res) {
     return
   }
 
-  const basePath = `${config.media.directory}/${config.app.name}/${volume}`
-  const path = `${basePath}/${hash}/${magic}_${filename}`
+  const path = getDocumentPath(json)
   const originalFileName = json['original_filename'] ?? filename
   res.status(200).download(path, originalFileName)
 }
