@@ -1,19 +1,16 @@
-import config from '../config.js'
 import { normalizeJson } from './json.js'
-
-const MEDIA_PATH = '/media/MorphoBank'
-const MEDIA_PORT = config.media.port ? `:${config.media.port}` : ''
-const URL_PATH = `${config.media.scheme}://${config.media.domain}${MEDIA_PORT}${MEDIA_PATH}`
+import { MEDIA_PATH, MEDIA_URL_PATH } from './media.js'
 
 export function getDocumentUrl(json) {
+  json = normalizeJson(json)
   if (!json['filename']) {
     return null
   }
-  json = normalizeJson(json)
-  return URL_PATH + getPartialPath(json)
+  return MEDIA_URL_PATH + getPartialPath(json)
 }
 
 export function getDocumentPath(json) {
+  json = normalizeJson(json)
   if (!json['filename']) {
     return null
   }

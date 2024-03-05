@@ -172,7 +172,9 @@ export async function editMediaFile(req, res) {
     return
   }
 
-  const values = req.body.media
+  // The values are set as a Form so that it can include binary information from
+  // the Form.
+  const values = req.body
 
   // Ensure that the specimen_id is within the same project.
   if (values.specimen_id) {
@@ -200,7 +202,7 @@ export async function editMediaFile(req, res) {
   const mediaUploader = new MediaUploader(transaction, req.user)
   try {
     if (req.file) {
-      await mediaUploader.setFile(media, 'media', req.file)
+      await mediaUploader.setMedia(media, 'media', req.file)
     }
 
     await media.save({
@@ -449,8 +451,8 @@ function convertMediaResponse(row) {
     icon: row.media ? getMedia(row.media, 'icon') : undefined,
     notes: row.notes,
     published: row.published,
-    is_sided: row.is_sided,
-    is_copyrighted: row.is_copyrighted,
+    is_sided: parseInt(row.is_sided) ?? 0,
+    is_copyrighted: parseInt(row.is_copyrighted) ?? 0,
     copyright_permission: row.copyright_permission,
     copyright_license: row.copyright_license,
     copyright_info: row.copyright_info,
