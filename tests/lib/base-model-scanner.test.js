@@ -81,7 +81,9 @@ describe('BaseModelScannerTests', () => {
   test('Test that generate SQL statement', async () => {
     const scanner = new BaseModelScanner(models.Character, 0)
 
-    const sql = await scanner.generateSQLStatementForTable(models.CharacterRuleAction)
+    const sql = await scanner.generateSQLStatementForTable(
+      models.CharacterRuleAction
+    )
 
     const expectedSQL = `
       SELECT character_rule_actions.*
@@ -95,7 +97,9 @@ describe('BaseModelScannerTests', () => {
   test('Test that generate SQL statement multiple JOINS', async () => {
     const scanner = new BaseModelScanner(models.Project, 0)
 
-    const sql = await scanner.generateSQLStatementForTable(models.MatrixFileUpload)
+    const sql = await scanner.generateSQLStatementForTable(
+      models.MatrixFileUpload
+    )
 
     const expectedSQL = `
       SELECT matrix_file_uploads.*

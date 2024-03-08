@@ -99,7 +99,9 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
           break
         }
         default:
-          throw new Error(`There is no defined query to get ids for ${tableName}`)
+          throw new Error(
+            `There is no defined query to get ids for ${tableName}`
+          )
       }
       this.cacheTableIds.set(tableName, Array.from(ids))
     }
