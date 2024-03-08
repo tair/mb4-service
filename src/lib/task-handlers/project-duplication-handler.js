@@ -59,7 +59,7 @@ export class ProjectDuplicationHandler extends Handler {
       transaction: transaction,
     })
     if (clonedProject.exemplar_media_id) {
-      const newExemplarMediaId = projectDuplicator.getDuplicateRecord(
+      const newExemplarMediaId = projectDuplicator.getDuplicateRecordId(
         models.MediaFile,
         clonedProject.exemplar_media_id
       )
@@ -107,7 +107,7 @@ export class ProjectDuplicationHandler extends Handler {
     )
 
     // Create a new task to generate the project overview stats because we don't
-    // want an error from project overview to affect projet duplication and also
+    // want an error from project overview to affect project duplication and also
     // be retryable.
     await models.TaskQueue.create(
       {
