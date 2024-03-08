@@ -281,7 +281,7 @@ export default class Project extends Model {
         disk_usage_limit: {
           type: DataTypes.BIGINT.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: 5 * 1024 * 1024 * 1024,
         },
         journal_in_press: {
           type: DataTypes.INTEGER.UNSIGNED,

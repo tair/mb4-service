@@ -152,7 +152,7 @@ export class BaseModelScanner {
     return diff.concat(numbered)
   }
 
-  generateSQLStatementForTable(tableModel) {
+  async generateSQLStatementForTable(tableModel) {
     const joiningTables = this.datamodel.getPath(tableModel, this.mainModel)
 
     const clauses = [`SELECT ${tableModel.getTableName()}.*`]
@@ -179,7 +179,7 @@ export class BaseModelScanner {
   }
 
   async getRowsForTable(tableModel) {
-    const sql = this.generateSQLStatementForTable(tableModel)
+    const sql = await this.generateSQLStatementForTable(tableModel)
     const transaction = this.getTransaction()
     const [rows] = await sequelizeConn.query(sql, {
       replacements: [this.mainModelId],
