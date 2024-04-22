@@ -54,6 +54,28 @@ export async function getTaxaInProject(projectId) {
   return rows
 }
 
+export async function getTaxonName(taxonIds) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT taxon_id, genus, specific_epithet
+      FROM taxa
+      WHERE taxon_id IN (?)`,
+    { replacements: [taxonIds] }
+  )
+  return rows
+}
+
+export async function getEolInfo(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT taxon_id, eol_pulled_on, eol_set_on, eol_no_results_on
+      FROM taxa
+      WHERE project_id = ?`,
+    { replacements: [projectId] }
+  )
+  return rows
+}
+
 export async function getTaxonIdsByHash(projectId, hashes) {
   const [rows] = await sequelizeConn.query(
     `
