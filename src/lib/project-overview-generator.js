@@ -367,7 +367,7 @@ export class ProjectOverviewGenerator {
           warnings: 0,
           images: 0,
           labels: 0,
-          cells_scored_no_npa_cnotes_cmedia_ccitations: 0,
+          undocumentedScores: 0,
         })
       }
 

@@ -9,7 +9,12 @@ import * as mediaService from '../services/media-service.js'
 
 export async function getProjects(req, res) {
   const userId = req.user?.user_id
-  const projects = userId ? await projectService.getProjectsForUser(userId) : []
+  if (userId == null) {
+    res.status(200).json({ projects: [] })
+    return
+  }
+
+  const projects = await projectService.getProjectsForUser(userId)
 
   const resultMap = new Map()
   const projectIds = []
@@ -41,19 +46,23 @@ export async function getProjects(req, res) {
     })
   }
 
-  const media = await mediaService.getMediaByIds(mediaIds)
-  for (const row of media) {
-    if (row.media) {
-      resultMap.get(row.project_id).media = getMedia(row.media, 'thumbnail')
+  if (mediaIds.length) {
+    const media = await mediaService.getMediaByIds(mediaIds)
+    for (const row of media) {
+      if (row.media) {
+        resultMap.get(row.project_id).media = getMedia(row.media, 'thumbnail')
+      }
     }
   }
 
-  const projectUsers = await projectUserService.getUsersInProjects(projectIds)
-  for (const projectUser of projectUsers) {
-    const projectId = projectUser.project_id
-    resultMap.get(projectId).members.push({
-      name: projectUser.fname + ' ' + projectUser.lname,
-    })
+  if (projectIds.length) {
+    const projectUsers = await projectUserService.getUsersInProjects(projectIds)
+    for (const projectUser of projectUsers) {
+      const projectId = projectUser.project_id
+      resultMap.get(projectId).members.push({
+        name: projectUser.fname + ' ' + projectUser.lname,
+      })
+    }
   }
 
   res.status(200).json({ projects: Array.from(resultMap.values()) })

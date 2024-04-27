@@ -13,7 +13,7 @@ export class BaseModelDuplicator extends BaseModelScanner {
     super(model, modelId)
 
     this.clonedIds = new Table()
-    this.overrideFieldName = new Set()
+    this.overrideFieldName = new Map()
     this.createdFiles = []
   }
 
@@ -157,7 +157,22 @@ export class BaseModelDuplicator extends BaseModelScanner {
     const transaction = this.getTransaction()
     const userInfo = os.userInfo()
     for (const [fieldName, versionMedia] of fields.entries()) {
-      for (const media of Object.values(versionMedia)) {
+      // Skip if the column is NULL.
+      if (versionMedia == null) {
+        continue
+      }
+
+      for (const [version, media] of Object.entries(versionMedia)) {
+        // These versions do not have corresponding files.
+        if (version == 'original_filename' || version == 'input') {
+          continue
+        }
+
+        // If 'use_icon' is set, there is not corresponding  thumbnail.
+        if (media.use_icon != null) {
+          continue
+        }
+
         const filename = media.filename
         const volumePath = `${basePath}/${media.volume}`
         const oldPath = `${volumePath}/${media.hash}/${media.magic}_${filename}`

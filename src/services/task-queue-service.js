@@ -35,7 +35,7 @@ export async function processTasks() {
           WHERE task_id = ?`,
           { replacements: [time(), taskId], type: QueryTypes.UPDATE }
         )
-        console.log('Unable to get hander', row.handler, ' for task', taskId)
+        console.log('Unable to get handler', row.handler, ' for task', taskId)
         continue
       }
 
