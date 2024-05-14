@@ -19,6 +19,7 @@ export async function fetchProjectInstitutions(req, res)
     // attempt to get the project institutions from the query
     const institutions = await institutionService.fetchInstitutions(req.params.projectId)
     res.status(200).json({institutions})
+    
   }catch(e){
     // error case
     console.error('Problem while getting project institutions (controller).',e)
@@ -83,17 +84,18 @@ export async function assignInstitutionToProject(req, res)
 export async function removeInstitutionFromProject(req, res)
 {
   // get project id and institution id
-  const projectId = req.params.project_id
-  const institutionId = req.body.institutionId
+  const projectId = req.params.projectId
+  const institutionName = req.body.institutionName
+  const institution = await models.Institution.findOne({ where: {name: institutionName}  })
 
   // check if failure to capture
-  if(institutionId == NULL)
+  if(institution == null)
   {
     res.status(404).json({ message: 'Institution is not found' })
     return
   }
 
-  // get actual institution
+  /*// get actual institution
   const institutionToRemove = await models.Institution.findByPk(institutionId)  
 
   // check for association ** might not need depending on how data is given to user **
@@ -101,36 +103,61 @@ export async function removeInstitutionFromProject(req, res)
   {
     res.status(404).json({ message: 'Institution is not associated with the project' })
   }
+  */
 
   // attempt to remove institution id from project
+  const transaction = await sequelizeConn.transaction()
   try{
-    console.log()
-  }
+    await models.InstitutionsXProject.destroy({
+      where: {
+              project_id: projectId,
+              institution_id: institution.institution_id
+      },
+      transaction: transaction,
+      individualHooks: true,
+      user: req.user,
+    })
 
+    await transaction.commit()
+    res.status(200).json({ institutionName })
+    
+  }catch(e){
     // else failure 
+    await transaction.rollback()
+    res.status(404).json({message : "could not remove association"})
+    console.log("error removing association", e)
+
+  }    
 }
 
-// code from user-controller.js that will help displaying institutions to choose from
+// modified code from user-controller that will aid in presenting available institutions to user
 export async function searchInstitutions(req, res) {
   const searchTerm = req.query.searchTerm
-  models.Institution.findAll({
-    attributes: ['institution_id', 'name'],
-    where: {
-      name: {
-        [Sequelize.Op.like]: '%' + searchTerm + '%',
+  const projectId = req.params.projectId
+
+  try{
+    // get way to access all institutions associated with this project 
+    const projectInstitutions =  await models.InstitutionsXProject.findAll({ 
+      attributes: ['institution_id'],
+      where: {project_id: projectId},
+    })
+
+    // extract ids because sequelize expects values not objects
+    const dupes = projectInstitutions.map(instu => instu.institution_id)
+
+    // get all institutions with like name segment and not within other model
+    const institutions = await models.Institution.findAll({ 
+      attributes: ['institution_id', 'name'], 
+      where: {
+        name: { [Sequelize.Op.like]: '%' + searchTerm + '%',},
+        institution_id : { [Sequelize.Op.notIn]: dupes },
       },
-    },
-  })
-    .then((institutions) => {
-      return res.status(200).json(institutions)
-    })
-    .catch((err) => {
-      console.log(err)
-      if (!err.statusCode) {
-        err.statusCode = 500
-      }
-      res
-        .status(500)
-        .json({ error: 'An error occurred while searching for institutions.' })
-    })
+    })      
+
+    return res.status(200).json(institutions)
+
+  } catch (e) {
+      res.status(500).json({message: "error obtaining list of insititutions" })
+      console.log('error obtaining list of insititutions', e)
+  }
 }
