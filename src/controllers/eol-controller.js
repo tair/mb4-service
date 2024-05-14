@@ -3,7 +3,7 @@ import { models } from '../models/init-models.js'
 
 import * as taxaService from '../services/taxa-service.js'
 import * as specimenService from '../services/specimen-service.js'
-import { EolFetcher } from '../lib/eol-fetcher.js'
+import { EolMediaFetcher } from '../lib/eol-media-fetcher.js'
 import { time } from '../util/util.js'
 
 export async function getEolInfo(req, res) {
@@ -27,7 +27,7 @@ export async function fetchEolImages(req, res) {
       return
     }
 
-    const fetcher = new EolFetcher()
+    const fetcher = new EolMediaFetcher()
     const mediaInfoPromiseMap = fetcher.fetchTaxa(taxonNames)
 
     const response = {
@@ -43,15 +43,17 @@ export async function fetchEolImages(req, res) {
         return
       }
 
-      const taxonId = taxon.taxon_id
       if (mediaInfo.success) {
-        response.success.push({taxon_id: taxonId, results: mediaInfo.results })
+        response.success.push({ taxon_id: taxonId, results: mediaInfo.results })
 
         taxon.eol_no_results_on = null
         taxon.eol_pulled_on = time()
         taxon.tmp_eol_data = mediaInfo.results ?? null
       } else {
-        response.failed.push({taxon_id: taxonId, retry: mediaInfo.retry})
+        response.failed.push({
+          taxon_id: taxonId,
+          retry: mediaInfo.retry,
+        })
 
         taxon.eol_no_results_on = time()
       }
@@ -63,13 +65,16 @@ export async function fetchEolImages(req, res) {
     }
 
     await transaction.commit()
-    res.status(200).json({ taxon_ids: taxonIds })
+    res.status(200).json({
+      taxon_ids: taxonIds,
+      success: response.success,
+      failed: response.failed,
+    })
   } catch (e) {
     console.log(e)
     res
       .status(500)
       .json({ message: 'Failed to update taxon with server error' })
-    return
   }
 }
 

@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-export class EolFetcher {
+export class EolMediaFetcher {
   constructor() {}
 
   fetchTaxa(taxa) {
@@ -10,14 +10,7 @@ export class EolFetcher {
       if (!taxonName) {
         continue
       }
-      try {
-        results.set(taxon.taxon_id, fetchEolImagesForTaxonName(taxonName))
-      } catch (e) {
-        results.set(taxon.taxon_id, {
-          success: false,
-          retry: true,
-        })
-      }
+      results.set(taxon.taxon_id, fetchEolImagesForTaxonName(taxonName))
     }
     return results
   }
@@ -30,29 +23,43 @@ async function fetchEolImagesForTaxonName(taxonName) {
     exact: 'false',
   }
 
-  const response = await getRequest('http://eol.org/api/search/1.0.json', {
-    params,
-  })
-  if (response.status != 200) {
+  try {
+    const response = await getRequest('http://eol.org/api/search/1.0.json', {
+      params,
+    })
+    if (response.status != 200) {
+      return {
+        success: false,
+        retry: true,
+        error: `Search failed with HTTP status: ${response.status}`,
+      }
+    }
+
+    const results = response.data?.results
+    if (results == null || !Array.isArray(results) || results.length == 0) {
+      return {
+        success: false
+      }
+    }
+
+    for (const result of results) {
+      const id = result.id
+      const imageResults = await getImagesFromLink(id)
+      if (imageResults.success && imageResults.results?.length > 0) {
+        return imageResults
+      }
+    }
+
+    return {
+      success: false
+    }
+  } catch(e) {
     return {
       success: false,
       retry: true,
+      error: e.message
     }
   }
-
-  const results = response.data?.results
-  if (results == null || !Array.isArray(results) || results.length == 0) {
-    return { success: false }
-  }
-
-  for (const result of results) {
-    const id = result.id
-    const imageResults = await getImagesFromLink(id)
-    if (imageResults.length > 0) {
-      return imageResults
-    }
-  }
-  return { success: true }
 }
 
 async function getImagesFromLink(id) {
@@ -78,6 +85,7 @@ async function getImagesFromLink(id) {
     return {
       success: false,
       retry: true,
+      error: `Fetch failed with HTTP status: ${response.status}`,
     }
   }
 
@@ -166,15 +174,14 @@ function getRequest(options, params) {
     const fetch = async () => {
       try {
         const response = await axios(options, params)
-        resolve(response)
-        return
-      } catch (err) {
-        if (err.response.status >= 500 && ++retries < maxRetries) {
+        if (response.status >= 500 && ++retries < maxRetries) {
           setTimeout(() => fetch(), sendDelay)
           sendDelay = Math.min(20_000, sendDelay << 1)
         } else {
-          reject(err)
+          resolve(response)
         }
+      } catch (err) {
+        reject(err)
       }
     }
 
