@@ -1,7 +1,7 @@
 import sequelizeConn from '../util/db.js'
 
 async function fetchInstitutions(projectId) {
-  let [rows] = await sequelizeConn.query(
+  const [rows] = await sequelizeConn.query(
     `
       SELECT ins.name as name, ins.institution_id as institutionId
       FROM institutions ins
@@ -10,11 +10,7 @@ async function fetchInstitutions(projectId) {
     { replacements: [projectId] }
   )
 
-  let res = []
-  for (var i in rows) {
-    res.push({ name: rows[i].name, institutionId: rows[i].institutionId })
-  }
-  return res
+  return rows
 }
 
 export { fetchInstitutions }
