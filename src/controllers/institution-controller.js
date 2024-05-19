@@ -17,7 +17,7 @@ export async function fetchProjectInstitutions(req, res) {
   }
 }
 
-export async function assignInstitutionToProject(req, res) {
+export async function addInstitutionToProject(req, res) {
   const projectId = req.params.projectId
   const institutionId = req.body.institutionId
 
