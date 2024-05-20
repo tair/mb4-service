@@ -46,7 +46,49 @@ export async function addInstitutionToProject(req, res) {
     res.status(500).json({ message: 'could not assign the two' })
   }
 }
+export async function buildInstitution(req, res) {
+  const projectId = req.params.projectId
+  const name = req.body.name
+  const date = new Date
 
+  const month = date.getMonth() + 1
+  const day   = date.getDate()
+  const year  = date.getFullYear()
+
+  const dateFormat = parseInt(`${month}${day}${year}`)
+
+  // check if it already exists
+  const institution = await models.Institution.findOne({where: { name : name }})
+
+  if(institution != null) {
+    console.log('Can not build an institution that already exists: ', institution)
+    return 
+  }
+
+  // attempt to build
+  try{
+    const newInstitution = models.Institution.build( {
+        project_id: projectId,
+        name: name,
+        created_on: dateFormat,
+      }
+    )
+
+    const transaction = await sequelizeConn.transaction()
+    await newInstitution.save({
+      transaction,
+      user: req.user,
+    })
+
+    await transaction.commit()
+    res.status(200).json({newInstitution})
+
+  } catch(e) {
+    console.error(e)
+    res.status(500).json({message: 'could not create institution'})
+  }
+
+}
 export async function removeInstitutionFromProject(req, res) {
   const projectId = req.params.projectId
   const institutionIds = req.body.institutionIds
@@ -80,7 +122,6 @@ export async function removeInstitutionFromProject(req, res) {
 export async function searchInstitutions(req, res) {
   const searchTerm = req.query.searchTerm
   const projectId = req.params.projectId
-
   try {
     const projectInstitutions = await models.InstitutionsXProject.findAll({
       attributes: ['institution_id'],
@@ -98,6 +139,8 @@ export async function searchInstitutions(req, res) {
         institution_id: { [Sequelize.Op.notIn]: dupes },
       },
     })
+
+    
 
     return res.status(200).json(institutions)
   } catch (e) {

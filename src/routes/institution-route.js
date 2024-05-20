@@ -6,6 +6,7 @@ const institutionRouter = express.Router({ mergeParams: true })
 institutionRouter.get('/', controller.fetchProjectInstitutions)
 institutionRouter.get('/search', controller.searchInstitutions)
 
+institutionRouter.post('/build', controller.buildInstitution)
 institutionRouter.post('/create', controller.addInstitutionToProject)
 institutionRouter.post('/remove', controller.removeInstitutionFromProject)
 
