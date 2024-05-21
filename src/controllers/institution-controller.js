@@ -160,7 +160,7 @@ export async function searchInstitutions(req, res) {
     })
 
     // extract ids because sequelize expects values not objects
-    const dupes = projectInstitutions.map((instu) => instu.institution_id)
+    const dupes = projectInstitutions.map((i) => i.institution_id)
 
     // get all institutions with like name segment and not within other model
     const institutions = await models.Institution.findAll({
