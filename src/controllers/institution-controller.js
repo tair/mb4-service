@@ -2,6 +2,7 @@ import * as institutionService from '../services/institution-service.js'
 import { models } from '../models/init-models.js'
 import { Sequelize } from 'sequelize'
 import sequelizeConn from '../util/db.js'
+import InstitutionsXProject from '../models/institutions-x-project.js'
 
 export async function fetchProjectInstitutions(req, res) {
   try {
@@ -92,25 +93,55 @@ export async function buildInstitution(req, res) {
 export async function removeInstitutionFromProject(req, res) {
   const projectId = req.params.projectId
   const institutionIds = req.body.institutionIds
+  const destroyInstitutions = req.body.destroyInstitutions
+
+  console.log(destroyInstitutions)
 
   if (institutionIds == null) {
     res.status(404).json({ message: 'Institutions not found' })
     return
   }
 
-  const transaction = await sequelizeConn.transaction()
+  const transactionOne = await sequelizeConn.transaction()
   try {
     await models.InstitutionsXProject.destroy({
       where: {
         project_id: projectId,
         institution_id: institutionIds,
       },
-      transaction: transaction,
+      transaction: transactionOne,
       individualHooks: true,
       user: req.user,
     })
 
-    await transaction.commit()
+    await transactionOne.commit()
+
+    if(destroyInstitutions) {
+      // find all references via institutions_x_projects that do not have associated projectId
+      const transactionTwo = await sequelizeConn.transaction()
+
+      const uniqueInstitutionIds = await models.InstitutionsXProject.findAll({
+        attributes: ['institution_id'],
+        where: {
+          institution_id: institutionIds,
+          project_id: {[Sequelize.Op.notIn]:projectId},
+        }
+      })
+
+      // if there aren't any within the list then delete the institutions
+      await models.Institution.destroy({
+        where: {
+          institution_id: uniqueInstitutionIds.institution_id
+        },
+        transaction: transactionTwo,
+        individualHooks: true,
+        user: req.user,
+      })
+
+      await transactionTwo.commit()
+    }
+
+    
     res.status(200).json({ institutionIds })
   } catch (e) {
     await transaction.rollback()
