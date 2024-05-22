@@ -8,6 +8,7 @@ institutionRouter.get('/search', controller.searchInstitutions)
 
 institutionRouter.post('/build', controller.buildInstitution)
 institutionRouter.post('/create', controller.addInstitutionToProject)
+institutionRouter.post('/destroy', controller.destoryInstitution)
 institutionRouter.post('/remove', controller.removeInstitutionFromProject)
 
 export default institutionRouter

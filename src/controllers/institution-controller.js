@@ -2,7 +2,6 @@ import * as institutionService from '../services/institution-service.js'
 import { models } from '../models/init-models.js'
 import { Sequelize } from 'sequelize'
 import sequelizeConn from '../util/db.js'
-import InstitutionsXProject from '../models/institutions-x-project.js'
 
 export async function fetchProjectInstitutions(req, res) {
   try {
@@ -17,7 +16,6 @@ export async function fetchProjectInstitutions(req, res) {
       .json({ message: 'Error while getting project institutions.' })
   }
 }
-
 export async function addInstitutionToProject(req, res) {
   const projectId = req.params.projectId
   const institutionId = req.body.institutionId
@@ -35,7 +33,7 @@ export async function addInstitutionToProject(req, res) {
 
     const transaction = await sequelizeConn.transaction()
     await projectInstitution.save({
-      transaction,
+      transaction: transaction,
       user: req.user,
     })
 
@@ -50,30 +48,34 @@ export async function addInstitutionToProject(req, res) {
 export async function buildInstitution(req, res) {
   const projectId = req.params.projectId
   const name = req.body.name
-  const date = new Date
+  const date = new Date()
 
   const month = date.getMonth() + 1
-  const day   = date.getDate()
-  const year  = date.getFullYear()
+  const day = date.getDate()
+  const year = date.getFullYear()
 
   const dateFormat = parseInt(`${month}${day}${year}`)
 
   // check if it already exists
-  const institution = await models.Institution.findOne({where: { name : name }})
+  const institution = await models.Institution.findOne({
+    where: { name: name },
+  })
 
-  if(institution != null) {
-    console.log('Can not build an institution that already exists: ', institution)
-    return 
+  if (institution != null) {
+    console.log(
+      'Can not build an institution that already exists: ',
+      institution
+    )
+    return
   }
 
   // attempt to build
-  try{
-    const newInstitution = models.Institution.build( {
-        project_id: projectId,
-        name: name,
-        created_on: dateFormat,
-      }
-    )
+  try {
+    const newInstitution = models.Institution.build({
+      project_id: projectId,
+      name: name,
+      created_on: dateFormat,
+    })
 
     const transaction = await sequelizeConn.transaction()
     await newInstitution.save({
@@ -82,69 +84,76 @@ export async function buildInstitution(req, res) {
     })
 
     await transaction.commit()
-    res.status(200).json({newInstitution})
-
-  } catch(e) {
+    res.status(200).json({ newInstitution })
+  } catch (e) {
     console.error(e)
-    res.status(500).json({message: 'could not create institution'})
+    res.status(500).json({ message: 'could not create institution' })
   }
+}
+export async function destoryInstitution(req, res) {
+  const projectId = req.params.projectId
+  const institutionIds = req.body.institutionIds
 
+  try {
+    const dupeInstitutionIds = await models.InstitutionsXProject.findAll({
+      attributes: ['institution_id'],
+      where: {
+        institution_id: institutionIds,
+        project_id: { [Sequelize.Op.not]: projectId },
+      },
+    })
+
+    const dupeInstitutionIdsArray = dupeInstitutionIds.map(
+      (i) => i.institution_id
+    )
+    const uniqueInstitutionIds = institutionIds.filter((institution) => {
+      return !dupeInstitutionIdsArray.includes(institution.institution_id)
+    })
+
+    const transaction = await sequelizeConn.transaction()
+    await models.Institution.destroy({
+      where: {
+        institution_id: uniqueInstitutionIds,
+      },
+      transaction: transaction,
+      individualHooks: true,
+      user: req.user,
+    })
+
+    await transaction.commit()
+    res.status(200).json({ message: 'Success in destroying institution' })
+  } catch (e) {
+    console.log('error removing institution from database ', e)
+    res
+      .status(500)
+      .json({ message: 'error removing institution from database ' })
+  }
 }
 export async function removeInstitutionFromProject(req, res) {
   const projectId = req.params.projectId
   const institutionIds = req.body.institutionIds
-  const destroyInstitutions = req.body.destroyInstitutions
-
-  console.log(destroyInstitutions)
 
   if (institutionIds == null) {
     res.status(404).json({ message: 'Institutions not found' })
     return
   }
 
-  const transactionOne = await sequelizeConn.transaction()
+  const transaction = await sequelizeConn.transaction()
   try {
     await models.InstitutionsXProject.destroy({
       where: {
         project_id: projectId,
         institution_id: institutionIds,
       },
-      transaction: transactionOne,
+      transaction: transaction,
       individualHooks: true,
       user: req.user,
     })
 
-    await transactionOne.commit()
+    await transaction.commit()
 
-    if(destroyInstitutions) {
-      // find all references via institutions_x_projects that do not have associated projectId
-      const transactionTwo = await sequelizeConn.transaction()
-
-      const uniqueInstitutionIds = await models.InstitutionsXProject.findAll({
-        attributes: ['institution_id'],
-        where: {
-          institution_id: institutionIds,
-          project_id: {[Sequelize.Op.notIn]:projectId},
-        }
-      })
-
-      // if there aren't any within the list then delete the institutions
-      await models.Institution.destroy({
-        where: {
-          institution_id: uniqueInstitutionIds.institution_id
-        },
-        transaction: transactionTwo,
-        individualHooks: true,
-        user: req.user,
-      })
-
-      await transactionTwo.commit()
-    }
-
-    
     res.status(200).json({ institutionIds })
   } catch (e) {
-    await transaction.rollback()
     res.status(500).json({ message: 'could not remove association' })
     console.log('error removing association', e)
   }
@@ -170,8 +179,6 @@ export async function searchInstitutions(req, res) {
         institution_id: { [Sequelize.Op.notIn]: dupes },
       },
     })
-
-    
 
     return res.status(200).json(institutions)
   } catch (e) {
