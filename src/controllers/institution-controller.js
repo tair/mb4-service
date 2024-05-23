@@ -20,11 +20,6 @@ export async function addInstitutionToProject(req, res) {
   const projectId = req.params.projectId
   const institutionId = req.body.institutionId
 
-  if (institutionId == null) {
-    res.status(404).json({ message: 'Institution is not found' })
-    return
-  }
-
   try {
     const projectInstitution = models.InstitutionsXProject.build({
       project_id: projectId,
@@ -45,7 +40,7 @@ export async function addInstitutionToProject(req, res) {
     res.status(500).json({ message: 'could not assign the two' })
   }
 }
-export async function buildInstitution(req, res) {
+export async function createInstitution(req, res) {
   const projectId = req.params.projectId
   const name = req.body.name
   const date = new Date()
@@ -56,20 +51,18 @@ export async function buildInstitution(req, res) {
 
   const dateFormat = parseInt(`${month}${day}${year}`)
 
-  // check if it already exists
   const institution = await models.Institution.findOne({
     where: { name: name },
   })
 
   if (institution != null) {
-    console.log(
+    console.error(
       'Can not build an institution that already exists: ',
-      institution
+      institution.name
     )
     return
   }
 
-  // attempt to build
   try {
     const newInstitution = models.Institution.build({
       project_id: projectId,
@@ -79,7 +72,17 @@ export async function buildInstitution(req, res) {
 
     const transaction = await sequelizeConn.transaction()
     await newInstitution.save({
-      transaction,
+      transaction: transaction,
+      user: req.user,
+    })
+
+    const institutionXProject = models.InstitutionsXProject.build({
+      project_id: projectId,
+      institution_id: newInstitution.institution_id,
+    })
+
+    await institutionXProject.save({
+      transaction: transaction,
       user: req.user,
     })
 
@@ -90,9 +93,14 @@ export async function buildInstitution(req, res) {
     res.status(500).json({ message: 'could not create institution' })
   }
 }
-export async function destoryInstitution(req, res) {
+export async function removeInstitutionFromProject(req, res) {
   const projectId = req.params.projectId
   const institutionIds = req.body.institutionIds
+
+  if (institutionIds == null) {
+    res.status(404).json({ message: 'Institutions not found' })
+    return
+  }
 
   try {
     const dupeInstitutionIds = await models.InstitutionsXProject.findAll({
@@ -106,44 +114,25 @@ export async function destoryInstitution(req, res) {
     const dupeInstitutionIdsArray = dupeInstitutionIds.map(
       (i) => i.institution_id
     )
-    const uniqueInstitutionIds = institutionIds.filter((institution) => {
-      return !dupeInstitutionIdsArray.includes(institution.institution_id)
+    const uniqueInstitutionIds = institutionIds.filter((institutionId) => {
+      return !dupeInstitutionIdsArray.includes(institutionId)
     })
 
     const transaction = await sequelizeConn.transaction()
-    await models.Institution.destroy({
+
+    await models.InstitutionsXProject.destroy({
       where: {
-        institution_id: uniqueInstitutionIds,
+        project_id: projectId,
+        institution_id: institutionIds,
       },
       transaction: transaction,
       individualHooks: true,
       user: req.user,
     })
 
-    await transaction.commit()
-    res.status(200).json({ message: 'Success in destroying institution' })
-  } catch (e) {
-    console.log('error removing institution from database ', e)
-    res
-      .status(500)
-      .json({ message: 'error removing institution from database ' })
-  }
-}
-export async function removeInstitutionFromProject(req, res) {
-  const projectId = req.params.projectId
-  const institutionIds = req.body.institutionIds
-
-  if (institutionIds == null) {
-    res.status(404).json({ message: 'Institutions not found' })
-    return
-  }
-
-  const transaction = await sequelizeConn.transaction()
-  try {
-    await models.InstitutionsXProject.destroy({
+    await models.Institution.destroy({
       where: {
-        project_id: projectId,
-        institution_id: institutionIds,
+        institution_id: uniqueInstitutionIds,
       },
       transaction: transaction,
       individualHooks: true,
