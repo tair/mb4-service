@@ -3,6 +3,7 @@ import express from 'express'
 import bibliographyRouter from './bibliography-route.js'
 import characterRouter from './characters-route.js'
 import documentRouter from './document-route.js'
+import duplicationRequestRouter from './duplication-request-route.js'
 import foliosRouter from './folios-route.js'
 import institutionRouter from './institution-route.js'
 import matrixRouter from './matrix-route.js'
@@ -32,6 +33,7 @@ projectRouter.use(authorizeProject)
 projectRouter.use('/bibliography', bibliographyRouter)
 projectRouter.use('/characters', characterRouter)
 projectRouter.use('/documents', documentRouter)
+projectRouter.use('/duplication/request', duplicationRequestRouter)
 projectRouter.use('/folios', foliosRouter)
 projectRouter.use('/institutions', institutionRouter)
 projectRouter.use('/matrices', matrixRouter)
