@@ -17,9 +17,9 @@ export async function fetchProjectInstitutions(req, res) {
   }
 }
 
-export async function assignInstitutionToProject(req, res) {
+export async function addInstitutionToProject(req, res) {
   const projectId = req.params.projectId
-  const institutionId = req.body.institutionToAdd
+  const institutionId = req.body.institutionId
 
   if (institutionId == null) {
     res.status(404).json({ message: 'Institution is not found' })
@@ -27,20 +27,19 @@ export async function assignInstitutionToProject(req, res) {
   }
 
   try {
-    const assignment = models.InstitutionsXProject.build({
+    const projectInstitution = models.InstitutionsXProject.build({
       project_id: projectId,
       institution_id: institutionId,
     })
 
     const transaction = await sequelizeConn.transaction()
-    await assignment.save({
+    await projectInstitution.save({
       transaction,
       user: req.user,
     })
 
     await transaction.commit()
     const institution = await models.Institution.findByPk(institutionId)
-    console.log('first id: %d', institution.institution_id)
     res.status(200).json({ institution })
   } catch (e) {
     console.error(e)
@@ -73,7 +72,7 @@ export async function removeInstitutionFromProject(req, res) {
     res.status(200).json({ institutionIds })
   } catch (e) {
     await transaction.rollback()
-    res.status(404).json({ message: 'could not remove association' })
+    res.status(500).json({ message: 'could not remove association' })
     console.log('error removing association', e)
   }
 }
@@ -89,7 +88,7 @@ export async function searchInstitutions(req, res) {
     })
 
     // extract ids because sequelize expects values not objects
-    const dupes = projectInstitutions.map((instu) => instu.institution_id)
+    const dupes = projectInstitutions.map((i) => i.institution_id)
 
     // get all institutions with like name segment and not within other model
     const institutions = await models.Institution.findAll({
