@@ -5,6 +5,7 @@ import characterRouter from './characters-route.js'
 import documentRouter from './document-route.js'
 import eolRouter from './eol-route.js'
 import foliosRouter from './folios-route.js'
+import iDigBioRouter from './idigbio-route.js'
 import institutionRouter from './institution-route.js'
 import matrixRouter from './matrix-route.js'
 import projectUsersRouter from './project-users-route.js'
@@ -35,6 +36,7 @@ projectRouter.use('/characters', characterRouter)
 projectRouter.use('/documents', documentRouter)
 projectRouter.use('/eol', eolRouter)
 projectRouter.use('/folios', foliosRouter)
+projectRouter.use('/idigbio', iDigBioRouter)
 projectRouter.use('/institutions', institutionRouter)
 projectRouter.use('/matrices', matrixRouter)
 projectRouter.use('/media', mediaRouter)
