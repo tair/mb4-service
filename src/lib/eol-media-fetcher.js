@@ -46,7 +46,10 @@ async function fetchEolImagesForTaxonName(taxonName) {
       const id = result.id
       const imageResults = await getImagesFromLink(id)
       if (imageResults.success && imageResults.results?.length > 0) {
-        return imageResults
+        return {
+          link: result.link,
+          ...imageResults,
+        }
       }
     }
 
@@ -147,6 +150,9 @@ async function getImagesFromLink(id) {
       }
     }
 
+    // TODO(kenzley): The keys are named this way to retain parity with V3 once we have
+    //     migrated completely off V3 onto V4. We should remove these fields and consider
+    //     creating a new JSON column with similar column names.
     results.push({
       eol_id: dataObject.identifier,
       tmp_media_url: imageUrl,
@@ -181,6 +187,7 @@ function getRequest(options, params) {
           resolve(response)
         }
       } catch (err) {
+        console.error('Failed to fetch EOL', err)
         reject(err)
       }
     }

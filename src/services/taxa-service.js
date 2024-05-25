@@ -76,6 +76,17 @@ export async function getEolInfo(projectId) {
   return rows
 }
 
+export async function getiDigBioInfo(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT taxon_id, idigbio_pulled_on, idigbio_set_on, idigbio_no_results_on
+      FROM taxa
+      WHERE project_id = ?`,
+    { replacements: [projectId] }
+  )
+  return rows
+}
+
 export async function getTaxonIdsByHash(projectId, hashes) {
   const [rows] = await sequelizeConn.query(
     `

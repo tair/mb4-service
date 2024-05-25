@@ -9,7 +9,7 @@ import { time } from '../util/util.js'
 export async function getEolInfo(req, res) {
   const projectId = req.params.projectId
   const eolInfo = await taxaService.getEolInfo(projectId)
-  res.status(200).json({ eol: eolInfo })
+  res.status(200).json({ results: eolInfo.map( i => convertEolInfo(i)) })
 }
 
 export async function fetchEolImages(req, res) {
@@ -30,31 +30,43 @@ export async function fetchEolImages(req, res) {
     const fetcher = new EolMediaFetcher()
     const mediaInfoPromiseMap = fetcher.fetchTaxa(taxonNames)
 
-    const response = {
-      failed: [],
-      success: [],
-    }
-    const transaction = await sequelizeConn.transaction()
-    for await (const [taxonId, mediaInfoPromise] of mediaInfoPromiseMap) {
-      const mediaInfo = await mediaInfoPromise
+    const resultMap = new Map()
+    const taxa = new Map()
+    for (const taxonId of taxonIds) {
       const taxon = await models.Taxon.findByPk(taxonId)
       if (taxon == null || taxon.project_id != projectId) {
         res.status(400).json({ message: 'Taxon is not found' })
         return
       }
 
-      if (mediaInfo.success) {
-        response.success.push({ taxon_id: taxonId, results: mediaInfo.results })
+      taxa.set(taxonId, taxon)
+      resultMap.set(taxonId, {
+        taxonId: taxonId,
+        media: []
+      })
+    }
 
+    const transaction = await sequelizeConn.transaction()
+    for await (const [taxonId, mediaInfoPromise] of mediaInfoPromiseMap) {
+      const mediaInfo = await mediaInfoPromise
+      const taxon = taxa.get(taxonId)
+      const result = resultMap.get(taxonId)
+      if (mediaInfo.success) {
+        result.link = mediaInfo.link
+        for (const info of mediaInfo.results) {
+          result.media.push({
+            url: info.media_url,
+            copyright_info: info.tmp_media_copyright_info,
+            copyright_permission: info.tmp_media_copyright_permission,
+            copyright_license: info.tmp_media_copyright_license,
+          })
+        }
+        taxon.tmp_more_info_link = mediaInfo.link
         taxon.eol_no_results_on = null
         taxon.eol_pulled_on = time()
         taxon.tmp_eol_data = mediaInfo.results ?? null
       } else {
-        response.failed.push({
-          taxon_id: taxonId,
-          retry: mediaInfo.retry,
-        })
-
+        result.retry = mediaInfo.retry
         taxon.eol_no_results_on = time()
       }
 
@@ -66,12 +78,10 @@ export async function fetchEolImages(req, res) {
 
     await transaction.commit()
     res.status(200).json({
-      taxon_ids: taxonIds,
-      success: response.success,
-      failed: response.failed,
+      results: [...resultMap.values()]
     })
   } catch (e) {
-    console.log(e)
+    console.error(e)
     res
       .status(500)
       .json({ message: 'Failed to update taxon with server error' })
@@ -194,4 +204,13 @@ export async function importEolImage(req, res) {
 
   await transaction.commit()
   res.status(200).json({ message: 'Nothing' })
+}
+
+function convertEolInfo(eolInfo) {
+  return {
+    taxon_id: eolInfo.taxon_id,
+    no_results_on: eolInfo.eol_no_results_on || undefined,
+    pulled_on: eolInfo.eol_pulled_on || undefined,
+    set_on: eolInfo.eol_set_on || undefined,
+  }
 }
