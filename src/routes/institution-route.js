@@ -6,7 +6,7 @@ const institutionRouter = express.Router({ mergeParams: true })
 institutionRouter.get('/', controller.fetchProjectInstitutions)
 institutionRouter.get('/search', controller.searchInstitutions)
 
-institutionRouter.post('/create', controller.addInstitutionToProject)
+institutionRouter.post('/add', controller.addInstitutionToProject)
 institutionRouter.post('/remove', controller.removeInstitutionFromProject)
 
 export default institutionRouter

@@ -16,18 +16,18 @@ export async function fetchProjectInstitutions(req, res) {
       .json({ message: 'Error while getting project institutions.' })
   }
 }
+
 export async function addInstitutionToProject(req, res) {
   const projectId = req.params.projectId
-  const name = req.body.name
+  const name = req.body.name.trim()
+  const institutionId = req.body.institutionId
 
-  if (name == null || name.replace(/\s/g, '').length == 0) {
+  if (name == null || name.length == 0) {
     res.status(404).json({ message: 'Institution cannot be found' })
     return
   }
 
-  let institution = await models.Institution.findOne({
-    where: { name: name },
-  })
+  let institution = await models.Institution.findByPk(institutionId)
 
   try {
     const transaction = await sequelizeConn.transaction()
@@ -36,6 +36,8 @@ export async function addInstitutionToProject(req, res) {
       institution = models.Institution.build({
         project_id: projectId,
         name: name,
+        user_id: req.user.user_id,
+        active: true,
       })
 
       await institution.save({
@@ -63,6 +65,7 @@ export async function addInstitutionToProject(req, res) {
       .json({ message: 'Error adding the institution to the project.' })
   }
 }
+
 export async function removeInstitutionFromProject(req, res) {
   const projectId = req.params.projectId
   const institutionIds = req.body.institutionIds
