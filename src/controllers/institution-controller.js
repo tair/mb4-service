@@ -34,7 +34,6 @@ export async function addInstitutionToProject(req, res) {
 
     if (institution == null) {
       institution = models.Institution.build({
-        project_id: projectId,
         name: name,
         user_id: req.user.user_id,
         active: true,
