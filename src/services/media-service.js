@@ -24,7 +24,7 @@ export async function getMediaFiles(projectId) {
 
 export async function getOneTimeMediaFiles(projectId) {
   const [rows] = await sequelizeConn.query(
-    `SELECT * FROM media_files WHERE project_id = ? AND is_copyrighted > 0 AND copyright_license = 8`,
+    `SELECT media_id FROM media_files WHERE project_id = ? AND is_copyrighted > 0 AND copyright_license = 8`,
     { replacements: [projectId] }
   )
   return rows
