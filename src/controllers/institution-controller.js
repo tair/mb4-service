@@ -19,7 +19,7 @@ export async function fetchProjectInstitutions(req, res) {
 
 export async function addInstitutionToProject(req, res) {
   const projectId = req.params.projectId
-  const name = req.body.name.trim()
+  const name = req.body.name?.trim()
   const institutionId = req.body.institutionId
 
   if (name == null || name.length == 0) {
@@ -27,33 +27,36 @@ export async function addInstitutionToProject(req, res) {
     return
   }
 
-  let institution = await models.Institution.findByPk(institutionId)
+  let institution = institutionId
+    ? await models.Institution.findByPk(institutionId)
+    : await models.Institution.findOne({ where: { name: name } })
 
   try {
     const transaction = await sequelizeConn.transaction()
 
     if (institution == null) {
-      institution = models.Institution.build({
-        name: name,
-        user_id: req.user.user_id,
-        active: true,
-      })
-
-      await institution.save({
-        transaction: transaction,
-        user: req.user,
-      })
+      institution = await models.Institution.create(
+        {
+          name: name,
+          user_id: req.user.user_id,
+        },
+        {
+          transaction: transaction,
+          user: req.user,
+        }
+      )
     }
 
-    const institutionXProject = models.InstitutionsXProject.build({
-      project_id: projectId,
-      institution_id: institution.institution_id,
-    })
-
-    await institutionXProject.save({
-      transaction: transaction,
-      user: req.user,
-    })
+    await models.InstitutionsXProject.create(
+      {
+        project_id: projectId,
+        institution_id: institution.institution_id,
+      },
+      {
+        transaction: transaction,
+        user: req.user,
+      }
+    )
 
     await transaction.commit()
     res.status(200).json({ institution })
@@ -69,25 +72,37 @@ export async function removeInstitutionFromProject(req, res) {
   const projectId = req.params.projectId
   const institutionIds = req.body.institutionIds
 
-  if (institutionIds == null || !(institutionIds.length > 0)) {
+  if (institutionIds == null || institutionIds.length == 0) {
     res.status(404).json({ message: 'Institutions not found' })
     return
   }
 
   try {
-    const dupeInstitutionIds = await models.InstitutionsXProject.findAll({
+    const dupeProjectInstitutionIds = await models.InstitutionsXProject.findAll(
+      {
+        attributes: ['institution_id'],
+        where: {
+          institution_id: institutionIds,
+          project_id: { [Sequelize.Op.not]: projectId },
+        },
+      }
+    )
+    const institutionxUserIds = await models.InstitutionsXUser.findAll({
       attributes: ['institution_id'],
-      where: {
-        institution_id: institutionIds,
-        project_id: { [Sequelize.Op.not]: projectId },
-      },
+      where: { institution_id: institutionIds },
     })
 
-    const dupeInstitutionIdsArray = dupeInstitutionIds.map(
+    const dupeProjectInstitutionIdsArray = dupeProjectInstitutionIds.map(
+      (i) => i.institution_id
+    )
+    const institutionxUserIdsArray = institutionxUserIds.map(
       (i) => i.institution_id
     )
     const uniqueInstitutionIds = institutionIds.filter((institutionId) => {
-      return !dupeInstitutionIdsArray.includes(institutionId)
+      return (
+        !dupeProjectInstitutionIdsArray.includes(institutionId) &&
+        !institutionxUserIdsArray.includes(institutionId)
+      )
     })
 
     const transaction = await sequelizeConn.transaction()
