@@ -42,7 +42,12 @@ projectRouter.use('/users', projectUsersRouter)
 projectRouter.use('/views', mediaViewsRouter)
 
 projectRouter.get('/overview', controller.getOverview)
+projectRouter.get(
+  '/duplication/request',
+  controller.getDuplicationRequestCriteria
+)
 
 projectRouter.post('/copyright', controller.setCopyright)
+projectRouter.post('/duplication/request', controller.createDuplicationRequest)
 
 export default projectsRouter
