@@ -43,6 +43,28 @@ export async function isMediaInProject(mediaIds, projectId) {
   return count == mediaIds.length
 }
 
+export async function getEolIds(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT DISTINCT eol_id
+      FROM media_files
+      WHERE project_id = ? AND eol_id IS NOT NULL`,
+    { replacements: [projectId] }
+  )
+  return rows.map((r) => r.eol_id)
+}
+
+export async function getUUIDs(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT DISTINCT uuid
+      FROM media_files
+      WHERE project_id = ? AND uuid IS NOT NULL`,
+    { replacements: [projectId] }
+  )
+  return rows.map((r) => r.eol_id)
+}
+
 export async function getCitations(projectId, mediaIds) {
   const [rows] = await sequelizeConn.query(
     `

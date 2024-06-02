@@ -1,22 +1,22 @@
-import axios from 'axios'
+import { fetchWithRetry } from '../util/url.js'
 
 export class EolMediaFetcher {
   constructor() {}
 
-  fetchTaxa(taxa) {
+  fetchTaxa(taxa, size = 1) {
     const results = new Map()
     for (const taxon of taxa) {
       const taxonName = `${taxon.genus} ${taxon.specific_epithet}`.trim()
       if (!taxonName) {
         continue
       }
-      results.set(taxon.taxon_id, fetchEolImagesForTaxonName(taxonName))
+      results.set(taxon.taxon_id, fetchEolImagesForTaxonName(taxonName, size))
     }
     return results
   }
 }
 
-async function fetchEolImagesForTaxonName(taxonName) {
+async function fetchEolImagesForTaxonName(taxonName, size = 1) {
   const params = {
     q: taxonName,
     page: 1,
@@ -24,9 +24,12 @@ async function fetchEolImagesForTaxonName(taxonName) {
   }
 
   try {
-    const response = await getRequest('http://eol.org/api/search/1.0.json', {
-      params,
-    })
+    const response = await fetchWithRetry(
+      'http://eol.org/api/search/1.0.json',
+      {
+        params,
+      }
+    )
     if (response.status != 200) {
       return {
         success: false,
@@ -38,13 +41,13 @@ async function fetchEolImagesForTaxonName(taxonName) {
     const results = response.data?.results
     if (results == null || !Array.isArray(results) || results.length == 0) {
       return {
-        success: false
+        success: false,
       }
     }
 
     for (const result of results) {
       const id = result.id
-      const imageResults = await getImagesFromLink(id)
+      const imageResults = await getImagesFromLink(id, size)
       if (imageResults.success && imageResults.results?.length > 0) {
         return {
           link: result.link,
@@ -54,20 +57,20 @@ async function fetchEolImagesForTaxonName(taxonName) {
     }
 
     return {
-      success: false
+      success: false,
     }
-  } catch(e) {
+  } catch (e) {
     return {
       success: false,
       retry: true,
-      error: e.message
+      error: e.message,
     }
   }
 }
 
-async function getImagesFromLink(id) {
+async function getImagesFromLink(id, size) {
   const params = {
-    images_per_page: 1,
+    images_per_page: size,
     videos: 0,
     sounds: 0,
     maps: 0,
@@ -81,9 +84,12 @@ async function getImagesFromLink(id) {
     references: false,
     vetted: 2,
   }
-  const response = await getRequest(`http://eol.org/api/pages/1.0/${id}.json`, {
-    params,
-  })
+  const response = await fetchWithRetry(
+    `http://eol.org/api/pages/1.0/${id}.json`,
+    {
+      params,
+    }
+  )
   if (response.status != 200) {
     return {
       success: false,
@@ -109,46 +115,27 @@ async function getImagesFromLink(id) {
       continue
     }
 
-    let imageRightsHolder = ''
+    const imageRightsHolder = {}
     const imageUrl = dataObject.eolMediaURL
     if (dataObject.rightsHolder) {
-      imageRightsHolder = dataObject.rightsHolder
+      imageRightsHolder.name = dataObject.rightsHolder
     } else if (Array.isArray(dataObject.agents)) {
       for (const agent of dataObject.agents) {
         switch (agent.role) {
           case 'photographer':
           case 'creator':
             if (agent.homepage) {
-              imageRightsHolder += `<a href='${agent.homepage}' target='_blank'>`
+              imageRightsHolder.url += `<a href='${agent.homepage}' target='_blank'>`
             }
-            imageRightsHolder += agent.full_name
-            if (agent.homepage) {
-              imageRightsHolder += '</a>'
-            }
+            imageRightsHolder.name = agent.full_name
             break
         }
       }
     }
 
-    let mediaCopyrightPermission = undefined
-    let mediaCopyrightLicense = undefined
-    const imageLicenseLink = dataObject.license?.toLowerCase()
-    if (imageLicenseLink.includes('publicdomain')) {
-      mediaCopyrightPermission = 4
-    } else {
-      mediaCopyrightPermission = 2
-      if (imageLicenseLink.includes('by-nc-sa')) {
-        mediaCopyrightLicense = 5
-      } else if (imageLicenseLink.includes('by-sa')) {
-        mediaCopyrightLicense = 4
-      } else if (imageLicenseLink.includes('by-nc')) {
-        mediaCopyrightLicense = 3
-      } else if (imageLicenseLink.includes('by')) {
-        mediaCopyrightLicense = 2
-      } else {
-        mediaCopyrightLicense = 8
-      }
-    }
+    const [mediaCopyrightPermission, mediaCopyrightLicense] = getCopyrightInfo(
+      dataObject.license
+    )
 
     // TODO(kenzley): The keys are named this way to retain parity with V3 once we have
     //     migrated completely off V3 onto V4. We should remove these fields and consider
@@ -163,35 +150,32 @@ async function getImagesFromLink(id) {
   }
 
   return {
-      success: true,
-      results: results,
-    }
+    success: true,
+    results: results,
+  }
 }
 
-/**
- * The EOL service is very brittle and it will return a 502 at times. We will retry
- * three times with an exponential delay to ensure that we get a response from EOL.
- */
-function getRequest(options, params) {
-  let retries = 0
-  let sendDelay = 1000
-  const maxRetries = 3
-  return new Promise((resolve, reject) => {
-    const fetch = async () => {
-      try {
-        const response = await axios(options, params)
-        if (response.status >= 500 && ++retries < maxRetries) {
-          setTimeout(() => fetch(), sendDelay)
-          sendDelay = Math.min(20_000, sendDelay << 1)
-        } else {
-          resolve(response)
-        }
-      } catch (err) {
-        console.error('Failed to fetch EOL', err)
-        reject(err)
-      }
+export function getCopyrightInfo(license) {
+  let mediaCopyrightPermission = undefined
+  let mediaCopyrightLicense = undefined
+  const imageLicenseLink = license?.toLowerCase()
+  if (imageLicenseLink.includes('publicdomain')) {
+    mediaCopyrightPermission = 4
+  } else {
+    mediaCopyrightPermission = 2
+    if (imageLicenseLink.includes('by-nc-sa')) {
+      mediaCopyrightLicense = 5
+    } else if (imageLicenseLink.includes('by-sa')) {
+      mediaCopyrightLicense = 4
+    } else if (imageLicenseLink.includes('by-nc')) {
+      mediaCopyrightLicense = 3
+    } else if (imageLicenseLink.includes('by')) {
+      mediaCopyrightLicense = 2
+    } else if (imageLicenseLink.includes('cc0')) {
+      mediaCopyrightLicense = 1
+    } else {
+      mediaCopyrightLicense = 8
     }
-
-    fetch()
-  })
+  }
+  return [mediaCopyrightPermission, mediaCopyrightLicense]
 }

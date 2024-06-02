@@ -12,7 +12,14 @@ export async function getProjectSpecimens(projectId) {
   return rows
 }
 
-export async function getSpecimenIdByTaxaIds(projectId, taxaIds) {
+/**
+ * Gets the vouchered specimen from a given project and set of taxa.
+ *
+ * This will return a map in which taxon IDs are the keys and the specimen IDs
+ * are the values. The values are unique because we have constraints on the
+ * number of vouchered taxon and specimen combination.
+ */
+export async function getVoucheredSpecimenIdByTaxaIds(projectId, taxaIds) {
   const [rows] = await sequelizeConn.query(
     `
       SELECT txs.taxon_id, s.specimen_id
