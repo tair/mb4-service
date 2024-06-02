@@ -208,6 +208,9 @@ export default class MediaFile extends Model {
         media_type: {
           type: DataTypes.STRING(40),
           allowNull: false,
+          validate: {
+            isIn: [['audio', 'video', 'image', '3d']],
+          },
         },
         uuid: {
           type: DataTypes.STRING(255),
