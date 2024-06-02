@@ -24,7 +24,7 @@ export async function downloadUrl(url, filename = null) {
 
   const directory = await fs.mkdtemp(path.join(tempPath, 'url-'))
 
-  filename = filename ?? blob.name ?? url.split('/').pop()
+  filename = filename ?? blob.name ?? getFileNameFromUrl(url, contentType)
   const tempFilePath = path.join(directory, filename)
 
   const arrayBuffer = await blob.arrayBuffer()
@@ -64,4 +64,36 @@ export async function fetchWithRetry(options, params, maxRetries = 3) {
 
     fetch()
   })
+}
+
+export function getFileNameFromUrl(string, contentType = '') {
+  const url = new URL(string)
+  const filename = url.pathname.split('/').pop()
+  if (filename.length == 0) {
+    return ''
+  }
+
+  const fileParts = filename.split('.')
+  if (fileParts.length > 1) {
+    return filename
+  }
+  const extension = getExtension(contentType)
+  return filename + '.' + extension
+}
+
+function getExtension(contentType) {
+  switch (contentType) {
+    case 'image/gif':
+      return 'gif'
+    case 'image/jpg':
+      return 'jpg'
+    case 'image/jpeg':
+      return 'jpg'
+    case 'image/png':
+      return 'png'
+    case 'text/html':
+      return 'html'
+    default:
+      return 'bin'
+  }
 }

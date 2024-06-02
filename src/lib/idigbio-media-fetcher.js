@@ -90,7 +90,7 @@ async function fetchiDigBioImagesForTaxonName(taxon, size = 1) {
       const imageRightsHolder = getImageRightsHolder(item, attributions)
       const [mediaCopyrightPermission, mediaCopyrightLicense] =
         getCopyrightInfo(imageLicense)
-      const imageUrl = IMAGE_URL_PATH + item.uuid + '?size=webview'
+      const imageUrl = IMAGE_URL_PATH + item.uuid
 
       const attributionId = item['indexTerms']['recordset']
       const attribution = attributions.get(attributionId)
