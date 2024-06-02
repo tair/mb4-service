@@ -257,14 +257,19 @@ export async function editMediaFiles(req, res) {
     })
   }
 
-  const results = []
   const transaction = await sequelizeConn.transaction()
   try {
     await models.MediaFile.update(values, {
       where: { media_id: mediaIds },
       transaction: transaction,
       individualHooks: true,
-      user: this.user,
+      user: req.user,
+    })
+    const results = await models.MediaFile.findAll({
+      where: {
+        media_id: mediaIds,
+      },
+      transaction: transaction,
     })
     await transaction.commit()
     res.status(200).json({
@@ -451,6 +456,7 @@ function convertMediaResponse(row) {
     icon: row.media ? getMedia(row.media, 'icon') : undefined,
     notes: row.notes,
     published: row.published,
+    cataloguing_status: row.cataloguing_status,
     is_sided: parseInt(row.is_sided) ?? 0,
     is_copyrighted: parseInt(row.is_copyrighted) ?? 0,
     copyright_permission: row.copyright_permission,
