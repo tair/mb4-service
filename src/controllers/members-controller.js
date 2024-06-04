@@ -1,4 +1,4 @@
-import * as service from '../services/members-service'
+import * as service from '../services/members-service.js'
 
 // this returns the members for specified project
 export async function getMembers(req, res) {
@@ -6,7 +6,7 @@ export async function getMembers(req, res) {
     try {
         const members = await service.getMembersInProject(projectId)
         res.status(200).json({
-          member: members.map((row) => convertMember(row)),
+          members: members.map((row) => convertMember(row)),
         })
       } catch (err) {
         console.error(`Error: Cannot fetch members for ${projectId}`, err)
@@ -20,9 +20,7 @@ function convertMember(row) {
       project_id: parseInt(row.project_id),
       user_id: parseInt(row.user_id),
       member_name: row.member_name,
-      adminstrator: parseInt(row.adminstrator),
-      //membership_status: parseInt(row.adminstrator), same as
-      // member_role?
+      administrator: parseInt(row.administrator),
       member_email: row.member_email,
       member_role: parseInt(row.member_role),
     }
