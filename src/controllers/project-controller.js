@@ -2,9 +2,11 @@ import sequelizeConn from '../util/db.js'
 import { getMedia } from '../util/media.js'
 import { models } from '../models/init-models.js'
 import * as institutionService from '../services/institution-service.js'
+import * as partitionService from '../services/partition-service.js'
 import * as projectService from '../services/projects-service.js'
 import * as projectStatsService from '../services/project-stats-service.js'
 import * as projectUserService from '../services/project-user-service.js'
+import { PartitionPublishHandler } from '../lib/task-handlers/partition-publish-handler.js'
 import * as mediaService from '../services/media-service.js'
 
 export async function getProjects(req, res) {
@@ -158,4 +160,89 @@ export async function getDuplicationRequestCriteria(req, res) {
   const hasAccess = project.permissions.includes('edit')
 
   res.status(200).json({ oneTimeMedia, projectPublished, hasAccess })
+}
+
+export async function partitionCreation(req, res) {
+  // get project
+  const project = req.project
+
+  // check if not deleted
+  if (project.deleted != 0) {
+    return res.status(404)
+  }
+
+  // action can't be done by non (curator and admin) // check can do action function
+
+  // check if not published
+
+  // set user access time?
+
+  // get project
+}
+
+export async function partitionSummary(req, res) {
+  // get partition id
+  // get partition
+  // check association between partition and project
+  // send variables (id, partition, project, and array back to view)
+}
+export async function getProjectPartitions(req, res) {
+  const projectId = req.params.projectId
+  const partitions = await partitionService.getPartitions(projectId)
+  console.log(partitions)
+
+  return res.status(200).json(partitions)
+}
+
+export async function publishPartition(req, res) {
+  // get partition id then retrieve the partition
+  const partitionId = req.body.partitionId
+
+  if (partitionId == null) {
+    return res.status(404)
+  }
+
+  const partition = models.Partition.findByPk(partitionId)
+
+  // check if partititon has BOTH taxon and characters
+  const taxonIds = partitionService.getTaxaInPartitions(partition.partition_id)
+  const characterIds = partitionService.getCharactersInPartitions(
+    partition.partition_id
+  )
+  if (taxonIds.length == 0 || characterIds.length == 0) {
+    // A partiton must have both characters and taxa to publish
+    return res.status(500)
+  }
+
+  // create new instance of task queue and assign (partiton_id, project_id, and user_id)
+  try {
+    transaction = sequelizeConn.transaction()
+    await models.TaskQueue.create(
+      {
+        user_id: req.user.userId,
+        // what values do I enter for row_key and entity_key ( or table_num and row_id)
+        priority: 300,
+        entity_key: null,
+        row_key: null,
+        handler: 'partitionPublish',
+        parameters: {
+          project_id: req.project.project_id,
+        },
+      },
+      {
+        transaction: transaction,
+        user: req.user,
+      }
+    )
+
+    await transaction.commit()
+    res.status(200)
+  } catch (e) {
+    console.error('Could not process partition publication request')
+    res
+      .status(500)
+      .json({ message: 'Could not process partition publication request' })
+  }
+
+  // return project , partition, and render of array?
 }
