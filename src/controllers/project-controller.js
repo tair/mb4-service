@@ -182,8 +182,18 @@ export async function partitionCreation(req, res) {
 
 export async function partitionSummary(req, res) {
   // get partition id
+  const partitionId = req.params.partitionId
+
   // get partition
+  const partition = await models.Partition.findByPk(partitionId)
+
   // check association between partition and project
+
+  // get character, media, view, media labels, specimens, documents, taxa, and bib references
+  const characters = await models.Ch
+
+  // get onetime medias
+
   // send variables (id, partition, project, and array back to view)
 }
 export async function getProjectPartitions(req, res) {

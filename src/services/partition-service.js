@@ -56,3 +56,21 @@ export async function getCharactersInPartitions(partitionIds) {
   }
   return map
 }
+
+export async function getMediaInPartitions(partitionIds) {
+  const map = new Map()
+  if (partitionIds.length == 0) {
+    return map
+  }
+
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT partiton_id, media_id
+      FROM media_x_partitions
+      WHERE partition)id IN (?)`,
+    { replacements: [partitionIds] }
+  )
+
+  for (const row of rows) {
+  }
+}
