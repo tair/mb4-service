@@ -1,6 +1,8 @@
 import sequelizeConn from '../util/db.js'
 import { getMedia } from '../util/media.js'
 import { models } from '../models/init-models.js'
+import * as bibliographyService from '../services/bibliography-service.js'
+import * as documentService from '../services/document-service.js'
 import * as institutionService from '../services/institution-service.js'
 import * as partitionService from '../services/partition-service.js'
 import * as projectService from '../services/projects-service.js'
@@ -181,20 +183,61 @@ export async function partitionCreation(req, res) {
 }
 
 export async function partitionSummary(req, res) {
-  // get partition id
+  const projectId = req.params.projectId
   const partitionId = req.params.partitionId
 
-  // get partition
   const partition = await models.Partition.findByPk(partitionId)
-
-  // check association between partition and project
+  let onetimeMedia = null
+  let views = null
+  let specimens = null
+  let labels = null
 
   // get character, media, view, media labels, specimens, documents, taxa, and bib references
-  const characters = await models.Ch
+  const characters = partitionService.getCharactersInPartitions(partitionId)
+  const taxa = partitionService.getTaxaInPartitions(partitionId)
 
-  // get onetime medias
+  const taxaIds = taxa.map((taxa) => taxa.taxaIds)
+  const characterIds = characters.map((character) => character.character_id)
+
+  const taxaMedia = mediaService.getMediaByTaxaIds(taxaIds) || []
+  const characterMedia = mediaService.getMediaByCharacterIds(characterIds) || []
+  const media = taxaMedia.filter((media) => {
+    return !characterMedia.includes(media)
+  })
+
+  if (media.length > 0) {
+    const mediaIds = media.map((media) => media.media_id)
+
+    onetimeMedia = media.filter(
+      (media) => media.is_copyrighted > 0 && media.copyright_license == 8
+    )
+    views = media.map((media) => media.views).length
+    specimens = media.map((media) => media.specimens).length
+    labels = mediaService.getMediaLabels(mediaIds).length
+  }
+
+  const documents = documentService.getDocuments(projectId).length
+  const bibliographicReferences =
+    bibliographyService.getBibliographiesByProjectId(projectId).length
+  const mediaLength = media.length
+  const taxaLength = taxa.length
+  const characterLength = characters.length
 
   // send variables (id, partition, project, and array back to view)
+  return res
+    .status(200)
+    .json({
+      partition,
+      characterLength,
+      taxaLength,
+      mediaLength,
+      onetimeMedia,
+      views,
+      specimens,
+      labels,
+      documents,
+      bibliographicReferences,
+    })
 }
 export async function getProjectPartitions(req, res) {
   const projectId = req.params.projectId
