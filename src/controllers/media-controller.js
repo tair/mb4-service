@@ -1,6 +1,7 @@
 import sequelizeConn from '../util/db.js'
 import * as service from '../services/media-service.js'
-import { getMedia } from '../util/media.js'
+import { getMedia, convertMediaTypeFromMimeType } from '../util/media.js'
+import { unzip } from '../util/zip.js'
 import { models } from '../models/init-models.js'
 import { MediaUploader } from '../lib/media-uploader.js'
 import {
@@ -23,8 +24,7 @@ export async function getMediaFiles(req, res) {
 
 export async function createMediaFile(req, res) {
   const projectId = req.params.projectId
-  const values = req.body.media
-  const media = models.MediaFile.build(values)
+  const media = models.MediaFile.build(req.body)
 
   // Ensure that the specimen_id is within the same project.
   if (media.specimen_id) {
@@ -51,7 +51,7 @@ export async function createMediaFile(req, res) {
   media.set({
     project_id: req.project.project_id,
     user_id: req.user.user_id,
-    media_type: '',
+    media_type: convertMediaTypeFromMimeType(req.file.mimetype),
   })
 
   const transaction = await sequelizeConn.transaction()
@@ -63,7 +63,7 @@ export async function createMediaFile(req, res) {
     })
 
     if (req.file) {
-      await mediaUploader.setFile(media, 'media', req.file)
+      await mediaUploader.setMedia(media, 'media', req.file)
     }
 
     await media.save({
@@ -84,6 +84,83 @@ export async function createMediaFile(req, res) {
   }
 
   res.status(200).json({ media: convertMediaResponse(media) })
+}
+
+export async function createMediaFiles(req, res) {
+  const projectId = req.params.projectId
+  const values = req.body
+
+  // Don't create media if the zip file is missing.
+  if (!req.file) {
+    res.status(400).json({ message: 'No zip file in request' })
+    return
+  }
+
+  // Ensure that the specimen is within the same project.
+  if (values.specimen_id) {
+    const specimen = await models.Specimen.findByPk(values.specimen_id)
+    if (specimen == null || specimen.project_id != projectId) {
+      res.status(404).json({ message: 'Specimen is not found' })
+      return
+    }
+  }
+
+  // Ensure that the view is within the same project.
+  if (values.view_id) {
+    const view = await models.MediaView.findByPk(values.view_id)
+    if (view == null || view.project_id != projectId) {
+      res.status(404).json({ message: 'View is not found' })
+      return
+    }
+  }
+
+  if (values.is_copyrighted == 0) {
+    values.copyright_permission = 0
+  }
+
+  const mediaFiles = []
+  const transaction = await sequelizeConn.transaction()
+  const mediaUploader = new MediaUploader(transaction, req.user)
+  try {
+    const files = await unzip(req.file.path)
+    for (const file of files) {
+      const media = models.MediaFile.build(values)
+      media.set({
+        project_id: req.project.project_id,
+        user_id: req.user.user_id,
+        cataloguing_status: 1,
+        media_type: convertMediaTypeFromMimeType(req.file.mimetype),
+      })
+      await media.save({
+        transaction,
+        user: req.user,
+      })
+
+      await mediaUploader.setMedia(media, 'media', file)
+
+      await media.save({
+        transaction,
+        user: req.user,
+        shouldSkipLogChange: true,
+      })
+
+      mediaFiles.push(media)
+    }
+
+    await transaction.commit()
+  } catch (e) {
+    await transaction.rollback()
+    mediaUploader.rollback()
+    console.log(e)
+    res
+      .status(500)
+      .json({ message: 'Failed to create media with server error' })
+    return
+  }
+
+  res.status(200).json({
+    media: mediaFiles.map((media) => convertMediaResponse(media)),
+  })
 }
 
 export async function deleteMediaFiles(req, res) {
