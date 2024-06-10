@@ -2,6 +2,7 @@ import { models } from '../../models/init-models.js'
 import { time } from '../../util/util.js'
 import sequelizeConn from '../../util/db.js'
 import { BaseModelDuplicator } from '../base-model-duplicator.js'
+import { EmailManager } from '../email-manager.js'
 import { Handler, HandlerErrors } from './handler.js'
 
 /** A handler to duplicating projects. */
@@ -130,9 +131,36 @@ export class ProjectDuplicationHandler extends Handler {
     // asynchronous actions based on the completion of the duplication. Namely,
     // We should add entries to the task queue to:
     //   * Reindex the entire project to allow search.
-    //   * Email the user that the project was completed.
+
+    // Create a new task to email the user that the project was successful
+    // duplicated.
+    await models.TaskQueue.create(
+      {
+        user_id: userId,
+        priority: 500,
+        entity_key: null,
+        row_key: null,
+        handler: 'Email',
+        parameters: {
+          template: 'project_duplication_request_approved',
+          name: user.fname,
+          to: user.email,
+          clonedProjectId,
+        },
+      },
+      {
+        transaction: transaction,
+        user: user,
+      }
+    )
 
     await transaction.commit()
+
+    const emailManager = new EmailManager()
+    emailManager.email('project_duplication_request_completed', {
+      projectId,
+      clonedProjectId,
+    })
 
     return {
       result: {
