@@ -16,15 +16,7 @@ export async function getMediaByIds(mediaIds) {
 
 export async function getMediaFiles(projectId) {
   const [rows] = await sequelizeConn.query(
-    `SELECT * FROM media_files WHERE project_id = ? AND cataloguing_status = 0`,
-    { replacements: [projectId] }
-  )
-  return rows
-}
-
-export async function getUncuratedMediaFiles(projectId) {
-  const [rows] = await sequelizeConn.query(
-    `SELECT * FROM media_files WHERE project_id = ? AND cataloguing_status = 1`,
+    `SELECT * FROM media_files WHERE project_id = ?`,
     { replacements: [projectId] }
   )
   return rows
