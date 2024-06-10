@@ -22,3 +22,29 @@ export function getMedia(media, version) {
     height: mediaVersion['height'],
   }
 }
+
+export function convertMediaTypeFromMimeType(mimeType) {
+  switch (mimeType) {
+    case 'audio/mpeg':
+    case 'audio/x-aiff':
+    case 'audio/x-wav':
+    case 'audio/x-realaudio':
+      return 'audio'
+    case 'video/mp4':
+    case 'video/quicktime':
+    case 'video/x-ms-asf':
+    case 'video/x-ms-wmv':
+    case 'video/x-flv':
+      return 'video'
+    case 'application/ply':
+    case 'application/stl':
+    case 'application/surf':
+      return '3d'
+    case 'image/gif':
+    case 'image/jpg':
+    case 'image/jpeg':
+    case 'image/png':
+    default:
+      return 'image'
+  }
+}
