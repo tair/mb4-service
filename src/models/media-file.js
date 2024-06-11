@@ -44,6 +44,8 @@ export default class MediaFile extends Model {
         notes: {
           type: DataTypes.TEXT,
           allowNull: false,
+          // TODO(kenzley): Make this field nullable
+          defaultValue: '',
         },
         published: {
           type: DataTypes.TINYINT.UNSIGNED,
@@ -138,14 +140,19 @@ export default class MediaFile extends Model {
         url: {
           type: DataTypes.TEXT,
           allowNull: false,
+          // TODO(kenzley): Make this field nullable
+          defaultValue: '',
         },
         url_description: {
           type: DataTypes.TEXT,
           allowNull: false,
+          // TODO(kenzley): Make this field nullable
+          defaultValue: '',
         },
         copyright_license: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
+          defaultValue: 0,
           validate: {
             isIn: [
               [
@@ -205,9 +212,13 @@ export default class MediaFile extends Model {
           type: DataTypes.TEXT,
           allowNull: true,
         },
+        // TODO(kenzley): Remove this column. We can determine the type from the mime type.
         media_type: {
           type: DataTypes.STRING(40),
           allowNull: false,
+          validate: {
+            isIn: [['audio', 'video', 'image', '3d']],
+          },
         },
         uuid: {
           type: DataTypes.STRING(255),

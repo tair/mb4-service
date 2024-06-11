@@ -1,0 +1,8 @@
+There has been a new project duplication request:
+
+Requested by: $requester
+Project: P$projectId
+Project Title: $projectName
+Duplication Reason: $note
+
+Please log in to the Admin interface to see more information about this request
