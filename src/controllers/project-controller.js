@@ -8,7 +8,6 @@ import * as partitionService from '../services/partition-service.js'
 import * as projectService from '../services/projects-service.js'
 import * as projectStatsService from '../services/project-stats-service.js'
 import * as projectUserService from '../services/project-user-service.js'
-import { PartitionPublishHandler } from '../lib/task-handlers/partition-publish-handler.js'
 import * as mediaService from '../services/media-service.js'
 
 export async function getProjects(req, res) {
@@ -164,122 +163,93 @@ export async function getDuplicationRequestCriteria(req, res) {
   res.status(200).json({ oneTimeMedia, projectPublished, hasAccess })
 }
 
-export async function partitionCreation(req, res) {
-  // get project
-  const project = req.project
-
-  // check if not deleted
-  if (project.deleted != 0) {
-    return res.status(404)
-  }
-
-  // action can't be done by non (curator and admin) // check can do action function
-
-  // check if not published
-
-  // set user access time?
-
-  // get project
-}
-
-export async function partitionSummary(req, res) {
+export async function getPartitionSummary(req, res) {
   const projectId = req.params.projectId
   const partitionId = req.params.partitionId
 
   const partition = await models.Partition.findByPk(partitionId)
-  let onetimeMedia = null
-  let views = null
-  let specimens = null
-  let labels = null
+  let onetimeMedia = []
+  let views = 0
+  let specimens = 0
+  let labels = 0
 
-  // get character, media, view, media labels, specimens, documents, taxa, and bib references
-  const characters = partitionService.getCharactersInPartitions(partitionId)
-  const taxa = partitionService.getTaxaInPartitions(partitionId)
+  const characters = await partitionService.getCharactersInPartitions(
+    partitionId
+  )
+  const taxa = await partitionService.getTaxaInPartitions(partitionId)
 
-  const taxaIds = taxa.map((taxa) => taxa.taxaIds)
-  const characterIds = characters.map((character) => character.character_id)
+  const taxaIds = Array.from(taxa.values())
+  const characterIds = Array.from(characters.values())
 
-  const taxaMedia = mediaService.getMediaByTaxaIds(taxaIds) || []
-  const characterMedia = mediaService.getMediaByCharacterIds(characterIds) || []
-  const media = taxaMedia.filter((media) => {
+  const taxaMedia =
+    taxaIds.length != 0 ? await mediaService.getMediaByTaxaIds(taxaIds) : []
+  const characterMedia =
+    characterIds.length != 0
+      ? await mediaService.getMediaByCharacterIds(characterIds)
+      : []
+
+  const connectedMediaIds = taxaMedia.filter((media) => {
     return !characterMedia.includes(media)
   })
 
-  if (media.length > 0) {
-    const mediaIds = media.map((media) => media.media_id)
+  if (connectedMediaIds.length > 0) {
+    const mediaIds = connectedMediaIds.map((media) => media.media_id)
 
-    onetimeMedia = media.filter(
+    const medias = await models.MediaFile.findAll({
+      where: { media_id: mediaIds },
+    })
+
+    onetimeMedia = medias.filter(
       (media) => media.is_copyrighted > 0 && media.copyright_license == 8
     )
-    views = media.map((media) => media.views).length
-    specimens = media.map((media) => media.specimens).length
+    views = medias.map((media) => media.views).length
+    specimens = medias.map((media) => media.specimens).length
     labels = mediaService.getMediaLabels(mediaIds).length
   }
 
   const documents = documentService.getDocuments(projectId).length
   const bibliographicReferences =
     bibliographyService.getBibliographiesByProjectId(projectId).length
-  const mediaLength = media.length
-  const taxaLength = taxa.length
-  const characterLength = characters.length
+  const mediaLength = connectedMediaIds.length
+  const taxaLength = taxaIds.length
+  const characterLength = characterIds.length
 
-  // send variables (id, partition, project, and array back to view)
-  return res
-    .status(200)
-    .json({
-      partition,
-      characterLength,
-      taxaLength,
-      mediaLength,
-      onetimeMedia,
-      views,
-      specimens,
-      labels,
-      documents,
-      bibliographicReferences,
-    })
+  return res.status(200).json({
+    partition,
+    characterLength,
+    taxaLength,
+    mediaLength,
+    onetimeMedia,
+    views,
+    specimens,
+    labels,
+    documents,
+    bibliographicReferences,
+  })
 }
 export async function getProjectPartitions(req, res) {
   const projectId = req.params.projectId
   const partitions = await partitionService.getPartitions(projectId)
-  console.log(partitions)
 
   return res.status(200).json(partitions)
 }
 
 export async function publishPartition(req, res) {
-  // get partition id then retrieve the partition
-  const partitionId = req.body.partitionId
+  const partitionId = req.params.partitionId
+  const onetimeAction = req.body.onetimeAction
 
-  if (partitionId == null) {
-    return res.status(404)
-  }
-
-  const partition = models.Partition.findByPk(partitionId)
-
-  // check if partititon has BOTH taxon and characters
-  const taxonIds = partitionService.getTaxaInPartitions(partition.partition_id)
-  const characterIds = partitionService.getCharactersInPartitions(
-    partition.partition_id
-  )
-  if (taxonIds.length == 0 || characterIds.length == 0) {
-    // A partiton must have both characters and taxa to publish
-    return res.status(500)
-  }
-
-  // create new instance of task queue and assign (partiton_id, project_id, and user_id)
   try {
-    transaction = sequelizeConn.transaction()
+    const transaction = await sequelizeConn.transaction()
     await models.TaskQueue.create(
       {
-        user_id: req.user.userId,
-        // what values do I enter for row_key and entity_key ( or table_num and row_id)
+        user_id: req.user.user_id,
         priority: 300,
-        entity_key: null,
-        row_key: null,
+        completed_on: null,
         handler: 'partitionPublish',
         parameters: {
           project_id: req.project.project_id,
+          partition_id: partitionId,
+          onetimeAction: onetimeAction,
         },
       },
       {
@@ -289,13 +259,11 @@ export async function publishPartition(req, res) {
     )
 
     await transaction.commit()
-    res.status(200)
+    res.status(200).json({ message: 'success' })
   } catch (e) {
-    console.error('Could not process partition publication request')
-    res
+    console.error('Could not process partition publication request\n', e)
+    return res
       .status(500)
       .json({ message: 'Could not process partition publication request' })
   }
-
-  // return project , partition, and render of array?
 }

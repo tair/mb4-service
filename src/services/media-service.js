@@ -16,8 +16,8 @@ export async function getMediaByIds(mediaIds) {
 
 export async function getMediaByCharacterIds(characterIds) {
   const [rows] = await sequelizeConn.query(
-    `SELECT media_id, specimen_id, view_id, is_copyrighted, copyright_license 
-     FROM character_x_media 
+    `SELECT media_id
+     FROM characters_x_media 
      WHERE character_id IN (?)`,
     { replacements: [characterIds] }
   )
@@ -25,9 +25,9 @@ export async function getMediaByCharacterIds(characterIds) {
 }
 export async function getMediaByTaxaIds(taxaIds) {
   const [rows] = await sequelizeConn.query(
-    `SELECT media_id, specimen_id, view_id, is_copyrighted, copyright_license 
+    `SELECT media_id
      FROM taxa_x_media 
-     WHERE taxa_id IN (?)`,
+     WHERE taxon_id IN (?)`,
     { replacements: [taxaIds] }
   )
   return rows
@@ -43,7 +43,7 @@ export async function getMediaFiles(projectId) {
 
 export async function getMediaLabels(mediaIds) {
   const [rows] = await sequelizeConn.query(
-    `SELECT label_id FROM media_label WHERE media_id IN (?)`,
+    `SELECT label_id FROM media_labels WHERE media_id IN (?)`,
     { replacements: [mediaIds] }
   )
   return rows
