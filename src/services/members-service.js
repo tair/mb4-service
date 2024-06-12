@@ -13,10 +13,13 @@ export async function getProjectMemberGroups(projectId) {
 
 export async function getMembersInProject(projectId) {
   const [rows] = await sequelizeConn.query(
-    `SELECT user_id, project_id, fname, lname, administrator, member_email, 
-    member_role, member_name 
-    FROM member_stats WHERE project_id = ?
-    ORDER BY member_name`,
+    `
+    SELECT pu.user_id, cu.fname, cu.lname, cu.email, 
+    pu.membership_type 
+    FROM projects_x_users AS pu
+    INNER JOIN ca_users AS cu ON cu.user_id=pu.user_id
+    WHERE pu.project_id = ?
+    ORDER BY cu.fname`,
     { replacements: [projectId] }
   )
   return rows

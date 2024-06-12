@@ -35,6 +35,7 @@ import _MediaFilesXBibliographicReference from './media-files-x-bibliographic-re
 import _MediaFilesXDocument from './media-files-x-document.js'
 import _MediaLabel from './media-label.js'
 import _MediaView from './media-view.js'
+import _MemberStat from './member-stat.js'
 import _Partition from './partition.js'
 import _ProjectDocumentFolder from './project-document-folder.js'
 import _ProjectDocument from './project-document.js'
@@ -129,6 +130,7 @@ function initModels(sequelizeConn) {
   )
   const MediaLabel = _MediaLabel.init(sequelizeConn, DataTypes)
   const MediaView = _MediaView.init(sequelizeConn, DataTypes)
+  const MemberStat = _MemberStat.init(sequelizeConn, DataTypes)
   const Partition = _Partition.init(sequelizeConn, DataTypes)
   const ProjectDocumentFolder = _ProjectDocumentFolder.init(
     sequelizeConn,

@@ -17,11 +17,10 @@ export async function getMembers(req, res) {
 //converts member data from db into its own object
 function convertMember(row) {
     return {
-      project_id: parseInt(row.project_id),
       user_id: parseInt(row.user_id),
-      member_name: row.member_name,
-      administrator: parseInt(row.administrator),
-      member_email: row.member_email,
-      member_role: parseInt(row.member_role),
+      fname: row.fname,
+      lname: row.lname,
+      membership_type: parseInt(row.membership_type),
+      email: row.email,
     }
 }
