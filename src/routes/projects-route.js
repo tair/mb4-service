@@ -13,6 +13,7 @@ import specimensRouter from './specimens-route.js'
 import taxaRouter from './taxa-route.js'
 import mediaRouter from './media-route.js'
 import mediaViewsRouter from './media-views-route.js'
+import memberRouter from './member-route.js'
 import * as controller from '../controllers/project-controller.js'
 import { authenticateToken } from './auth-interceptor.js'
 import { authorizeProject } from './project-interceptor.js'
@@ -40,6 +41,7 @@ projectRouter.use('/idigbio', iDigBioRouter)
 projectRouter.use('/institutions', institutionRouter)
 projectRouter.use('/matrices', matrixRouter)
 projectRouter.use('/media', mediaRouter)
+projectRouter.use('/members', memberRouter)
 projectRouter.use('/specimens', specimensRouter)
 projectRouter.use('/taxa', taxaRouter)
 projectRouter.use('/users', projectUsersRouter)
