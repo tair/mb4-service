@@ -168,9 +168,8 @@ export async function getPartitionSummary(req, res) {
   const partitionId = req.params.partitionId
 
   const partition = await models.Partition.findByPk(partitionId)
-  let onetimeMedia = []
-  let views = 0
-  let specimens = 0
+  let bibliographicReferences = 0
+  let documents = 0
   let labels = 0
 
   const characters = await partitionService.getCharactersInPartitions(
@@ -181,44 +180,22 @@ export async function getPartitionSummary(req, res) {
   const taxaIds = Array.from(taxa.values())
   const characterIds = Array.from(characters.values())
 
-  const taxaMedia =
-    taxaIds.length != 0 ? await mediaService.getMediaByTaxaIds(taxaIds) : []
-  const characterMedia =
-    characterIds.length != 0
-      ? await mediaService.getMediaByCharacterIds(characterIds)
-      : []
+  const { medias, views, specimens, onetimeMedia } =
+    await mediaService.getMediaSpecimensAndViews(projectId, partitionId)
 
-  const connectedMediaIds = taxaMedia.filter((media) => {
-    return !characterMedia.includes(media)
-  })
-
-  if (connectedMediaIds.length > 0) {
-    const mediaIds = connectedMediaIds.map((media) => media.media_id)
-
-    const medias = await models.MediaFile.findAll({
-      where: { media_id: mediaIds },
-    })
-
-    onetimeMedia = medias.filter(
-      (media) => media.is_copyrighted > 0 && media.copyright_license == 8
-    )
-    views = medias.map((media) => media.views).length
-    specimens = medias.map((media) => media.specimens).length
-    labels = mediaService.getMediaLabels(mediaIds).length
+  if (medias.length > 0) {
+    documents =
+      (await documentService.getDocumentsByMediaIds(medias).length) || 0
+    labels = (await mediaService.getMediaLabels(medias).length) || 0
+    bibliographicReferences =
+      (await bibliographyService.getBibliographiesByMediaId(medias).length) || 0
   }
-
-  const documents = documentService.getDocuments(projectId).length
-  const bibliographicReferences =
-    bibliographyService.getBibliographiesByProjectId(projectId).length
-  const mediaLength = connectedMediaIds.length
-  const taxaLength = taxaIds.length
-  const characterLength = characterIds.length
 
   return res.status(200).json({
     partition,
-    characterLength,
-    taxaLength,
-    mediaLength,
+    characterIds,
+    taxaIds,
+    medias,
     onetimeMedia,
     views,
     specimens,
@@ -247,6 +224,7 @@ export async function publishPartition(req, res) {
         completed_on: null,
         handler: 'partitionPublish',
         parameters: {
+          user_id: req.user.user_id,
           project_id: req.project.project_id,
           partition_id: partitionId,
           onetimeAction: onetimeAction,

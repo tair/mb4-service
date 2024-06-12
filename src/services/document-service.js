@@ -12,6 +12,17 @@ export async function getDocuments(projectId) {
   return rows
 }
 
+export async function getDocumentsByMediaIds(mediaIds) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT document_id
+      FROM media_files_x_documents
+      WHERE media_id IN (?)`,
+    { replacements: [mediaIds] }
+  )
+  return rows
+}
+
 export async function getDocumentFolders(projectId) {
   const [rows] = await sequelizeConn.query(
     `

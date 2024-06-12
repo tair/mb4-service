@@ -23,6 +23,17 @@ export async function getBibliographiesByGroupId(groupId) {
   return rows
 }
 
+export async function getBibliographiesByMediaId(mediaIds) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT reference_id
+      FROM media_files_x_bibliographic_references
+      WHERE media_id IN (?)`,
+    { replacements: [mediaIds] }
+  )
+  return rows
+}
+
 export async function getBibliographiesByIds(referenceIds) {
   const [rows] = await sequelizeConn.query(
     `

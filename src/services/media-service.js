@@ -4,7 +4,7 @@ import { capitalizeFirstLetter } from '../util/util.js'
 export async function getMediaByIds(mediaIds) {
   const [media] = await sequelizeConn.query(
     `
-    SELECT project_id, media_id, media
+    SELECT project_id, media_id, media, is_copyrighted, copyright_license, views, specimens
     FROM media_files
     WHERE media_id IN (?)`,
     {
@@ -47,6 +47,111 @@ export async function getMediaLabels(mediaIds) {
     { replacements: [mediaIds] }
   )
   return rows
+}
+
+export async function getMediaSpecimensAndViews(projectId, partitionId) {
+  let medias = new Set([])
+  let onetimeMedia = new Set([])
+  let specimens = new Set([])
+  let views = new Set([])
+
+  // query all attrached to cells
+  let [rows] = await sequelizeConn.query(
+    `
+      SELECT DISTINCT mf.media_id, mf.view_id, mf.specimen_id, mf.copyright_license
+			FROM media_files mf
+			INNER JOIN cells_x_media AS cxm ON cxm.media_id = mf.media_id
+			INNER JOIN taxa_x_partitions AS txp ON cxm.taxon_id = txp.taxon_id
+			INNER JOIN characters_x_partitions AS cxp ON cxm.character_id = cxp.character_id
+			WHERE mf.project_id = ? AND txp.partition_id = ? AND cxp.partition_id = ?`,
+    { replacements: [projectId, partitionId, partitionId] }
+  )
+
+  // iterate over result and look for onetime, views, media, specimens
+  for (const rowSet of rows) {
+    for (const row of rowSet) {
+      medias.add(row.media_id)
+
+      if (row.view_id) {
+        views.add(row.view_id)
+      }
+
+      if (row.specimens) {
+        specimens.add(row.specimens)
+      }
+
+      if (row.copyright_license == 8) {
+        onetimeMedia.add(row.media_id)
+      }
+    }
+  }
+
+  // query all media attrached to taxa
+  rows = await sequelizeConn.query(
+    `
+    SELECT DISTINCT mf.media_id, mf.view_id, mf.specimen_id, mf.copyright_license
+    FROM media_files mf
+    INNER JOIN taxa_x_media AS txm ON txm.media_id = mf.media_id
+    INNER JOIN taxa_x_partitions AS txp ON txp.taxon_id = txp.taxon_id
+    WHERE mf.project_id = ? AND txp.partition_id = ?`,
+    { replacements: [projectId, partitionId] }
+  )
+
+  // iterate over result and look for onetime, views, media, specimens
+  for (const rowSet of rows) {
+    for (const row of rowSet) {
+      medias.add(row.media_id)
+
+      if (row.view_id) {
+        views.add(row.view_id)
+      }
+
+      if (row.specimens) {
+        specimens.add(row.specimens)
+      }
+
+      if (row.copyright_license == 8) {
+        onetimeMedia.add(row.media_id)
+      }
+    }
+  }
+
+  // query all attrached to cells
+  rows = await sequelizeConn.query(
+    `
+			SELECT DISTINCT mf.media_id, mf.view_id, mf.specimen_id, mf.copyright_license
+			FROM media_files mf
+			INNER JOIN characters_x_media AS cxm ON cxm.media_id = mf.media_id
+			INNER JOIN characters_x_partitions AS cxp ON cxm.character_id = cxp.character_id
+			WHERE mf.project_id = ? AND cxp.partition_id = ?`,
+    { replacements: [projectId, partitionId] }
+  )
+
+  // iterate over result and look for onetime, views, media, specimens
+  for (const rowSet of rows) {
+    for (const row of rowSet) {
+      medias.add(row.media_id)
+
+      if (row.view_id) {
+        views.add(row.view_id)
+      }
+
+      if (row.specimens) {
+        specimens.add(row.specimens)
+      }
+
+      if (row.copyright_license == 8) {
+        onetimeMedia.add(row.media_id)
+      }
+    }
+  }
+
+  medias = Array.from(medias)
+  views = Array.from(views)
+  specimens = Array.from(specimens)
+  onetimeMedia = Array.from(onetimeMedia)
+
+  return { medias, views, specimens, onetimeMedia }
 }
 
 export async function getOneTimeMediaFiles(projectId) {
