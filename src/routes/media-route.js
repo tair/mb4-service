@@ -5,9 +5,15 @@ import { upload } from './upload.js'
 const mediaRouter = express.Router({ mergeParams: true })
 
 mediaRouter.get('/', controller.getMediaFiles)
-mediaRouter.post('/create', upload.single('file'), controller.createMediaFile)
 mediaRouter.post('/delete', controller.deleteMediaFiles)
 mediaRouter.post('/edit', controller.editMediaFiles)
+
+mediaRouter.post('/create', upload.single('file'), controller.createMediaFile)
+mediaRouter.post(
+  '/create/batch',
+  upload.single('file'),
+  controller.createMediaFiles
+)
 
 mediaRouter.get('/:mediaId', controller.getMediaFile)
 mediaRouter.post(

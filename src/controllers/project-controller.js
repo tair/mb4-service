@@ -120,3 +120,42 @@ export async function setCopyright(req, res) {
 
   res.status(200).json({ message: 'Project updated' })
 }
+
+export async function createDuplicationRequest(req, res) {
+  const projectId = req.params.projectId
+  const remarks = req.body.remarks
+  const onetimeAction = req.body.onetimeAction
+
+  try {
+    const transaction = await sequelizeConn.transaction()
+    await models.ProjectDuplicationRequest.create(
+      {
+        project_id: projectId,
+        request_remarks: remarks,
+        status: 1,
+        user_id: req.user.user_id,
+        onetime_use_action: onetimeAction,
+        notes: remarks,
+      },
+      { transaction }
+    )
+
+    await transaction.commit()
+    res.status(200)
+  } catch (e) {
+    console.error('Error making duplication request', e)
+    res.status(500).json({ message: 'Could not create duplication request' })
+  }
+}
+
+export async function getDuplicationRequestCriteria(req, res) {
+  const projectId = req.params.projectId
+
+  const oneTimeMedia = await mediaService.getOneTimeMediaFiles(projectId)
+
+  const project = req.project
+  const projectPublished = project.published == 1
+  const hasAccess = project.permissions.includes('edit')
+
+  res.status(200).json({ oneTimeMedia, projectPublished, hasAccess })
+}

@@ -12,6 +12,30 @@ export async function getProjectSpecimens(projectId) {
   return rows
 }
 
+/**
+ * Gets the vouchered specimen from a given project and set of taxa.
+ *
+ * This will return a map in which taxon IDs are the keys and the specimen IDs
+ * are the values. The values are unique because we have constraints on the
+ * number of vouchered taxon and specimen combination.
+ */
+export async function getVoucheredSpecimenIdByTaxaIds(projectId, taxaIds) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT txs.taxon_id, s.specimen_id
+      FROM specimens s
+      INNER JOIN taxa_x_specimens AS txs ON txs.specimen_id = s.specimen_id
+      WHERE s.project_id = ? AND txs.taxon_id IN (?) AND s.reference_source = 1`,
+    { replacements: [projectId, taxaIds] }
+  )
+
+  const map = new Map()
+  for (const row of rows) {
+    map.set(row.taxon_id, row.specimen_id)
+  }
+  return map
+}
+
 export async function getSpecimenDetails(projectId) {
   const [rows] = await sequelizeConn.query(
     `

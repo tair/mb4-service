@@ -9,8 +9,11 @@ import { time } from '../util/util.js'
 //     * The taxonomy ranks are ordered by their relative order and update their
 //       columns so that they can be null;
 //     * The notes columns can be null;
-//     * Move the tmp, idigbio, and eol columns into a separate table which
-//       indicate pulled data from external sources.
+//     * Delete tmp_* columns since they are no longer needed
+//     * Move eol_pulled_on and eol_set_on into its own JSON column 'eol'
+//     * Move idigbio_{pulled|set|no_results}_on into its own JSON column 'idigbio'
+//     * Consider moving all the externality_fetches data into a JSON columns:
+//       [{ type: string, pulled_on: number, set_on: number, no_results_on: number }, ...]
 export default class Taxon extends Model {
   static init(sequelize, DataTypes) {
     return super.init(

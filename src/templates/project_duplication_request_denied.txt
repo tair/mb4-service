@@ -1,0 +1,7 @@
+Hello $name,
+
+Unfortunately, MorphoBank cannot fulfill your duplication request.
+
+$reason
+
+If you have any further questions please reach out using the Ask Us form linked from MorphoBank's home page.
