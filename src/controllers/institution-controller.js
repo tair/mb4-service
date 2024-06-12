@@ -151,7 +151,7 @@ export async function searchInstitutions(req, res) {
 
     // get all institutions with like name segment and not within other model
     const institutions = await models.Institution.findAll({
-      attributes: ['institution_id', 'name'],
+      attributes: ['institution_id'],
       where: {
         name: { [Sequelize.Op.like]: '%' + searchTerm + '%' },
         institution_id: { [Sequelize.Op.notIn]: dupes },
@@ -163,4 +163,14 @@ export async function searchInstitutions(req, res) {
     res.status(500).json({ message: 'error obtaining list of insititutions' })
     console.log('error obtaining list of insititutions', e)
   }
+}
+
+export async function searchInstitutionById(req, res) {
+  const institutionId = req.query.institutionId
+
+  const institution = institutionId
+    ? await models.Institution.findByPk(institutionId)
+    : null
+
+  res.status(200).json({ institution })
 }
