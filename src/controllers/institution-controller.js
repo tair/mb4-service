@@ -72,12 +72,13 @@ export async function editInstitution(req, res) {
   const projectId = req.params.projectId
   const institutionId = req.body.institutionId
   const name = req.body.name
+  const selectedInstitutionId = req.body.selectedInstitutionId
 
   const institution = await models.Institution.findByPk(institutionId)
 
-  let presentInstitutionWithName = await models.Institution.findOne({
-    where: { name: name },
-  })
+  let presentInstitutionWithName = selectedInstitutionId
+    ? await models.Institution.findByPk(selectedInstitutionId)
+    : await models.Institution.findOne({ where: { name: name } })
 
   const dupeProjectInstitutionIds =
     await institutionService.getInstitutionProjectReferences(projectId, [
@@ -86,12 +87,10 @@ export async function editInstitution(req, res) {
   const institutionxUserIds =
     await institutionService.getInstitutionUserReferences([institutionId])
 
-  const uniqueInstitutionIds =
+  const institutionInUse =
     dupeProjectInstitutionIds.length || institutionxUserIds.length
-      ? []
-      : [institutionId]
 
-  if (presentInstitutionWithName == null && uniqueInstitutionIds.length == 1) {
+  if (presentInstitutionWithName == null && !institutionInUse) {
     institution.name = name
     await institution.save({
       user: req.user,
@@ -136,14 +135,16 @@ export async function editInstitution(req, res) {
       user: req.user,
     })
 
-    await models.Institution.destroy({
-      where: {
-        institution_id: uniqueInstitutionIds,
-      },
-      transaction: transaction,
-      individualHooks: true,
-      user: req.user,
-    })
+    if (!institutionInUse) {
+      await models.Institution.destroy({
+        where: {
+          institution_id: institutionId,
+        },
+        transaction: transaction,
+        individualHooks: true,
+        user: req.user,
+      })
+    }
 
     await transaction.commit()
     return res.status(200)
