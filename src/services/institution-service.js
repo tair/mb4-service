@@ -13,4 +13,31 @@ async function fetchInstitutions(projectId) {
   return rows
 }
 
-export { fetchInstitutions }
+async function getInstitutionUserReferences(institutionIds) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT institution_id
+      FROM institutions_x_users
+      WHERE institution_id in (?)`,
+    { replacements: [institutionIds] }
+  )
+
+  return rows
+}
+
+async function getInstitutionProjectReferences(projectId, institutionIds) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT institution_id
+      FROM institutions_x_projects
+      WHERE institution_id in (?) AND project_id != ?`,
+    { replacements: [institutionIds, projectId] }
+  )
+  return rows
+}
+
+export {
+  fetchInstitutions,
+  getInstitutionProjectReferences,
+  getInstitutionUserReferences,
+}
