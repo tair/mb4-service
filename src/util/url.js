@@ -3,6 +3,8 @@ import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
 
+import { Buffer } from 'node:buffer'
+
 /**
  * Download the URL to the local machine in the temporary directory.
  *
