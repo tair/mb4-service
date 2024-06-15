@@ -44,3 +44,14 @@ export async function getMediaIds(referenceId, mediaIds) {
   )
   return rows
 }
+
+export async function getTaxaIds(referenceId, taxaIds) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT taxon_id
+      FROM taxa_x_bibliographic_references
+      WHERE reference_id = ? AND taxon_id IN (?)`,
+    { replacements: [referenceId, taxaIds] }
+  )
+  return rows
+}
