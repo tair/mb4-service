@@ -35,6 +35,17 @@ export async function getMedia(projectId, folioId) {
   return rows
 }
 
+export async function getMediaIds(folioId, mediaIds) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT media_id
+      FROM folios_x_media_files
+      WHERE folio_id = ? AND media_id IN (?)`,
+    { replacements: [folioId, mediaIds] }
+  )
+  return rows
+}
+
 export async function isLinkInFolio(folioId, linkIds) {
   const [[{ count }]] = await sequelizeConn.query(
     `
