@@ -359,6 +359,27 @@ export async function editMediaFiles(req, res) {
   }
 }
 
+export async function downloadFilenames(req, res) {
+  const projectId = req.params.projectId
+  const rows = await service.getMediaFiles(projectId)
+  const lines = ['Original File Name, Morphobank Media ID']
+  for (const row of rows) {
+    const mediaId = row.media_id
+    const filename =
+      row.media.ORIGINAL_FILENAME ?? 'original filename not available'
+    lines.push(`"${filename}", "${mediaId}"`)
+  }
+
+  res.set({
+    'Content-Type': 'application/csv',
+    'Content-Disposition': 'attachment; filename=original_filenames.csv',
+    'Cache-Control': 'private',
+    'Last-Modified': new Date(),
+    Pragma: 'no-store',
+  })
+  res.status(200).send(lines.join('\r\n'))
+}
+
 export async function getCitations(req, res) {
   const projectId = req.project.project_id
   const mediaId = req.params.mediaId
