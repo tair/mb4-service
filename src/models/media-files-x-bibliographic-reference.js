@@ -30,10 +30,12 @@ export default class MediaFilesXBibliographicReference extends Model {
         pp: {
           type: DataTypes.STRING(255),
           allowNull: false,
+          defaultValue: '',
         },
         notes: {
           type: DataTypes.TEXT,
           allowNull: false,
+          defaultValue: '',
         },
         user_id: {
           type: DataTypes.INTEGER.UNSIGNED,
