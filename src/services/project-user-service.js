@@ -15,12 +15,23 @@ export async function getUsersInProjects(projectIds) {
 export async function getMembersInProject(projectId) {
   const [rows] = await sequelizeConn.query(
     `
-    SELECT pu.user_id, u.fname, u.lname, u.email, 
-    pu.membership_type 
-    FROM projects_x_users AS pu
-    INNER JOIN ca_users AS u ON u.user_id=pu.user_id
-    WHERE pu.project_id = ?
-    ORDER BY cu.fname`,
+    SELECT pxu.user_id, u.fname, u.lname, u.email, 
+    pxu.membership_type 
+    FROM projects_x_users AS pxu
+    INNER JOIN ca_users AS u ON u.user_id = pxu.user_id
+    WHERE pxu.project_id = ?
+    ORDER BY u.fname`,
+    { replacements: [projectId] }
+  )
+  return rows
+}
+
+export async function getAdmin(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+    SELECT user_id
+    FROM projects
+    WHERE project_id = ?`,
     { replacements: [projectId] }
   )
   return rows

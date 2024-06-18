@@ -12,8 +12,9 @@ export async function getMembers(req, res) {
   const projectId = req.params.projectId
   try {
       const members = await service.getMembersInProject(projectId)
+      const admin = (await service.getAdmin(projectId))[0].user_id
       res.status(200).json({
-        members: members.map((row) => convertMember(row)),
+        members: members.map((row) => convertMember(row, admin)),
       })
     } catch (err) {
       console.error(`Error: Cannot fetch members for ${projectId}`, err)
@@ -37,9 +38,10 @@ export async function deleteUser(req, res) {
 }
 
 //converts member data from db into its own object
-function convertMember(row) {
+function convertMember(row, admin) {
   return {
     user_id: parseInt(row.user_id),
+    admin: row.user_id == admin,
     fname: row.fname,
     lname: row.lname,
     membership_type: parseInt(row.membership_type),
