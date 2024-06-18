@@ -31,13 +31,3 @@ export async function deleteMember(req, res) {
   res.status(200).json({ link_ids: link_ids })
 }
 
-//converts member data from db into its own object
-function convertMember(row) {
-    return {
-      user_id: parseInt(row.user_id),
-      fname: row.fname,
-      lname: row.lname,
-      membership_type: parseInt(row.membership_type),
-      email: row.email,
-    }
-}
