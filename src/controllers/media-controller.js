@@ -587,6 +587,22 @@ export async function deleteCitations(req, res) {
   }
 }
 
+export async function getFilterMediaIds(req, res) {
+  const projectId = req.project.project_id
+  const [cell, character, taxa, documents] = await Promise.all([
+    service.getCellMedia(projectId),
+    service.getCharacterMedia(projectId),
+    service.getTaxonMedia(projectId),
+    service.getDocumentMedia(projectId),
+  ])
+  res.status(200).json({
+    cells: cell.map((c) => c.media_id),
+    characters: character.map((c) => c.media_id),
+    taxa: taxa.map((t) => t.media_id),
+    documents: documents.map((d) => d.media_id),
+  })
+}
+
 function convertMediaResponse(row) {
   return {
     media_id: parseInt(row.media_id),
@@ -600,7 +616,8 @@ function convertMediaResponse(row) {
     published: row.published,
     cataloguing_status: row.cataloguing_status,
     is_sided: parseInt(row.is_sided) ?? 0,
-    is_copyrighted: parseInt(row.is_copyrighted) ?? 0,
+    is_copyrighted:
+      row.is_copyrighted == null ? null : parseInt(row.is_copyrighted),
     copyright_permission: row.copyright_permission,
     copyright_license: row.copyright_license,
     copyright_info: row.copyright_info,
