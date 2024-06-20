@@ -1,8 +1,6 @@
 import { fetchWithRetry } from '../util/url.js'
 
 export class EolMediaFetcher {
-  constructor() {}
-
   fetchTaxa(taxa, size = 1) {
     const results = new Map()
     for (const taxon of taxa) {
