@@ -7,8 +7,9 @@ taxaRouter.get('/', controller.getTaxa)
 taxaRouter.post('/create', controller.createTaxon)
 taxaRouter.post('/create/batch', controller.createTaxa)
 taxaRouter.post('/delete', controller.deleteTaxa)
-taxaRouter.post('/usages', controller.getUsage)
+taxaRouter.post('/edit', controller.editTaxa)
 taxaRouter.post('/search', controller.search)
+taxaRouter.post('/usages', controller.getUsage)
 
 taxaRouter.post('/:taxonId/edit', controller.editTaxon)
 

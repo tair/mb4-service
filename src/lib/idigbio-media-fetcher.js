@@ -2,8 +2,6 @@ import { fetchWithRetry } from '../util/url.js'
 import { getCopyrightInfo } from './eol-media-fetcher.js'
 
 export class iDigBioMediaFetcher {
-  constructor() {}
-
   fetchTaxa(taxa, size = 1) {
     const results = new Map()
     for (const taxon of taxa) {

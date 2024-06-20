@@ -27,13 +27,17 @@ export default class TaxaXBibliographicReference extends Model {
             key: 'taxon_id',
           },
         },
+        // TODO(kenzley): Update to support null values
         pp: {
           type: DataTypes.STRING(255),
           allowNull: false,
+          defaultValue: '',
         },
+        // TODO(kenzley): Update to support null values
         notes: {
           type: DataTypes.TEXT,
           allowNull: false,
+          defaultValue: '',
         },
         user_id: {
           type: DataTypes.INTEGER.UNSIGNED,

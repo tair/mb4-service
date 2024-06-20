@@ -6,12 +6,7 @@ export const MEDIA_PATH = `${config.media.directory}/${config.app.name}`
 export const MEDIA_URL_PATH = `${config.media.scheme}://${config.media.domain}${MEDIA_PORT}/media/${config.app.name}`
 
 export function getMedia(media, version) {
-  if (media == null) {
-    return undefined
-  }
-
-  media = normalizeJson(media)
-  const mediaVersion = media[version]
+  const mediaVersion = getMediaVersion(media, version)
   if (mediaVersion == null) {
     return undefined
   }
@@ -21,6 +16,16 @@ export function getMedia(media, version) {
     width: mediaVersion['width'],
     height: mediaVersion['height'],
   }
+}
+
+export function getMediaVersion(media, version) {
+  if (media == null) {
+    return undefined
+  }
+
+  media = normalizeJson(media)
+  const mediaVersion = media[version]
+  return mediaVersion
 }
 
 export function convertMediaTypeFromMimeType(mimeType) {
