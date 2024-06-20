@@ -1,5 +1,6 @@
 import sequelizeConn from '../util/db.js'
 import { Op } from 'sequelize'
+import * as bibliographyService from '../services/bibliography-service.js'
 import * as matrixService from '../services/matrix-service.js'
 import * as partitionService from '../services/partition-service.js'
 import * as taxaService from '../services/taxa-service.js'
@@ -132,6 +133,63 @@ export async function editTaxon(req, res) {
   res.status(200).json({
     taxon: taxon,
   })
+}
+
+export async function editTaxa(req, res) {
+  const projectId = req.project.project_id
+  const taxaIds = req.body.taxa_ids
+  const values = req.body.taxa
+
+  const isInProject = await taxaService.isTaxaInProject(taxaIds, projectId)
+  if (!isInProject) {
+    return res.status(400).json({
+      message: 'Not all taxa are in the specified project',
+    })
+  }
+
+  const transaction = await sequelizeConn.transaction()
+  try {
+    const referenceId = values.reference_id
+    if (referenceId) {
+      const rows = await bibliographyService.getTaxaIds(referenceId, taxaIds)
+      const existingTaxaIds = new Set(rows.map((r) => r.taxon_id))
+      const newTaxaIds = taxaIds.filter((id) => !existingTaxaIds.has(id))
+      await models.TaxaXBibliographicReference.bulkCreate(
+        newTaxaIds.map((taxonId) => ({
+          reference_id: referenceId,
+          taxon_id: taxonId,
+          user_id: req.user.user_id,
+        })),
+        {
+          transaction: transaction,
+          individualHooks: true,
+          ignoreDuplicates: true,
+          user: req.user,
+        }
+      )
+    }
+
+    await models.Taxon.update(values, {
+      where: { taxon_id: taxaIds },
+      transaction: transaction,
+      individualHooks: true,
+      user: req.user,
+    })
+    const taxa = await models.Taxon.findAll({
+      where: {
+        taxon_id: taxaIds,
+      },
+      transaction: transaction,
+    })
+    await transaction.commit()
+    res.status(200).json({
+      taxa,
+    })
+  } catch (e) {
+    await transaction.rollback()
+    console.log(e)
+    res.status(500).json({ message: 'Failed to edit media with server error' })
+  }
 }
 
 export async function getUsage(req, res) {
