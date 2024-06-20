@@ -15,7 +15,7 @@ export async function getUsersInProjects(projectIds) {
 export async function getMembersInProject(projectId) {
   const [rows] = await sequelizeConn.query(
     `
-    SELECT pxu.user_id, u.fname, u.lname, u.email, 
+    SELECT pxu.user_id, pxu.link_id, u.fname, u.lname, u.email, 
     pxu.membership_type 
     FROM projects_x_users AS pxu
     INNER JOIN ca_users AS u ON u.user_id = pxu.user_id

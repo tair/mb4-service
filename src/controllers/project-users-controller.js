@@ -34,13 +34,14 @@ export async function deleteUser(req, res) {
     user: req.user,
   })
   await transaction.commit()
-  res.status(200)
+  res.status(200).json({ link_id: link_id })
 }
 
 //converts member data from db into its own object
 function convertMember(row, admin) {
   return {
     user_id: parseInt(row.user_id),
+    link_id: parseInt(row.link_id),
     admin: row.user_id == admin,
     fname: row.fname,
     lname: row.lname,
