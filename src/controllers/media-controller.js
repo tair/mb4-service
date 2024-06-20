@@ -1,5 +1,7 @@
 import sequelizeConn from '../util/db.js'
 import * as service from '../services/media-service.js'
+import * as bibliographyService from '../services/bibliography-service.js'
+import * as folioService from '../services/folios-service.js'
 import { getMedia, convertMediaTypeFromMimeType } from '../util/media.js'
 import { unzip } from '../util/zip.js'
 import { models } from '../models/init-models.js'
@@ -336,6 +338,48 @@ export async function editMediaFiles(req, res) {
 
   const transaction = await sequelizeConn.transaction()
   try {
+    const referenceId = values.reference_id
+    if (referenceId) {
+      const rows = await bibliographyService.getMediaIds(referenceId, mediaIds)
+      const existingMediaIds = new Set(rows.map((r) => r.media_id))
+      const newMediaIds = mediaIds.filter((id) => !existingMediaIds.has(id))
+      await models.MediaFilesXBibliographicReference.bulkCreate(
+        newMediaIds.map((mediaId) => ({
+          reference_id: referenceId,
+          media_id: mediaId,
+          user_id: req.user.user_id,
+        })),
+        {
+          transaction: transaction,
+          individualHooks: true,
+          ignoreDuplicates: true,
+          user: req.user,
+        }
+      )
+    }
+
+    const folioId = values.folio_id
+    if (folioId) {
+      const rows = await folioService.getMediaIds(folioId, mediaIds)
+      let position = await folioService.getMaxPositionForFolioMedia(folioId)
+      const existingMediaIds = new Set(rows.map((r) => r.media_id))
+      const newMediaIds = mediaIds.filter((id) => !existingMediaIds.has(id))
+      await models.FoliosXMediaFile.bulkCreate(
+        newMediaIds.map((mediaId) => ({
+          folio_id: folioId,
+          media_id: mediaId,
+          user_id: req.user.user_id,
+          position: ++position,
+        })),
+        {
+          transaction: transaction,
+          individualHooks: true,
+          ignoreDuplicates: true,
+          user: req.user,
+        }
+      )
+    }
+
     await models.MediaFile.update(values, {
       where: { media_id: mediaIds },
       transaction: transaction,
