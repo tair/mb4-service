@@ -11,15 +11,15 @@ export async function getProjectUsers(req, res) {
 export async function getMembers(req, res) {
   const projectId = req.params.projectId
   try {
-      const members = await service.getMembersInProject(projectId)
-      const admin = (await service.getAdmin(projectId))[0].user_id
-      res.status(200).json({
-        members: members.map((row) => convertMember(row, admin)),
-      })
-    } catch (err) {
-      console.error(`Error: Cannot fetch members for ${projectId}`, err)
-      res.status(500).json({ message: 'Error while fetching members.' })
-    }
+    const members = await service.getMembersInProject(projectId)
+    const admin = (await service.getAdmin(projectId))[0].user_id
+    res.status(200).json({
+      members: members.map((row) => convertMember(row, admin)),
+    })
+  } catch (err) {
+    console.error(`Error: Cannot fetch members for ${projectId}`, err)
+    res.status(500).json({ message: 'Error while fetching members.' })
+  }
 }
 
 export async function deleteUser(req, res) {
