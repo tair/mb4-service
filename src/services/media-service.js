@@ -93,6 +93,54 @@ export async function isCitationInProject(projectId, mediaId, citationIds) {
   return count == citationIds.length
 }
 
+export async function getCellMedia(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT DISTINCT cm.media_id
+      FROM cells_x_media cm
+      INNER JOIN media_files AS m ON m.media_id = cm.media_id
+      WHERE m.project_id = ?`,
+    { replacements: [projectId] }
+  )
+  return rows
+}
+
+export async function getCharacterMedia(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT DISTINCT cm.media_id
+      FROM characters_x_media cm
+      INNER JOIN media_files AS m ON m.media_id = cm.media_id
+      WHERE m.project_id = ?`,
+    { replacements: [projectId] }
+  )
+  return rows
+}
+
+export async function getTaxonMedia(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT DISTINCT tm.media_id
+      FROM taxa_x_media tm
+      INNER JOIN media_files AS m ON m.media_id = tm.media_id
+      WHERE m.project_id = ?`,
+    { replacements: [projectId] }
+  )
+  return rows
+}
+
+export async function getDocumentMedia(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT DISTINCT dm.media_id
+      FROM media_files_x_documents dm
+      INNER JOIN media_files AS m ON m.media_id = dm.media_id
+      WHERE m.project_id = ?`,
+    { replacements: [projectId] }
+  )
+  return rows
+}
+
 export async function getImageProps(projectId, type, exemplarMediaId) {
   // From the current observation, all published project does have a exemplarMediaId
   const [rows] = exemplarMediaId
