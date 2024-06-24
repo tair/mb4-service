@@ -10,9 +10,9 @@ export async function getProjectUsers(req, res) {
 
 export async function getMembers(req, res) {
   const projectId = req.params.projectId
+  const admin = req.project.user_id
   try {
-    const members = await service.getMembersInProject(projectId)
-    const admin = (await service.getAdmin(projectId))[0].user_id
+    const members = await service.getUsersInProjects(projectId)
     res.status(200).json({
       members: members.map((row) => convertMember(row, admin)),
     })
