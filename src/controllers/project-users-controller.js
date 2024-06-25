@@ -3,18 +3,12 @@ import sequelizeConn from '../util/db.js'
 import { models } from '../models/init-models.js'
 
 export async function getProjectUsers(req, res) {
-  const projectId = req.project.project_id
-  const users = await service.getUsersInProjects([projectId])
-  res.status(200).json({ users })
-}
-
-export async function getMembers(req, res) {
   const projectId = req.params.projectId
   const admin = req.project.user_id
   try {
-    const members = await service.getUsersInProjects(projectId)
+    const users = await service.getUsersInProjects(projectId)
     res.status(200).json({
-      members: members.map((row) => convertMember(row, admin)),
+      users: users.map((row) => convertUser(row, admin)),
     })
   } catch (err) {
     console.error(`Error: Cannot fetch members for ${projectId}`, err)
@@ -38,7 +32,7 @@ export async function deleteUser(req, res) {
 }
 
 //converts member data from db into its own object
-function convertMember(row, admin) {
+function convertUser(row, admin) {
   return {
     user_id: parseInt(row.user_id),
     link_id: parseInt(row.link_id),
