@@ -68,6 +68,92 @@ export async function addInstitutionToProject(req, res) {
   }
 }
 
+export async function editInstitution(req, res) {
+  const projectId = req.params.projectId
+  const institutionId = req.body.institutionId
+  const name = req.body.name
+  const selectedInstitutionId = req.body.selectedInstitutionId
+
+  const institution = await models.Institution.findByPk(institutionId)
+
+  let presentInstitutionWithName = selectedInstitutionId
+    ? await models.Institution.findByPk(selectedInstitutionId)
+    : await models.Institution.findOne({ where: { name: name } })
+
+  const dupeProjectInstitutionIds =
+    await institutionService.getInstitutionProjectReferences(projectId, [
+      institutionId,
+    ])
+  const institutionxUserIds =
+    await institutionService.getInstitutionUserReferences([institutionId])
+
+  const institutionInUse =
+    dupeProjectInstitutionIds.length || institutionxUserIds.length
+
+  if (presentInstitutionWithName == null && !institutionInUse) {
+    institution.name = name
+    await institution.save({
+      user: req.user,
+    })
+    return res.status(200)
+  }
+
+  const transaction = await sequelizeConn.transaction()
+
+  try {
+    if (presentInstitutionWithName == null) {
+      presentInstitutionWithName = await models.Institution.create(
+        {
+          name: name,
+          user_id: req.user.user_id,
+        },
+        {
+          transaction: transaction,
+          user: req.user,
+        }
+      )
+    }
+
+    await models.InstitutionsXProject.create(
+      {
+        project_id: projectId,
+        institution_id: presentInstitutionWithName.institution_id,
+      },
+      {
+        transaction: transaction,
+        user: req.user,
+      }
+    )
+
+    await models.InstitutionsXProject.destroy({
+      where: {
+        project_id: projectId,
+        institution_id: institutionId,
+      },
+      transaction: transaction,
+      individualHooks: true,
+      user: req.user,
+    })
+
+    if (!institutionInUse) {
+      await models.Institution.destroy({
+        where: {
+          institution_id: institutionId,
+        },
+        transaction: transaction,
+        individualHooks: true,
+        user: req.user,
+      })
+    }
+
+    await transaction.commit()
+    return res.status(200)
+  } catch (e) {
+    res.status(500)
+    console.error('Could not change Institution\n', e)
+  }
+}
+
 export async function removeInstitutionFromProject(req, res) {
   const projectId = req.params.projectId
   const institutionIds = req.body.institutionIds
@@ -78,30 +164,18 @@ export async function removeInstitutionFromProject(req, res) {
   }
 
   try {
-    const dupeProjectInstitutionIds = await models.InstitutionsXProject.findAll(
-      {
-        attributes: ['institution_id'],
-        where: {
-          institution_id: institutionIds,
-          project_id: { [Sequelize.Op.not]: projectId },
-        },
-      }
-    )
-    const institutionxUserIds = await models.InstitutionsXUser.findAll({
-      attributes: ['institution_id'],
-      where: { institution_id: institutionIds },
-    })
+    const dupeProjectInstitutionIds =
+      await institutionService.getInstitutionProjectReferences(
+        projectId,
+        institutionIds
+      )
+    const institutionxUserIds =
+      await institutionService.getInstitutionUserReferences(institutionIds)
 
-    const dupeProjectInstitutionIdsArray = dupeProjectInstitutionIds.map(
-      (i) => i.institution_id
-    )
-    const institutionxUserIdsArray = institutionxUserIds.map(
-      (i) => i.institution_id
-    )
     const uniqueInstitutionIds = institutionIds.filter((institutionId) => {
       return (
-        !dupeProjectInstitutionIdsArray.includes(institutionId) &&
-        !institutionxUserIdsArray.includes(institutionId)
+        !dupeProjectInstitutionIds.includes(institutionId) &&
+        !institutionxUserIds.includes(institutionId)
       )
     })
 
@@ -163,4 +237,14 @@ export async function searchInstitutions(req, res) {
     res.status(500).json({ message: 'error obtaining list of insititutions' })
     console.log('error obtaining list of insititutions', e)
   }
+}
+
+export async function searchInstitutionById(req, res) {
+  const institutionId = req.query.institutionId
+
+  const institution = institutionId
+    ? await models.Institution.findByPk(institutionId)
+    : null
+
+  res.status(200).json({ institution })
 }
