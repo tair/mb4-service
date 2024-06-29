@@ -1,7 +1,10 @@
 import sequelizeConn from '../util/db.js'
 import { getMedia } from '../util/media.js'
 import { models } from '../models/init-models.js'
+import * as bibliographyService from '../services/bibliography-service.js'
+import * as documentService from '../services/document-service.js'
 import * as institutionService from '../services/institution-service.js'
+import * as partitionService from '../services/partition-service.js'
 import * as projectService from '../services/projects-service.js'
 import * as projectStatsService from '../services/project-stats-service.js'
 import * as projectUserService from '../services/project-user-service.js'
@@ -158,4 +161,87 @@ export async function getDuplicationRequestCriteria(req, res) {
   const hasAccess = project.permissions.includes('edit')
 
   res.status(200).json({ oneTimeMedia, projectPublished, hasAccess })
+}
+
+export async function getPartitionSummary(req, res) {
+  const projectId = req.params.projectId
+  const partitionId = req.params.partitionId
+
+  const partition = await models.Partition.findByPk(partitionId)
+  let bibliographicReferences = 0
+  let documents = 0
+  let labels = 0
+
+  const characters = await partitionService.getCharactersInPartitions(
+    partitionId
+  )
+  const taxa = await partitionService.getTaxaInPartitions(partitionId)
+
+  const taxaIds = Array.from(taxa.values())
+  const characterIds = Array.from(characters.values())
+
+  const { medias, views, specimens, onetimeMedia } =
+    await mediaService.getMediaSpecimensAndViews(projectId, partitionId)
+
+  if (medias.length > 0) {
+    documents =
+      (await documentService.getDocumentsByMediaIds(medias).length) || 0
+    labels = (await mediaService.getMediaLabels(medias).length) || 0
+    bibliographicReferences =
+      (await bibliographyService.getBibliographiesByMediaId(medias).length) || 0
+  }
+
+  return res.status(200).json({
+    partition,
+    characterIds,
+    taxaIds,
+    medias,
+    onetimeMedia,
+    views,
+    specimens,
+    labels,
+    documents,
+    bibliographicReferences,
+  })
+}
+export async function getProjectPartitions(req, res) {
+  const projectId = req.params.projectId
+  const partitions = await partitionService.getPartitions(projectId)
+
+  return res.status(200).json(partitions)
+}
+
+export async function publishPartition(req, res) {
+  const partitionId = req.params.partitionId
+  const onetimeAction = req.body.onetimeAction
+
+  try {
+    const transaction = await sequelizeConn.transaction()
+    await models.TaskQueue.create(
+      {
+        user_id: req.user.user_id,
+        priority: 300,
+        completed_on: null,
+        handler: 'partitionPublish',
+        parameters: {
+          user_id: req.user.user_id,
+          project_id: req.project.project_id,
+          partition_id: partitionId,
+          onetimeAction: onetimeAction,
+        },
+      },
+      {
+        transaction: transaction,
+        user: req.user,
+      }
+    )
+
+    await transaction.commit()
+    res.status(200).json({ message: 'success' })
+  } catch (e) {
+    console.error('Could not process partition publication request\n', e)
+    return res
+      .status(500)
+      .json({ message: 'Could not process partition publication request' })
+  }
 }
