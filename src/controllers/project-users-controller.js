@@ -31,6 +31,37 @@ export async function deleteUser(req, res) {
   res.status(200).json({ link_id: link_id })
 }
 
+export async function editUser(req, res) {
+  const projectId = req.project.project_id
+  const linkId = req.params.linkId
+  const admin = req.project.user_id
+  const user = await models.ProjectsXUser.findByPk(linkId)
+  if (user == null || user.project_id != projectId) {
+    res.status(404).json({ message: 'User is not found' })
+    return
+  }
+
+  const values = req.body.user
+
+  for (const column in values) {
+    user.set(column, values[column])
+  }
+  const transaction = await sequelizeConn.transaction()
+  try {
+    await user.save({
+      transaction,
+      user: req.user,
+    })
+
+    await transaction.commit()
+    res.status(200).json({ user: convertUser(user, admin) })
+  } catch (e) {
+    console.log(e)
+    await transaction.rollback()
+    res.status(500).json({ message: 'Failed to create user with server error' })
+  }
+}
+
 //converts member data from db into its own object
 function convertUser(row, admin) {
   return {
