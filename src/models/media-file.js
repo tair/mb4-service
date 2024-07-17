@@ -265,4 +265,50 @@ export default class MediaFile extends Model {
       }
     )
   }
+
+  static getSideRepresentation(isSided) {
+    const valueMap = ["not applicable", "left side", "left side"]
+		return valueMap[isSided]			
+  }
+
+  static getCopyrightPermission(permission) {
+    const valueMap = [					
+      "Copyright permission not set",
+      "Person loading media owns copyright and grants permission for use of media on MorphoBank",
+      "Permission to use media on MorphoBank granted by copyright holder",
+      "Permission pending",
+      "Copyright expired or work otherwise in public domain",
+      "Copyright permission not yet requested"
+    ]
+    return valueMap[permission]
+  }
+
+  static getLicenseImage(isCopyrighted, permission, license) {
+    let response = {
+      'isOneTimeUse' : false,
+      'image': null
+    }
+    const licenseMap = {
+      1: 'CC-0.png',
+      2: 'CC-BY.png',
+      3: 'CC-BY-NC.png',
+      4: 'CC-BY-SA.png',
+      5: 'CC-BY-NC-SA.png',
+      6: 'CC-BY-ND.png',
+      7: 'CC-BY-NC-ND.png',
+    }
+
+    if (isCopyrighted) {
+      if (permission == 4) {
+        response.image = 'PDM.png'
+      } else if (license > 0 && license < 8) {
+        response.image = licenseMap[license]
+      } else if (license == 8) {
+        response.isOneTimeUse = true
+      }
+    } else {
+      response.image = 'CC-0.png'
+    }
+    return response
+  }
 }

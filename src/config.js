@@ -7,6 +7,7 @@ dotenv.config()
 const config = {
   app: {
     name: process.env.APP_NAME,
+    frontendDomain: process.env.APP_FRONTEND_DOMAIN,
   },
   media: {
     scheme: process.env.MEDIA_SCHEME,
@@ -37,6 +38,16 @@ const config = {
     clientAccessToken: process.env.ORCID_CLIENT_ACCESS_TOKEN,
     redirect: process.env.ORCID_REDIRECT_URL,
   },
+  auth: {
+    accessTokenSecret: process.env.ACCESS_TOKEN_SECRET,
+    refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET,
+    jwtTokenExpiresIn: process.env.JWT_TOKEN_EXPIRES_IN
+  },
+  email: {
+    region: process.env.AWS_REGION,
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  }
 }
 
 export default config
