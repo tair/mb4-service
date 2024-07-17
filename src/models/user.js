@@ -221,4 +221,10 @@ export default class User extends Model {
   async validatePassword(password) {
     return await this.constructor.validatePassword(password, this.password_hash)
   }
+
+  getResetPasswordKey() {
+    // Concatenate userId and passwordHash with '/'
+    const resetKey = `${this.user_id}/${this.password_hash || ''}`;
+    return User.md5HashPassword(resetKey)
+  }
 }
