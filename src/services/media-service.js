@@ -218,10 +218,10 @@ export async function getMediaFileDump(projectId) {
 
   for (let i = 0; i < rows.length; i++) {
     let mediaObj = rows[i]
-    const { medium, thumbnail } = mediaObj.media
+    const { original, large, medium, thumbnail, ORIGINAL_FILENAME } = mediaObj.media
     let obj = {
       media_id: mediaObj.media_id,
-      media: { medium, thumbnail }
+      media: { original, large, medium, thumbnail, ORIGINAL_FILENAME }
     }
     let simpleTextFields = ['view_name', 'url', 'url_description']
     for (let textField of simpleTextFields) {
@@ -243,7 +243,7 @@ export async function getMediaFileDump(projectId) {
       }
       obj['copyright_permission'] = MediaFile.getCopyrightPermission(mediaObj.copyright_permission)
     }
-    obj['license'] = MediaFile.getLicenseImage(mediaObj.is_copyrighted, mediaObj.copyright_info, mediaObj.copyright_permission)
+    obj['license'] = MediaFile.getLicenseImage(mediaObj.is_copyrighted, mediaObj.copyright_permission, mediaObj.copyright_license)
     let taxaNames = taxaMap[mediaObj.media_id]
     if (taxaNames) {
       obj['taxa_name'] = taxaNames.join(' ') 
@@ -258,7 +258,7 @@ export async function getMediaFileDump(projectId) {
     if (mediaObj.is_sided) {
       obj['side_represented'] = MediaFile.getSideRepresentation(mediaObj.is_sided)
     }
-    
+
     let referenceTexts = bibRefMap[mediaObj.media_id]
     if (referenceTexts) {
       obj['references'] = referenceTexts
@@ -410,10 +410,9 @@ function getSpecimenName(row, taxaNames) {
     }
   }
   // set source label
+  let referenceSource = row.reference_source
   let sourceLabel
-  if (row.reference_source) {
-    sourceLabel = 'unvouchered'
-  } else if (row.institution_code) {
+  if (referenceSource == 0) {
     // institution code must exist when other two columns exist
     sourceLabel = row.institution_code
     if (row.collection_code) {
@@ -422,13 +421,22 @@ function getSpecimenName(row, taxaNames) {
     if (row.catalog_number) {
       sourceLabel += ':' + row.catalog_number
     }
+  } else if (referenceSource == 1) {
+    sourceLabel = 'unvouchered'
+  } else {
+    return 'Unknown specimen reference type ' + referenceSource
   }
   if (sourceLabel) {
+    sourceLabel = sourceLabel.trim()
     if (name) {
+      name = name.trim()
       name += ' (' + sourceLabel + ')'
     } else {
       name = sourceLabel
     }
+  }
+  if (name) {
+    name = name.replace(/[\n\r\t]+/g, " ");
   }
   return name
 }
