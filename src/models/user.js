@@ -189,6 +189,10 @@ export default class User extends Model {
     return parseInt(lastLogout)
   }
 
+  static getName(fname, lname) {
+    return fname + ' ' + lname
+  }
+
   static md5HashPassword(password) {
     return crypto.createHash('md5').update(password).digest('hex')
   }
@@ -216,5 +220,11 @@ export default class User extends Model {
   // validate a raw password for the current user
   async validatePassword(password) {
     return await this.constructor.validatePassword(password, this.password_hash)
+  }
+
+  getResetPasswordKey() {
+    // Concatenate userId and passwordHash with '/'
+    const resetKey = `${this.user_id}/${this.password_hash || ''}`;
+    return User.md5HashPassword(resetKey)
   }
 }
