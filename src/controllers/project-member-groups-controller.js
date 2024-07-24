@@ -18,11 +18,7 @@ export async function getGroupsMembership(req, res) {
   const membershipId = req.params.linkId
   try {
     const groups = await service.getGroupsInProject(projectId)
-    console.log('groups')
-    console.log(groups)
     const groups_joined = await service.getGroupsForMember(membershipId)
-    console.log('groups joined')
-    console.log(groups_joined)
     res.status(200).json({
       groups_membership: convertGroupsJoined(groups, groups_joined),
     })
@@ -34,14 +30,12 @@ export async function getGroupsMembership(req, res) {
 
 function convertGroupsJoined(groups, groups_joined) {
   const groups_membership = []
-  while(groups.length>0) {//needs a change below to iterate over groups to check
+  while(groups.length>0) {//might need an improvement in efficiency below its slight
     let pushed = false
     let i = 0
     // groups{a,b,d,e,f,g}
     // joined{b,d,g,a}
     while(groups_joined.length>i) {
-      console.log("in loop")
-      console.log(groups_joined)
       if(groups_joined[i].group_id == groups[0].group_id){
         groups_membership.push(groupsJoinedHelper(groups[0], groups_joined[i]))
         pushed = true
@@ -61,9 +55,6 @@ function convertGroupsJoined(groups, groups_joined) {
 }
 
 function groupsJoinedHelper(group, group_joined) {
-  console.log('in helper')
-  console.log(group)
-  console.log(group_joined)
   if(group_joined) {
     return {
       joined: (group.group_id == group_joined.group_id) ? 1 : 0,
