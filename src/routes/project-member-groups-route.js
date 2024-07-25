@@ -5,6 +5,4 @@ const projectMemberGroupsRouter = express.Router({ mergeParams: true })
 
 projectMemberGroupsRouter.get('/', controller.getProjectGroups)
 
-projectMemberGroupsRouter.get('/:linkId/membership', controller.getGroupsMembership)
-
 export default projectMemberGroupsRouter
