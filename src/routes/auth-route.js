@@ -6,6 +6,9 @@ import {
   logout,
   getORCIDAuthUrl,
   authenticateORCID,
+  resetPassword,
+  setNewPassword,
+  validateResetKey
 } from '../controllers/auth-controller.js'
 import { maybeAuthenticateToken } from './auth-interceptor.js'
 import { signup } from '../controllers/user-controller.js'
@@ -57,5 +60,11 @@ authRouter.post(
   maybeAuthenticateToken,
   authenticateORCID
 )
+
+authRouter.post('/reset-password', resetPassword)
+
+authRouter.get('/validate-reset-key', validateResetKey)
+
+authRouter.post('/set-new-password', setNewPassword)
 
 export default authRouter

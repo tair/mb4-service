@@ -74,7 +74,7 @@ async function dataDump(req, res) {
     for (let i = 0; i < projects.length; i++) {
       const project = projects[i]
       const projectId = project.project_id
-      const media_files = await mediaService.getMediaFiles(projectId)
+      const media_files = await mediaService.getMediaFileDump(projectId)
       const project_details = await projectDetailService.getProjectDetails(
         projectId,
         matrixMap,

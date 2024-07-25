@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
-import process from 'node:process'
 import { Buffer } from 'node:buffer'
+import config from '../config.js'
 
 export function authenticateToken(req, res, next) {
   // Return 401 when token is not present or in a invalid format in the header.
@@ -21,7 +21,7 @@ export function authenticateToken(req, res, next) {
     return res.status(401).json({ message: 'Auth token not found.' })
   }
 
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, credential) => {
+  jwt.verify(token, config.auth.accessTokenSecret, (err, credential) => {
     // Return 403 when the token is present but invalid.
     if (err) {
       return res.status(403).json({ message: 'Auth token is invalid.' })
@@ -55,7 +55,7 @@ export function maybeAuthenticateToken(req, res, next) {
     return
   }
 
-  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, credential) => {
+  jwt.verify(token, config.auth.accessTokenSecret, (err, credential) => {
     if (!err) {
       req.credential = credential
     }
