@@ -8,9 +8,11 @@ export async function getProjectUsers(req, res) {
   const admin = req.project.user_id
   try {
     const users = await projectUserService.getUsersInProjects(projectId)
-    const convertedUsers = await Promise.all(users.map((row) => {
-      return convertUser(row, admin)
-    }))
+    const convertedUsers = await Promise.all(
+      users.map((row) => {
+        return convertUser(row, admin)
+      })
+    )
     res.status(200).json({
       users: convertedUsers,
     })
@@ -71,8 +73,8 @@ export async function editUser(req, res) {
 }
 
 async function editGroupsMembership(groupsMembership, req) {
-  for( let group of groupsMembership) {
-    if(group.joined == 0) {
+  for (let group of groupsMembership) {
+    if (group.joined == 0) {
       await deleteGroupsMembership(group.link_id, req)
     } else {
       await addGroupsMembership(group.group_id, req)
@@ -83,15 +85,16 @@ async function editGroupsMembership(groupsMembership, req) {
 async function addGroupsMembership(groupId, req) {
   const linkId = req.params.linkId
   const transaction = await sequelizeConn.transaction()
-  const [projectMembersXGroup, created] = await models.ProjectMembersXGroup.findOrCreate({
-    where: { 
-      membership_id: linkId,
-      group_id: groupId,
-     },
-     transaction: transaction,
-     user: req.user,
-  })
-  if(created) {
+  const [projectMembersXGroup, created] =
+    await models.ProjectMembersXGroup.findOrCreate({
+      where: {
+        membership_id: linkId,
+        group_id: groupId,
+      },
+      transaction: transaction,
+      user: req.user,
+    })
+  if (created) {
     await projectMembersXGroup.save({
       transaction,
       user: req.user,
@@ -115,27 +118,29 @@ async function deleteGroupsMembership(link_id, req) {
 
 async function getGroupsMembership(projectId, membershipId) {
   const groups = await projectMemberGroupsService.getGroupsInProject(projectId)
-  const groups_joined = await projectMemberGroupsService.getGroupsForMember(membershipId)
+  const groups_joined = await projectMemberGroupsService.getGroupsForMember(
+    membershipId
+  )
   return convertGroupsJoined(groups, groups_joined)
 }
 
 function convertGroupsJoined(groups, groups_joined) {
   const groups_membership = []
-  while(groups.length>0) {
+  while (groups.length > 0) {
     let pushed = false
     let i = 0
-    while(groups_joined.length>i) {
-      if(groups_joined[i].group_id == groups[0].group_id){
+    while (groups_joined.length > i) {
+      if (groups_joined[i].group_id == groups[0].group_id) {
         groups_membership.push(groupsJoinedHelper(groups[0], groups_joined[i]))
         pushed = true
         break
       }
       i++
     }
-    if(!pushed) {
+    if (!pushed) {
       groups_membership.push(groupsJoinedHelper(groups[0], null))
     } else {
-      groups_joined.splice(i,1)
+      groups_joined.splice(i, 1)
     }
     groups.shift()
   }
@@ -144,12 +149,12 @@ function convertGroupsJoined(groups, groups_joined) {
 }
 
 function groupsJoinedHelper(group, group_joined) {
-  if(group_joined) {
+  if (group_joined) {
     return {
-      joined: (group.group_id == group_joined.group_id) ? 1 : 0,
+      joined: group.group_id == group_joined.group_id ? 1 : 0,
       group_name: group.group_name,
       group_id: parseInt(group.group_id),
-      link_id: group_joined.link_id
+      link_id: group_joined.link_id,
     }
   } else {
     return {

@@ -123,9 +123,7 @@ ${attachmentParts}
   }
 }
 
-export async function sendResetPasswordEmail(email, resetKey) {
-
-}
+export async function sendResetPasswordEmail(email, resetKey) {}
 
 async function emailFailure(err, recipient = process.env.ERROR_TECHTEAM) {
   const sender = process.env.ERROR_TECHTEAM // Update this as per your requirement
