@@ -95,16 +95,13 @@ async function resetPassword(req, res) {
   }
 
   const email = req.body.email
-
-  // unlikely to happen, UI requires an email address.
   if (!email) {
     res.status(400).json({ message: 'Missing email.' })
     return
   }
 
   try {
-    let user = await models.User.findOne({ where: { email: email } })
-
+    const user = await models.User.findOne({ where: { email: email } })
     if (!user) {
       res.status(400).json({ message: 'Email address does not exist.' })
       return
@@ -125,8 +122,8 @@ async function resetPassword(req, res) {
   } catch (error) {
     console.log('Send reset password email failed!')
     console.error(error)
-    let status = 400
-    if (error.response && error.response.status) status = error.response.status
+
+    const status = error?.response?.status ?? 400
     res.status(status).json(error)
     return
   }
@@ -153,8 +150,8 @@ async function validateResetKey(req, res) {
   } catch (error) {
     console.log('Validate Reset key failed')
     console.error(error)
-    let status = 400
-    if (error.response && error.response.status) status = error.response.status
+
+    const status = error?.response?.status ?? 400
     res.status(status).json(error)
     return
   }
@@ -221,6 +218,7 @@ async function setNewPassword(req, res) {
   } catch (error) {
     console.log('Validate Reset key failed')
     console.error(error)
+
     const status = error?.response?.status ?? 400
     res.status(status).json(error)
     return
@@ -247,8 +245,8 @@ async function authenticateORCID(req, res) {
   } catch (error) {
     console.log('Get logged in user failed')
     console.error(error)
-    let status = 400
-    if (error.response && error.response.status) status = error.response.status
+
+    const status = error?.response?.status ?? 400
     res.status(status).json(error)
     return
   }
@@ -433,9 +431,8 @@ async function authenticateORCID(req, res) {
     .catch((error) => {
       console.log('authenticate orcid user failed')
       console.error(error)
-      let status = 400
-      if (error.response && error.response.status)
-        status = error.response.status
+
+      const status = error?.response?.status ?? 400
       res.status(status).json(error)
     })
 }
