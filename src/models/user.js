@@ -224,7 +224,7 @@ export default class User extends Model {
 
   getResetPasswordKey() {
     // Concatenate userId and passwordHash with '/'
-    const resetKey = `${this.user_id}/${this.password_hash || ''}`;
+    const resetKey = `${this.user_id}/${this.password_hash || ''}`
     return User.md5HashPassword(resetKey)
   }
 }
