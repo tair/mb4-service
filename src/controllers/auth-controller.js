@@ -96,18 +96,17 @@ async function resetPassword(req, res) {
 
   const email = req.body.email
 
-  // unlikely to happen, UI requires an email addressx
+  // unlikely to happen, UI requires an email address.
   if (!email) {
-    res.status(400).json({message: 'Missing email.'})
+    res.status(400).json({ message: 'Missing email.' })
     return
   }
 
   try {
-
     let user = await models.User.findOne({ where: { email: email } })
 
     if (!user) {
-      res.status(400).json({message: 'Email address does not exist.'})
+      res.status(400).json({ message: 'Email address does not exist.' })
       return
     }
 
@@ -115,51 +114,47 @@ async function resetPassword(req, res) {
     const resetPasswordUrl = `${config.app.frontendDomain}/users/set-new-password?key=${resetKey}`
 
     const emailManager = new EmailManager()
-    // not using the message for now
-    const message = await emailManager.email('reset_password_instruction', {
+    await emailManager.email('reset_password_instruction', {
       resetPasswordUrl,
       to: email,
     })
 
     res.status(200).json({
-      message: "Sent reset password email!"
+      message: 'Sent reset password email!',
     })
   } catch (error) {
     console.log('Send reset password email failed!')
     console.error(error)
     let status = 400
-    if (error.response && error.response.status)
-      status = error.response.status
+    if (error.response && error.response.status) status = error.response.status
     res.status(status).json(error)
     return
   }
-
 }
 
 async function validateResetKey(req, res) {
   const resetKey = req.query.resetKey
 
   if (!resetKey) {
-    res.status(400).json({message: 'Missing reset key.'})
+    res.status(400).json({ message: 'Missing reset key.' })
     return
   }
 
   try {
-    let resetKeyClean = resetKey.replace(/[^A-Za-z0-9]+/g, '');
-    let users = await findUserByResetKey(resetKeyClean);
+    let resetKeyClean = resetKey.replace(/[^A-Za-z0-9]+/g, '')
+    let users = await findUserByResetKey(resetKeyClean)
 
     // in case a user is not found or find more than one users
     if (users.length != 1) {
-      res.status(400).json({"message": "Invalid reset key"})
+      res.status(400).json({ message: 'Invalid reset key' })
     } else {
-      res.status(200).json({"message": "Valid reset key"})
+      res.status(200).json({ message: 'Valid reset key' })
     }
   } catch (error) {
     console.log('Validate Reset key failed')
     console.error(error)
     let status = 400
-    if (error.response && error.response.status)
-      status = error.response.status
+    if (error.response && error.response.status) status = error.response.status
     res.status(status).json(error)
     return
   }
@@ -171,12 +166,17 @@ async function findUserByResetKey(resetKey) {
     where: Sequelize.where(
       Sequelize.fn(
         'md5',
-        Sequelize.fn('concat', Sequelize.col('user_id'), '/', Sequelize.fn('IFNULL', Sequelize.col('password_hash'), ''))
+        Sequelize.fn(
+          'concat',
+          Sequelize.col('user_id'),
+          '/',
+          Sequelize.fn('IFNULL', Sequelize.col('password_hash'), '')
+        )
       ),
       resetKey
-    )
-  });
-  return users;
+    ),
+  })
+  return users
 }
 
 async function setNewPassword(req, res) {
@@ -184,52 +184,48 @@ async function setNewPassword(req, res) {
   const password = req.body.password
 
   if (!resetKey) {
-    res.status(400).json({message: 'Missing reset key.'})
+    res.status(400).json({ message: 'Missing reset key.' })
     return
   }
 
   if (!password) {
-    res.status(400).json({message: 'Missing password'})
+    res.status(400).json({ message: 'Missing password' })
     return
   }
 
   try {
-    let resetKeyClean = resetKey.replace(/[^A-Za-z0-9]+/g, '');
-    let users = await findUserByResetKey(resetKeyClean);
+    const resetKeyClean = resetKey.replace(/[^A-Za-z0-9]+/g, '')
+    const users = await findUserByResetKey(resetKeyClean)
 
     // in case a user is not found or find more than one users
     if (users.length != 1) {
-      res.status(400).json({"message": "Invalid reset key"})
+      res.status(400).json({ message: 'Invalid reset key' })
       return
     }
 
-    let user = users[0]
-    let passwordHash = await models.User.hashPassword(password)
+    const user = users[0]
+    const passwordHash = await models.User.hashPassword(password)
     user.password_hash = passwordHash
     await user.save({ user: user })
 
     const emailManager = new EmailManager()
-    let time = getFormattedDateTime()
-    // not using the message for now
-    const message = await emailManager.email('reset_password_notification', {
+    const time = getFormattedDateTime()
+    await emailManager.email('reset_password_notification', {
       time,
       to: user.email,
     })
 
     res.status(200).json({
-      message: "Set new password succeeded!"
+      message: 'Set new password succeeded!',
     })
   } catch (error) {
     console.log('Validate Reset key failed')
     console.error(error)
-    let status = 400
-    if (error.response && error.response.status)
-      status = error.response.status
+    const status = error?.response?.status ?? 400
     res.status(status).json(error)
     return
   }
 }
-
 
 async function getORCIDAuthUrl(req, res) {
   const url = `${config.orcid.domain}/oauth/authorize?client_id=${config.orcid.clientId}\
@@ -456,4 +452,12 @@ function getTokenExpiry(token) {
   return expiry
 }
 
-export { login, logout, getORCIDAuthUrl, authenticateORCID, resetPassword, validateResetKey, setNewPassword }
+export {
+  login,
+  logout,
+  getORCIDAuthUrl,
+  authenticateORCID,
+  resetPassword,
+  validateResetKey,
+  setNewPassword,
+}

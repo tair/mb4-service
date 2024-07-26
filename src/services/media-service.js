@@ -221,7 +221,7 @@ export async function getMediaFileDump(projectId) {
     const { medium, thumbnail } = mediaObj.media
     let obj = {
       media_id: mediaObj.media_id,
-      media: { medium, thumbnail }
+      media: { medium, thumbnail },
     }
     let simpleTextFields = ['view_name', 'url', 'url_description']
     for (let textField of simpleTextFields) {
@@ -241,12 +241,18 @@ export async function getMediaFileDump(projectId) {
       if (mediaObj.copyright_info) {
         obj['copyright_holder'] = mediaObj.copyright_info
       }
-      obj['copyright_permission'] = MediaFile.getCopyrightPermission(mediaObj.copyright_permission)
+      obj['copyright_permission'] = MediaFile.getCopyrightPermission(
+        mediaObj.copyright_permission
+      )
     }
-    obj['license'] = MediaFile.getLicenseImage(mediaObj.is_copyrighted, mediaObj.copyright_info, mediaObj.copyright_permission)
+    obj['license'] = MediaFile.getLicenseImage(
+      mediaObj.is_copyrighted,
+      mediaObj.copyright_info,
+      mediaObj.copyright_permission
+    )
     let taxaNames = taxaMap[mediaObj.media_id]
     if (taxaNames) {
-      obj['taxa_name'] = taxaNames.join(' ') 
+      obj['taxa_name'] = taxaNames.join(' ')
     }
     let specimenName = getSpecimenName(mediaObj, taxaNames)
     if (specimenName) {
@@ -256,9 +262,11 @@ export async function getMediaFileDump(projectId) {
       obj['specimen_notes'] = mediaObj.description.trim()
     }
     if (mediaObj.is_sided) {
-      obj['side_represented'] = MediaFile.getSideRepresentation(mediaObj.is_sided)
+      obj['side_represented'] = MediaFile.getSideRepresentation(
+        mediaObj.is_sided
+      )
     }
-    
+
     let referenceTexts = bibRefMap[mediaObj.media_id]
     if (referenceTexts) {
       obj['references'] = referenceTexts
@@ -268,9 +276,9 @@ export async function getMediaFileDump(projectId) {
     }
     if (mediaObj.ancestor_media_id) {
       let ancestor = {
-        'media_id': mediaObj.ancestor_media_id,
-        'project_id': mediaObj.ancestor_project_id,
-        'project_deleted': mediaObj.ancestor_project_deleted
+        media_id: mediaObj.ancestor_media_id,
+        project_id: mediaObj.ancestor_project_id,
+        project_deleted: mediaObj.ancestor_project_deleted,
       }
       let siblings = siblingMediaMap[mediaObj.media_id]
       if (siblings) {
@@ -455,7 +463,9 @@ async function getBibliographicReferencesMap(projectId) {
     if (!referenceMap[ref.media_id]) {
       referenceMap[ref.media_id] = []
     }
-    referenceMap[ref.media_id].push(BibliographicReference.getCitationText(ref, null))
+    referenceMap[ref.media_id].push(
+      BibliographicReference.getCitationText(ref, null)
+    )
   }
   return referenceMap
 }
@@ -482,7 +492,10 @@ async function getSiblingMediaMap(projectId) {
     if (!siblingMediaMap[media.media_id]) {
       siblingMediaMap[media.media_id] = []
     }
-    siblingMediaMap[media.media_id].push({'media_id': media.sibling_media_id, 'project_id': media.sibling_project_id})
+    siblingMediaMap[media.media_id].push({
+      media_id: media.sibling_media_id,
+      project_id: media.sibling_project_id,
+    })
   }
   return siblingMediaMap
 }

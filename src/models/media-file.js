@@ -267,26 +267,26 @@ export default class MediaFile extends Model {
   }
 
   static getSideRepresentation(isSided) {
-    const valueMap = ["not applicable", "left side", "left side"]
-		return valueMap[isSided]			
+    const valueMap = ['not applicable', 'left side', 'left side']
+    return valueMap[isSided]
   }
 
   static getCopyrightPermission(permission) {
-    const valueMap = [					
-      "Copyright permission not set",
-      "Person loading media owns copyright and grants permission for use of media on MorphoBank",
-      "Permission to use media on MorphoBank granted by copyright holder",
-      "Permission pending",
-      "Copyright expired or work otherwise in public domain",
-      "Copyright permission not yet requested"
+    const valueMap = [
+      'Copyright permission not set',
+      'Person loading media owns copyright and grants permission for use of media on MorphoBank',
+      'Permission to use media on MorphoBank granted by copyright holder',
+      'Permission pending',
+      'Copyright expired or work otherwise in public domain',
+      'Copyright permission not yet requested',
     ]
     return valueMap[permission]
   }
 
   static getLicenseImage(isCopyrighted, permission, license) {
     let response = {
-      'isOneTimeUse' : false,
-      'image': null
+      isOneTimeUse: false,
+      image: null,
     }
     const licenseMap = {
       1: 'CC-0.png',

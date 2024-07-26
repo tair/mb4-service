@@ -2,6 +2,7 @@ import * as aws from '@aws-sdk/client-ses'
 import nodemailer from 'nodemailer'
 import { readFile } from 'node:fs/promises'
 import path from 'path'
+import process from 'node:process'
 import config from '../config.js'
 
 const ses = new aws.SESClient({
