@@ -1,5 +1,6 @@
 import express from 'express'
 import * as controller from '../controllers/media-controller.js'
+import mediaLabelsRouter from './media-labels-route.js'
 import { upload } from './upload.js'
 
 const mediaRouter = express.Router({ mergeParams: true })
@@ -32,5 +33,8 @@ mediaRouter.post(
   controller.editCitation
 )
 mediaRouter.post('/:mediaId/citations/delete', controller.deleteCitations)
+
+// This is a sub-route focused on /media/<media ID>/labels
+mediaRouter.use('/:mediaId/labels', mediaLabelsRouter)
 
 export default mediaRouter
