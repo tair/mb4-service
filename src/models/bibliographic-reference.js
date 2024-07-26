@@ -269,7 +269,7 @@ export default class BibliographicReference extends Model {
     if (record.collation) {
       citation +=
         (record.vol ? ', ' : ' ') +
-        (/[,\-]/.test(record.collation) ? ' pp. ' : ' p. ') +
+        (/[,-]/.test(record.collation) ? ' pp. ' : ' p. ') +
         record.collation
     }
 
