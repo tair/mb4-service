@@ -71,8 +71,12 @@ export async function addInstitutionToProject(req, res) {
 export async function editInstitution(req, res) {
   const projectId = req.params.projectId
   const institutionId = req.body.institutionId
-  const name = req.body.name
+  const name = req.body.name?.trim()
   const selectedInstitutionId = req.body.selectedInstitutionId
+
+  if (name == null || name.length == 0) {
+    return res.status(400)
+  }
 
   const institution = await models.Institution.findByPk(institutionId)
 
@@ -80,27 +84,44 @@ export async function editInstitution(req, res) {
     ? await models.Institution.findByPk(selectedInstitutionId)
     : await models.Institution.findOne({ where: { name: name } })
 
+  console.log(institution, presentInstitutionWithName)
+
   const dupeProjectInstitutionIds =
     await institutionService.getInstitutionProjectReferences(projectId, [
       institutionId,
     ])
+
   const institutionxUserIds =
     await institutionService.getInstitutionUserReferences([institutionId])
 
   const institutionInUse =
     dupeProjectInstitutionIds.length || institutionxUserIds.length
 
-  if (presentInstitutionWithName == null && !institutionInUse) {
-    institution.name = name
-    await institution.save({
-      user: req.user,
-    })
-    return res.status(200)
-  }
-
   const transaction = await sequelizeConn.transaction()
 
   try {
+    if (!institutionInUse) {
+      await models.Institution.destroy({
+        where: {
+          institution_id: institutionId,
+        },
+        transaction: transaction,
+        individualHooks: true,
+        user: req.user,
+      })
+
+      if (presentInstitutionWithName == null) {
+        institution.name = name
+        await institution.save({
+          user: req.user,
+        })
+
+        await transaction.commit()
+
+        return res.status(200).json({ institution })
+      }
+    }
+
     if (presentInstitutionWithName == null) {
       presentInstitutionWithName = await models.Institution.create(
         {
@@ -135,19 +156,8 @@ export async function editInstitution(req, res) {
       user: req.user,
     })
 
-    if (!institutionInUse) {
-      await models.Institution.destroy({
-        where: {
-          institution_id: institutionId,
-        },
-        transaction: transaction,
-        individualHooks: true,
-        user: req.user,
-      })
-    }
-
     await transaction.commit()
-    return res.status(200)
+    return res.status(200).json({ institution: presentInstitutionWithName })
   } catch (e) {
     res.status(500)
     console.error('Could not change Institution\n', e)
@@ -237,14 +247,4 @@ export async function searchInstitutions(req, res) {
     res.status(500).json({ message: 'error obtaining list of insititutions' })
     console.log('error obtaining list of insititutions', e)
   }
-}
-
-export async function searchInstitutionById(req, res) {
-  const institutionId = req.query.institutionId
-
-  const institution = institutionId
-    ? await models.Institution.findByPk(institutionId)
-    : null
-
-  res.status(200).json({ institution })
 }
