@@ -82,7 +82,7 @@ export async function getCharacterCount(partitionId) {
 }
 
 export async function getBibliographiesCount(partitionId, projectId) {
-  references = new Set()
+  const references = new Set()
 
   let [rows] = await sequelizeConn.query(
     `
@@ -92,15 +92,13 @@ export async function getBibliographiesCount(partitionId, projectId) {
 			INNER JOIN characters_x_partitions AS cxp ON cxbr.character_id = cxp.character_id
 			INNER JOIN taxa_x_partitions AS txp ON cxbr.taxon_id = txp.taxon_id
 			WHERE txp.partition_id = ? AND cxp.partition_id = ? AND br.project_id = ?`,
-      { replacements: [partitionId, partitionId, projectId]}
+    { replacements: [partitionId, partitionId, projectId] }
   )
 
-  for(const rowSet in rows) {
-
-    for( const row in rowSet) {
-        references.add(row)
+  for (const rowSet in rows) {
+    for (const row in rowSet) {
+      references.add(row)
     }
-
   }
 
   rows = await sequelizeConn.query(
@@ -110,15 +108,13 @@ export async function getBibliographiesCount(partitionId, projectId) {
 			INNER JOIN characters_x_bibliographic_references AS cxbr ON cxbr.reference_id = br.reference_id
 			INNER JOIN characters_x_partitions AS cxp ON cxbr.character_id = cxp.character_id
 			WHERE br.project_id = ? AND cxp.partition_id = ?`,
-      {replacements: [projectId, partitionId]}
+    { replacements: [projectId, partitionId] }
   )
 
-  for(const rowSet in rows) {
-
-    for( const row in rowSet) {
-        references.add(row)
+  for (const rowSet in rows) {
+    for (const row in rowSet) {
+      references.add(row)
     }
-
   }
 
   rows = await sequelizeConn.query(
@@ -128,15 +124,13 @@ export async function getBibliographiesCount(partitionId, projectId) {
 			INNER JOIN taxa_x_bibliographic_references AS cxbr ON cxbr.reference_id = br.reference_id
 			INNER JOIN taxa_x_partitions AS txp ON cxbr.taxon_id = txp.taxon_id
 			WHERE br.project_id = ? AND txp.partition_id = ?`,
-      {replacements: [projectId, partitionId]}
+    { replacements: [projectId, partitionId] }
   )
 
-  for(const rowSet in rows) {
-
-    for( const row in rowSet) {
-        references.add(row)
+  for (const rowSet in rows) {
+    for (const row in rowSet) {
+      references.add(row)
     }
-
   }
 
   return references.length

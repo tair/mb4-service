@@ -1,8 +1,6 @@
 import sequelizeConn from '../util/db.js'
 import { getMedia } from '../util/media.js'
 import { models } from '../models/init-models.js'
-import * as bibliographyService from '../services/bibliography-service.js'
-import * as documentService from '../services/document-service.js'
 import * as institutionService from '../services/institution-service.js'
 import * as partitionService from '../services/partition-service.js'
 import * as projectService from '../services/projects-service.js'
@@ -168,20 +166,25 @@ export async function getPartitionSummary(req, res) {
   const partitionId = req.params.partitionId
 
   const partition = await models.Partition.findByPk(partitionId)
-  
+
   const characterCount = await partitionService.getCharacterCount(partitionId)
   const taxaCount = await partitionService.getTaxaCount(partitionId)
-  const bibliographicReferenceCount = await partitionService.getBibliographiesCount(partitionId, projectId)
-  
-  const { medias, views, specimens, onetimeMedia } =
-  await mediaService.getMediaSpecimensAndViews(projectId, partitionId)
+  const bibliographicReferenceCount =
+    await partitionService.getBibliographiesCount(partitionId, projectId)
 
-  const documentCount = await partitionService.getDocumentCount(medias, projectId)
-  const labelCount = await partitionService.getMediaLabelsCount(medias)
-  
+  const { medias, views, specimens, onetimeMedia } =
+    await mediaService.getMediaSpecimensAndViews(projectId, partitionId)
+
+  const documentCount = medias.length
+    ? await partitionService.getDocumentCount(medias, projectId)
+    : 0
+  const labelCount = medias.length
+    ? await partitionService.getMediaLabelsCount(medias)
+    : 0
+
   const mediaCount = medias.length
   const viewCount = views.length
-  const specimenCount = specimens.length  
+  const specimenCount = specimens.length
 
   return res.status(200).json({
     partition,

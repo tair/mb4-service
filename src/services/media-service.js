@@ -50,10 +50,10 @@ export async function getMediaLabels(mediaIds) {
 }
 
 export async function getMediaSpecimensAndViews(projectId, partitionId) {
-  const medias = new Set()
-  const onetimeMedia = new Set()
-  const specimens = new Set()
-  const views = new Set()
+  let medias = new Set()
+  let onetimeMedia = new Set()
+  let specimens = new Set()
+  let views = new Set()
 
   // query all attrached to cells
   let [rows] = await sequelizeConn.query(
