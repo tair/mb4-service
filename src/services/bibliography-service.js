@@ -33,3 +33,25 @@ export async function getBibliographiesByIds(referenceIds) {
   )
   return rows
 }
+
+export async function getMediaIds(referenceId, mediaIds) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT media_id
+      FROM media_files_x_bibliographic_references
+      WHERE reference_id = ? AND media_id IN (?)`,
+    { replacements: [referenceId, mediaIds] }
+  )
+  return rows
+}
+
+export async function getTaxaIds(referenceId, taxaIds) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT taxon_id
+      FROM taxa_x_bibliographic_references
+      WHERE reference_id = ? AND taxon_id IN (?)`,
+    { replacements: [referenceId, taxaIds] }
+  )
+  return rows
+}

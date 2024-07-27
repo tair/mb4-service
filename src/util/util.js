@@ -99,3 +99,12 @@ export function parseNullableInt(value) {
 export function parseNullableFloat(value) {
   return value == null ? null : parseFloat(value)
 }
+
+export function getFormattedDateTime() {
+  return (
+    new Date().toLocaleString('en-US', {
+      timeZone: 'America/Los_Angeles',
+      hour12: true,
+    }) + ' PST'
+  )
+}
