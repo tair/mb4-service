@@ -168,42 +168,35 @@ export async function getPartitionSummary(req, res) {
   const partitionId = req.params.partitionId
 
   const partition = await models.Partition.findByPk(partitionId)
-  let bibliographicReferences = 0
-  let documents = 0
-  let labels = 0
-
-  const characters = await partitionService.getCharactersInPartitions(
-    partitionId
-  )
-  const taxa = await partitionService.getTaxaInPartitions(partitionId)
-
-  const taxaIds = Array.from(taxa.values())
-  const characterIds = Array.from(characters.values())
-
+  
+  const characterCount = await partitionService.getCharacterCount(partitionId)
+  const taxaCount = await partitionService.getTaxaCount(partitionId)
+  const bibliographicReferenceCount = await partitionService.getBibliographiesCount(partitionId, projectId)
+  
   const { medias, views, specimens, onetimeMedia } =
-    await mediaService.getMediaSpecimensAndViews(projectId, partitionId)
+  await mediaService.getMediaSpecimensAndViews(projectId, partitionId)
 
-  if (medias.length > 0) {
-    documents =
-      (await documentService.getDocumentsByMediaIds(medias).length) || 0
-    labels = (await mediaService.getMediaLabels(medias).length) || 0
-    bibliographicReferences =
-      (await bibliographyService.getBibliographiesByMediaId(medias).length) || 0
-  }
+  const documentCount = await partitionService.getDocumentCount(medias, projectId)
+  const labelCount = await partitionService.getMediaLabelsCount(medias)
+  
+  const mediaCount = medias.length
+  const viewCount = views.length
+  const specimenCount = specimens.length  
 
   return res.status(200).json({
     partition,
-    characterIds,
-    taxaIds,
-    medias,
+    characterCount,
+    taxaCount,
+    mediaCount,
     onetimeMedia,
-    views,
-    specimens,
-    labels,
-    documents,
-    bibliographicReferences,
+    viewCount,
+    specimenCount,
+    labelCount,
+    documentCount,
+    bibliographicReferenceCount,
   })
 }
+
 export async function getProjectPartitions(req, res) {
   const projectId = req.params.projectId
   const partitions = await partitionService.getPartitions(projectId)

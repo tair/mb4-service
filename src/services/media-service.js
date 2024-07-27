@@ -4,7 +4,7 @@ import { capitalizeFirstLetter } from '../util/util.js'
 export async function getMediaByIds(mediaIds) {
   const [media] = await sequelizeConn.query(
     `
-    SELECT project_id, media_id, media, is_copyrighted, copyright_license, views, specimens
+    SELECT project_id, media_id, media
     FROM media_files
     WHERE media_id IN (?)`,
     {
@@ -50,10 +50,10 @@ export async function getMediaLabels(mediaIds) {
 }
 
 export async function getMediaSpecimensAndViews(projectId, partitionId) {
-  let medias = new Set([])
-  let onetimeMedia = new Set([])
-  let specimens = new Set([])
-  let views = new Set([])
+  const medias = new Set()
+  const onetimeMedia = new Set()
+  const specimens = new Set()
+  const views = new Set()
 
   // query all attrached to cells
   let [rows] = await sequelizeConn.query(
