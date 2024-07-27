@@ -3,12 +3,13 @@ import nodemailer from 'nodemailer'
 import { readFile } from 'node:fs/promises'
 import path from 'path'
 import process from 'node:process'
+import config from '../config.js'
 
 const ses = new aws.SESClient({
-  region: process.env.AWS_REGION,
+  region: config.email.region,
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    accessKeyId: config.email.accessKeyId,
+    secretAccessKey: config.email.secretAccessKey,
   },
 })
 
@@ -92,5 +93,13 @@ const DEFAULT_EMAIL_OPTIONS = {
     subject: 'Morphobank Project Duplication Request Denied',
     from: 'no-reply@morphobank.org',
     include_logo: true,
+  },
+  reset_password_instruction: {
+    subject: '[Morphobank] Resetting your site password',
+    from: 'no-reply@morphobank.org',
+  },
+  reset_password_notification: {
+    subject: '[Morphobank] Your password has been reset',
+    from: 'no-reply@morphobank.org',
   },
 }
