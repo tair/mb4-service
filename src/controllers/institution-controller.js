@@ -68,6 +68,99 @@ export async function addInstitutionToProject(req, res) {
   }
 }
 
+export async function editInstitution(req, res) {
+  const projectId = req.params.projectId
+  const institutionId = req.body.institutionId
+  const name = req.body.name?.trim()
+  const selectedInstitutionId = req.body.selectedInstitutionId
+
+  if (name == null || name.length == 0) {
+    return res.status(400)
+  }
+
+  const institution = await models.Institution.findByPk(institutionId)
+
+  let newInstitution = selectedInstitutionId
+    ? await models.Institution.findByPk(selectedInstitutionId)
+    : await models.Institution.findOne({ where: { name: name } })
+
+  const dupeProjectInstitutionIds =
+    await institutionService.getInstitutionIdsReferencedOutsideProject(
+      [institutionId],
+      projectId
+    )
+
+  const institutionInUse = dupeProjectInstitutionIds.length != 0
+
+  const transaction = await sequelizeConn.transaction()
+
+  try {
+    // See if current institution is not in use by another party
+    if (!institutionInUse) {
+      if (newInstitution == null) {
+        // replace and return institution
+        institution.name = name
+        await institution.save({
+          user: req.user,
+        })
+
+        return res.status(200).json({ institution })
+      }
+
+      // destroy the old institution
+      await models.Institution.destroy({
+        where: {
+          institution_id: institutionId,
+        },
+        transaction: transaction,
+        individualHooks: true,
+        user: req.user,
+      })
+    }
+
+    // build new institution if not found=
+    if (newInstitution == null) {
+      newInstitution = await models.Institution.create(
+        {
+          name: name,
+          user_id: req.user.user_id,
+        },
+        {
+          transaction: transaction,
+          user: req.user,
+        }
+      )
+    }
+
+    await models.InstitutionsXProject.create(
+      {
+        project_id: projectId,
+        institution_id: newInstitution.institution_id,
+      },
+      {
+        transaction: transaction,
+        user: req.user,
+      }
+    )
+
+    await models.InstitutionsXProject.destroy({
+      where: {
+        project_id: projectId,
+        institution_id: institutionId,
+      },
+      transaction: transaction,
+      individualHooks: true,
+      user: req.user,
+    })
+
+    await transaction.commit()
+    return res.status(200).json({ institution: newInstitution })
+  } catch (e) {
+    res.status(500)
+    console.error('Could not change Institution', e)
+  }
+}
+
 export async function removeInstitutionFromProject(req, res) {
   const projectId = req.params.projectId
   const institutionIds = req.body.institutionIds
@@ -78,31 +171,14 @@ export async function removeInstitutionFromProject(req, res) {
   }
 
   try {
-    const dupeProjectInstitutionIds = await models.InstitutionsXProject.findAll(
-      {
-        attributes: ['institution_id'],
-        where: {
-          institution_id: institutionIds,
-          project_id: { [Sequelize.Op.not]: projectId },
-        },
-      }
-    )
-    const institutionxUserIds = await models.InstitutionsXUser.findAll({
-      attributes: ['institution_id'],
-      where: { institution_id: institutionIds },
-    })
-
-    const dupeProjectInstitutionIdsArray = dupeProjectInstitutionIds.map(
-      (i) => i.institution_id
-    )
-    const institutionxUserIdsArray = institutionxUserIds.map(
-      (i) => i.institution_id
-    )
-    const uniqueInstitutionIds = institutionIds.filter((institutionId) => {
-      return (
-        !dupeProjectInstitutionIdsArray.includes(institutionId) &&
-        !institutionxUserIdsArray.includes(institutionId)
+    const dupeProjectInstitutionIds =
+      await institutionService.getInstitutionIdsReferencedOutsideProject(
+        institutionIds,
+        projectId
       )
+
+    const uniqueInstitutionIds = institutionIds.filter((institutionId) => {
+      return !dupeProjectInstitutionIds.includes(institutionId)
     })
 
     const transaction = await sequelizeConn.transaction()
