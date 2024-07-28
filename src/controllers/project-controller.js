@@ -172,9 +172,10 @@ export async function getPartitionSummary(req, res) {
   const bibliographicReferenceCount =
     await partitionService.getBibliographiesCount(partitionId, projectId)
 
-  const { medias, views, specimens, onetimeMedia } =
+  const { medias, viewCount, specimenCount, onetimeMedia } =
     await mediaService.getMediaSpecimensAndViews(projectId, partitionId)
 
+  // functions that require the associated media Ids
   const documentCount = medias.length
     ? await partitionService.getDocumentCount(medias, projectId)
     : 0
@@ -183,8 +184,6 @@ export async function getPartitionSummary(req, res) {
     : 0
 
   const mediaCount = medias.length
-  const viewCount = views.length
-  const specimenCount = specimens.length
 
   return res.status(200).json({
     partition,
