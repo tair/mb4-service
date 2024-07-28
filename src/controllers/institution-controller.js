@@ -80,27 +80,34 @@ export async function editInstitution(req, res) {
 
   const institution = await models.Institution.findByPk(institutionId)
 
-  let presentInstitutionWithName = selectedInstitutionId
+  let newInstitution = selectedInstitutionId
     ? await models.Institution.findByPk(selectedInstitutionId)
     : await models.Institution.findOne({ where: { name: name } })
 
-  console.log(institution, presentInstitutionWithName)
-
   const dupeProjectInstitutionIds =
-    await institutionService.getInstitutionProjectReferences(projectId, [
-      institutionId,
-    ])
+    await institutionService.getInstitutionIdsReferencedOutsideProject(
+      [institutionId],
+      projectId
+    )
 
-  const institutionxUserIds =
-    await institutionService.getInstitutionUserReferences([institutionId])
-
-  const institutionInUse =
-    dupeProjectInstitutionIds.length || institutionxUserIds.length
+  const institutionInUse = dupeProjectInstitutionIds.length != 0
 
   const transaction = await sequelizeConn.transaction()
 
   try {
+    // See if current institution is not in use by another party
     if (!institutionInUse) {
+      if (newInstitution == null) {
+        // replace and return institution
+        institution.name = name
+        await institution.save({
+          user: req.user,
+        })
+
+        return res.status(200).json({ institution })
+      }
+
+      // destroy the old institution
       await models.Institution.destroy({
         where: {
           institution_id: institutionId,
@@ -109,21 +116,11 @@ export async function editInstitution(req, res) {
         individualHooks: true,
         user: req.user,
       })
-
-      if (presentInstitutionWithName == null) {
-        institution.name = name
-        await institution.save({
-          user: req.user,
-        })
-
-        await transaction.commit()
-
-        return res.status(200).json({ institution })
-      }
     }
 
-    if (presentInstitutionWithName == null) {
-      presentInstitutionWithName = await models.Institution.create(
+    // build new institution if not found=
+    if (newInstitution == null) {
+      newInstitution = await models.Institution.create(
         {
           name: name,
           user_id: req.user.user_id,
@@ -138,7 +135,7 @@ export async function editInstitution(req, res) {
     await models.InstitutionsXProject.create(
       {
         project_id: projectId,
-        institution_id: presentInstitutionWithName.institution_id,
+        institution_id: newInstitution.institution_id,
       },
       {
         transaction: transaction,
@@ -157,10 +154,10 @@ export async function editInstitution(req, res) {
     })
 
     await transaction.commit()
-    return res.status(200).json({ institution: presentInstitutionWithName })
+    return res.status(200).json({ institution: newInstitution })
   } catch (e) {
     res.status(500)
-    console.error('Could not change Institution\n', e)
+    console.error('Could not change Institution', e)
   }
 }
 
@@ -175,18 +172,13 @@ export async function removeInstitutionFromProject(req, res) {
 
   try {
     const dupeProjectInstitutionIds =
-      await institutionService.getInstitutionProjectReferences(
-        projectId,
-        institutionIds
+      await institutionService.getInstitutionIdsReferencedOutsideProject(
+        institutionIds,
+        projectId
       )
-    const institutionxUserIds =
-      await institutionService.getInstitutionUserReferences(institutionIds)
 
     const uniqueInstitutionIds = institutionIds.filter((institutionId) => {
-      return (
-        !dupeProjectInstitutionIds.includes(institutionId) &&
-        !institutionxUserIds.includes(institutionId)
-      )
+      return !dupeProjectInstitutionIds.includes(institutionId)
     })
 
     const transaction = await sequelizeConn.transaction()
