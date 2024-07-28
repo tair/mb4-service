@@ -84,6 +84,8 @@ export async function editInstitution(req, res) {
     ? await models.Institution.findByPk(selectedInstitutionId)
     : await models.Institution.findOne({ where: { name: name } })
 
+  // Determine whether the current institution is referenced any where else
+  // outside of the current project.
   const dupeProjectInstitutionIds =
     await institutionService.getInstitutionIdsReferencedOutsideProject(
       [institutionId],
@@ -95,10 +97,11 @@ export async function editInstitution(req, res) {
   const transaction = await sequelizeConn.transaction()
 
   try {
-    // See if current institution is not in use by another party
     if (!institutionInUse) {
+      // If the previous institution is not is use outside of this project and
+      // the new instituion does not already exist, let's update the current
+      // institution and return it immediately.
       if (newInstitution == null) {
-        // replace and return institution
         institution.name = name
         await institution.save({
           user: req.user,
@@ -107,7 +110,9 @@ export async function editInstitution(req, res) {
         return res.status(200).json({ institution })
       }
 
-      // destroy the old institution
+      // If the institution is not in use and another one is more correct, let's
+      // just delete it from the database so that it doesn't pollute searching
+      // for other users.
       await models.Institution.destroy({
         where: {
           institution_id: institutionId,
@@ -118,7 +123,6 @@ export async function editInstitution(req, res) {
       })
     }
 
-    // build new institution if not found=
     if (newInstitution == null) {
       newInstitution = await models.Institution.create(
         {
@@ -222,10 +226,10 @@ export async function searchInstitutions(req, res) {
       where: { project_id: projectId },
     })
 
-    // extract ids because sequelize expects values not objects
+    // Extract ids because sequelize expects values not objects
     const dupes = projectInstitutions.map((i) => i.institution_id)
 
-    // get all institutions with like name segment and not within other model
+    // Get all institutions with like name segment and not within other model
     const institutions = await models.Institution.findAll({
       attributes: ['institution_id', 'name'],
       where: {
