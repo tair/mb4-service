@@ -5,6 +5,8 @@ const mediaLabelsRouter = express.Router({ mergeParams: true })
 
 mediaLabelsRouter.get('/', controller.getMediaLabels)
 
-mediaLabelsRouter.post('/:linkId', controller.editMediaLabel)
+mediaLabelsRouter.post('/edit', controller.editMediaLabels)
+
+mediaLabelsRouter.post('/delete', controller.deleteMediaLabels)
 
 export default mediaLabelsRouter
