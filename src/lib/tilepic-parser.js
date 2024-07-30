@@ -3,7 +3,6 @@ import fs from 'fs/promises'
 import { MEDIA_PATH } from '../util/media.js'
 
 export class TilepicParser {
-  
   constructor(path) {
     this.path = MEDIA_PATH + path
   }
@@ -16,7 +15,7 @@ export class TilepicParser {
 
     try {
       let buffer = Buffer.alloc(4)
-      await file.read({buffer})
+      await file.read({ buffer })
 
       // Verify that the file has the 'TPC' Magic header. This prevents fetching
       // files that are not in the TilePic format.
@@ -26,23 +25,23 @@ export class TilepicParser {
       }
 
       // Read the Header Length and verify that it is valid.
-      await file.read({buffer})
+      await file.read({ buffer })
       const headerLength = buffer.readUInt32BE()
       if (headerLength <= 8) {
         throw 'Tilepic header length is invalid'
       }
 
       let position = headerLength + (tile - 1) * 4
-      await file.read({buffer, position})
+      await file.read({ buffer, position })
       const startPosition = buffer.readUInt32BE()
 
       position += 4
-      await file.read({buffer, position})
+      await file.read({ buffer, position })
       const endPosition = buffer.readUInt32BE()
 
       const fileLength = endPosition - startPosition
       buffer = Buffer.alloc(fileLength)
-      await file.read({buffer, position: startPosition})
+      await file.read({ buffer, position: startPosition })
 
       return buffer
     } finally {

@@ -7,6 +7,9 @@ import { Datamodel } from '../lib/datamodel/datamodel.js'
 export async function getMediaLabels(req, res) {
   const projectId = req.params.projectId
   const mediaId = req.params.mediaId
+
+  // Confirms that the media file belongs to the project to prevent access to
+  // media files in different projects.
   const media = await models.MediaFile.findByPk(mediaId)
   if (media == null || media.project_id != projectId) {
     res.status(404).json({ message: 'Media is not found' })
@@ -17,7 +20,7 @@ export async function getMediaLabels(req, res) {
   const tableNum = getTabelNumberFromType(type)
   if (tableNum == null) {
     res.status(400).json({ message: 'Type not specified' })
-    return 
+    return
   }
 
   const rows = await service.getMediaLabels(mediaId, tableNum)
@@ -60,7 +63,7 @@ export async function getMediaLabels(req, res) {
   res.status(200).json(labels)
 }
 
-export async function editMediaLabel(req, res) {
+export async function editMediaLabels(req, res) {
   const projectId = req.params.projectId
   const mediaId = req.params.mediaId
 
@@ -76,18 +79,18 @@ export async function editMediaLabel(req, res) {
   const tableNum = getTabelNumberFromType(type)
   if (tableNum == null) {
     res.status(400).json({ message: 'Type not specified' })
-    return 
+    return
   }
 
   // Get the linking table media table and verify that it still exists in the
   // database.
   const datamodel = Datamodel.getInstance()
   const tableModel = datamodel.getTableByNumber(tableNum)
-  const linkId = req.params.linkId
+  const linkId = req.body.linkId
   const link = await tableModel.findByPk(linkId)
   if (link == null) {
     res.status(400).json({ message: 'Link is not found' })
-    return 
+    return
   }
 
   // Confirm that the linking reference also belongs to the project. This
@@ -95,32 +98,41 @@ export async function editMediaLabel(req, res) {
   const reference = await getLinkingReference(link, type)
   if (reference == null || reference.project_id != projectId) {
     res.status(400).json({ message: 'Reference not found in project' })
-    return    
+    return
   }
 
   const transaction = await sequelizeConn.transaction()
   const newLabels = req.body.save
   for (const properties of newLabels) {
-    const label = 
-        properties.annotation_id
-            ? await models.MediaLabel.findByPk(properties.annotation_id)
-            : models.MediaLabel.build({ user_id: req.user.user_id })
+    let label = null
+    if (properties.annotation_id) {
+      label = await models.MediaLabel.findByPk(properties.annotation_id)
+    }
+    if (label == null) {
+      label = models.MediaLabel.build({
+        user_id: req.user.user_id,
+        media_id: mediaId,
+        link_id: linkId,
+        table_num: tableNum,
+      })
+    }
+
     label.title = properties.label
     label.content = properties.label
-      label.properties = {
-        x: properties.x,
-        y: properties.y,
-        tx: properties.tx,
-        ty: properties.ty,
-        tw: properties.tw,
-        th: properties.th,
-        showDefaultText: properties.showDefaultText,
-        locked: 0,
-      }
+    label.properties = {
+      x: properties.x,
+      y: properties.y,
+      tx: properties.tx,
+      ty: properties.ty,
+      tw: properties.tw,
+      th: properties.th,
+      showDefaultText: properties.showDefaultText,
+      locked: 0,
+    }
     switch (properties.type) {
       case 'rect':
         label.typecode = 0
-        label.properties.w =properties.w
+        label.properties.w = properties.w
         label.properties.h = properties.h
         break
       case 'point':
@@ -133,15 +145,29 @@ export async function editMediaLabel(req, res) {
     }
 
     await label.save({
-        transaction,
-        user: req.user,
-      })
+      transaction,
+      user: req.user,
+    })
+
+    properties.annotation_id = label.label_id
   }
 
-    await transaction.commit()
-    res.status(200).json({
-      annotation_ids: []
-    })
+  await transaction.commit()
+  res.status(200).json({
+    labels: newLabels,
+  })
+}
+
+export async function deleteMediaLabels(req, res) {
+  const annotationIds = req.body.annotationIds
+
+  // TODO: Implement the ability to delete media labels based on their label_id
+  //     primary keys. We must also verify that the label belongs to the media
+  //     in the URL.
+
+  res.status(200).json({
+    annotationIds,
+  })
 }
 
 /**
@@ -149,11 +175,16 @@ export async function editMediaLabel(req, res) {
  */
 function getTabelNumberFromType(type) {
   switch (type) {
-    case 'X': return TABLE_NUMBERS.cells_x_media
-    case 'M': return TABLE_NUMBERS.media_files
-    case 'T': return TABLE_NUMBERS.taxa_x_media
-    case 'C': return TABLE_NUMBERS.characters_x_media
-    default: return null
+    case 'X':
+      return TABLE_NUMBERS.cells_x_media
+    case 'M':
+      return TABLE_NUMBERS.media_files
+    case 'T':
+      return TABLE_NUMBERS.taxa_x_media
+    case 'C':
+      return TABLE_NUMBERS.characters_x_media
+    default:
+      return null
   }
 }
 

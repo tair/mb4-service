@@ -1,8 +1,7 @@
 import { TilepicParser } from '../lib/tilepic-parser.js'
 
 export async function getTilePic(req, res) {
-
-  const path = req.query.p    
+  const path = req.query.p
   if (!path) {
     console.log('Path is not defined')
     res.sendStatus(400)
@@ -27,7 +26,7 @@ export async function getTilePic(req, res) {
     res.status(200)
     res.write(image)
     res.end()
-  } catch(e) {
+  } catch (e) {
     console.log('Error getting tilepic:', e)
     res.sendStatus(404)
   }
