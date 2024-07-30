@@ -8,13 +8,8 @@ export async function getProjectUsers(req, res) {
   const admin = req.project.user_id
   try {
     const users = await projectUserService.getUsersInProjects(projectId)
-    const convertedUsers = await Promise.all(
-      users.map((row) => {
-        return convertUser(row, admin)
-      })
-    )
     res.status(200).json({
-      users: convertedUsers,
+      users: users.map((row) => convertUser(row, admin)),
     })
   } catch (err) {
     console.error(`Error: Cannot fetch members for ${projectId}`, err)
@@ -38,6 +33,8 @@ export async function deleteUser(req, res) {
 }
 
 export async function editUser(req, res) {
+  console.log('in controller')
+  console.log(req.user)
   const projectId = req.project.project_id
   const linkId = req.params.linkId
   const admin = req.project.user_id
@@ -47,31 +44,83 @@ export async function editUser(req, res) {
     return
   }
 
-  const values = req.body.user
-  await editGroupsMembership(values.groups_membership, req)
+  const valuesUser = req.body.user
+  console.log('groups joined')
+  console.log(req.body.groupsJoined)
+  const updatedJoinedGroupIds = req.body.groupsJoined.map((groupId) => {
+    return parseInt(groupId)
+  })
 
-  delete values.groups_membership
+  const joinedGroups = await models.ProjectMembersXGroup.findAll({
+    where: {
+      membership_id: valuesUser.link_id,
+    },
+  })
+  console.log('link_id')
+  console.log(valuesUser.link_id)
+  const joinedGroupIds = joinedGroups.map(
+    (group) => group.group_id
+  )
+  console.log('joined group ids')
+  console.log(joinedGroupIds)
+  const groupsToAdd = updatedJoinedGroupIds.filter(
+    (updatedGroupId) => !joinedGroupIds.includes(updatedGroupId)
+  )
+  console.log('groups to add')
+  console.log(groupsToAdd)
+  const groupsToDelete = joinedGroupIds.filter(
+    (joinedGroupId) => !updatedJoinedGroupIds.includes(joinedGroupId)
+  )
 
-  for (const column in values) {
-    user.set(column, values[column])
+  if (groupsToAdd) {
+    await models.ProjectMembersXGroup.bulkCreate(
+      groupsToAdd.map((id) => ({
+        group_id: id,
+        membership_id: valuesUser.link_id,
+      }))
+    )
   }
+  if (groupsToDelete) {
+    await models.ProjectMembersXGroup.destroy({
+      where: {
+        group_id: groupsToDelete,
+      },
+    })
+  }
+
+  
+
+  console.log('joined groups:')
+  console.log(joinedGroups)
+  //ids: [123, 124, 125] <-------- valuesGroups
+  //await editGroupsMembership(values.groups_membership, req)
+
+  //delete values.groups_membership
+
+  // setting the changes for the member_type in pxu
+  console.log('membership type')
+  console.log(valuesUser.membership_type)
+  if(valuesUser.membership_type !== undefined) {
+    user.membership_type = valuesUser.membership_type
+  }
+
   const transaction = await sequelizeConn.transaction()
   try {
     await user.save({
       transaction,
       user: req.user,
     })
+    user.joined_groups = updatedJoinedGroupIds
 
     await transaction.commit()
-    const convertedUser = await convertUser(user, admin)
-    res.status(200).json({ user: convertedUser })
+    res.status(200).json({ user: convertUser(user, admin) })
   } catch (e) {
     console.log(e)
     await transaction.rollback()
     res.status(500).json({ message: 'Failed to edit user due to server error' })
   }
 }
-
+/*
 async function editGroupsMembership(groupsMembership, req) {
   for (let group of groupsMembership) {
     if (group.joined == 0) {
@@ -84,90 +133,45 @@ async function editGroupsMembership(groupsMembership, req) {
 
 async function addGroupsMembership(groupId, req) {
   const linkId = req.params.linkId
-  const transaction = await sequelizeConn.transaction()
   const [projectMembersXGroup, created] =
     await models.ProjectMembersXGroup.findOrCreate({
       where: {
         membership_id: linkId,
         group_id: groupId,
       },
-      transaction: transaction,
       user: req.user,
     })
   if (created) {
     await projectMembersXGroup.save({
-      transaction,
       user: req.user,
     })
-    await transaction.commit()
   }
 }
 
 async function deleteGroupsMembership(link_id, req) {
-  const transaction = await sequelizeConn.transaction()
   await models.ProjectMembersXGroup.destroy({
     where: {
       link_id: link_id,
     },
-    transaction: transaction,
     individualHooks: true,
     user: req.user,
   })
-  await transaction.commit()
-}
-
-async function getGroupsMembership(projectId, membershipId) {
-  const groups = await projectMemberGroupsService.getGroupsInProject(projectId)
-  const groups_joined = await projectMemberGroupsService.getGroupsForMember(
-    membershipId
-  )
-  return convertGroupsJoined(groups, groups_joined)
-}
-
-function convertGroupsJoined(groups, groups_joined) {
-  const groups_membership = []
-  while (groups.length > 0) {
-    let pushed = false
-    let i = 0
-    while (groups_joined.length > i) {
-      if (groups_joined[i].group_id == groups[0].group_id) {
-        groups_membership.push(groupsJoinedHelper(groups[0], groups_joined[i]))
-        pushed = true
-        break
-      }
-      i++
-    }
-    if (!pushed) {
-      groups_membership.push(groupsJoinedHelper(groups[0], null))
-    } else {
-      groups_joined.splice(i, 1)
-    }
-    groups.shift()
-  }
-
-  return groups_membership
-}
-
-function groupsJoinedHelper(group, group_joined) {
-  if (group_joined) {
-    return {
-      joined: group.group_id == group_joined.group_id ? 1 : 0,
-      group_name: group.group_name,
-      group_id: parseInt(group.group_id),
-      link_id: group_joined.link_id,
-    }
-  } else {
-    return {
-      joined: 0,
-      group_name: group.group_name,
-      group_id: parseInt(group.group_id),
-      link_id: 0,
-    }
-  }
-}
+}*/
 
 //converts member data from db into its own object
-async function convertUser(row, admin) {
+function convertUser(row, admin) {
+  if((typeof row.joined_groups) == String) {
+    return {
+      user_id: parseInt(row.user_id),
+      link_id: parseInt(row.link_id),
+      admin: row.user_id == admin,
+      fname: row.fname,
+      lname: row.lname,
+      membership_type: parseInt(row.membership_type),
+      email: row.email,
+      joined_groups: (row.joined_groups.split(',')).map((groupId) => parseInt(groupId)),
+    }
+  }
   return {
     user_id: parseInt(row.user_id),
     link_id: parseInt(row.link_id),
@@ -176,6 +180,6 @@ async function convertUser(row, admin) {
     lname: row.lname,
     membership_type: parseInt(row.membership_type),
     email: row.email,
-    groups_membership: await getGroupsMembership(row.project_id, row.link_id),
+    joined_groups: row.joined_groups,
   }
 }
