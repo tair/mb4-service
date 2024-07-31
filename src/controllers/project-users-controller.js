@@ -36,20 +36,17 @@ export async function editUser(req, res) {
   const linkId = req.params.linkId
   const admin = req.project.user_id
   const user = await models.ProjectsXUser.findByPk(linkId)
+  const userData = req.body.user
   if (user == null || user.project_id != projectId) {
     res.status(404).json({ message: 'User is not found' })
     return
   }
   const transaction = await sequelizeConn.transaction()
   try {
-    const valuesUser = req.body.user
-    const updatedJoinedGroupIds = req.body.groupsJoined.map((groupId) => {
-      return parseInt(groupId)
-    })
-
+    const updatedJoinedGroupIds = req.body.groupsJoined
     const joinedGroups = await models.ProjectMembersXGroup.findAll({
       where: {
-        membership_id: valuesUser.link_id,
+        membership_id: userData.link_id,
       },
     })
     const joinedGroupIds = joinedGroups.map(
@@ -66,7 +63,7 @@ export async function editUser(req, res) {
       await models.ProjectMembersXGroup.bulkCreate(
         groupsToAdd.map((id) => ({
           group_id: id,
-          membership_id: valuesUser.link_id,
+          membership_id: userData.link_id,
         })),
         {
           transaction: transaction,
@@ -87,20 +84,19 @@ export async function editUser(req, res) {
         user: req.user,
       })
     }
-
     // setting the changes for the member_type in pxu
-    if(valuesUser.membership_type !== undefined) {
-      user.membership_type = valuesUser.membership_type
+    if(userData.membership_type !== undefined) {
+      user.membership_type = userData.membership_type
     }
     // saving the changes made for user (membership_type)
     await user.save({
       transaction,
       user: req.user,
     })
-    user.joined_groups = updatedJoinedGroupIds
+    userData.membership_type = user.membership_type
 
     await transaction.commit()
-    res.status(200).json({ user: convertUser(user, admin) })
+    res.status(200).json({ user: convertUser(userData, admin) })
   } catch (e) {
     console.log(e)
     await transaction.rollback()
