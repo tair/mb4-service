@@ -1,5 +1,4 @@
 import * as projectUserService from '../services/project-user-service.js'
-import * as projectMemberGroupsService from '../services/project-member-groups-service.js'
 import sequelizeConn from '../util/db.js'
 import { models } from '../models/init-models.js'
 
@@ -33,8 +32,6 @@ export async function deleteUser(req, res) {
 }
 
 export async function editUser(req, res) {
-  console.log('in controller')
-  console.log(req.user)
   const projectId = req.project.project_id
   const linkId = req.params.linkId
   const admin = req.project.user_id
@@ -43,69 +40,59 @@ export async function editUser(req, res) {
     res.status(404).json({ message: 'User is not found' })
     return
   }
-
-  const valuesUser = req.body.user
-  console.log('groups joined')
-  console.log(req.body.groupsJoined)
-  const updatedJoinedGroupIds = req.body.groupsJoined.map((groupId) => {
-    return parseInt(groupId)
-  })
-
-  const joinedGroups = await models.ProjectMembersXGroup.findAll({
-    where: {
-      membership_id: valuesUser.link_id,
-    },
-  })
-  console.log('link_id')
-  console.log(valuesUser.link_id)
-  const joinedGroupIds = joinedGroups.map(
-    (group) => group.group_id
-  )
-  console.log('joined group ids')
-  console.log(joinedGroupIds)
-  const groupsToAdd = updatedJoinedGroupIds.filter(
-    (updatedGroupId) => !joinedGroupIds.includes(updatedGroupId)
-  )
-  console.log('groups to add')
-  console.log(groupsToAdd)
-  const groupsToDelete = joinedGroupIds.filter(
-    (joinedGroupId) => !updatedJoinedGroupIds.includes(joinedGroupId)
-  )
-
-  if (groupsToAdd) {
-    await models.ProjectMembersXGroup.bulkCreate(
-      groupsToAdd.map((id) => ({
-        group_id: id,
-        membership_id: valuesUser.link_id,
-      }))
-    )
-  }
-  if (groupsToDelete) {
-    await models.ProjectMembersXGroup.destroy({
-      where: {
-        group_id: groupsToDelete,
-      },
-    })
-  }
-
-  
-
-  console.log('joined groups:')
-  console.log(joinedGroups)
-  //ids: [123, 124, 125] <-------- valuesGroups
-  //await editGroupsMembership(values.groups_membership, req)
-
-  //delete values.groups_membership
-
-  // setting the changes for the member_type in pxu
-  console.log('membership type')
-  console.log(valuesUser.membership_type)
-  if(valuesUser.membership_type !== undefined) {
-    user.membership_type = valuesUser.membership_type
-  }
-
   const transaction = await sequelizeConn.transaction()
   try {
+    const valuesUser = req.body.user
+    const updatedJoinedGroupIds = req.body.groupsJoined.map((groupId) => {
+      return parseInt(groupId)
+    })
+
+    const joinedGroups = await models.ProjectMembersXGroup.findAll({
+      where: {
+        membership_id: valuesUser.link_id,
+      },
+    })
+    const joinedGroupIds = joinedGroups.map(
+      (group) => group.group_id
+    )
+    const groupsToAdd = updatedJoinedGroupIds.filter(
+      (updatedGroupId) => !joinedGroupIds.includes(updatedGroupId)
+    )
+    const groupsToDelete = joinedGroupIds.filter(
+      (joinedGroupId) => !updatedJoinedGroupIds.includes(joinedGroupId)
+    )
+    // adding groups member is a part of by creating PMXG row for user
+    if (groupsToAdd) {
+      await models.ProjectMembersXGroup.bulkCreate(
+        groupsToAdd.map((id) => ({
+          group_id: id,
+          membership_id: valuesUser.link_id,
+        })),
+        {
+          transaction: transaction,
+          individualHooks: true,
+          user: req.user,
+        }
+      )
+    }
+    // deleting the groups specified for a specific user
+    if (groupsToDelete) {
+      await models.ProjectMembersXGroup.destroy({
+        where: {
+          group_id: groupsToDelete,
+          membership_id: linkId
+        },
+        transaction: transaction,
+        individualHooks: true,
+        user: req.user,
+      })
+    }
+
+    // setting the changes for the member_type in pxu
+    if(valuesUser.membership_type !== undefined) {
+      user.membership_type = valuesUser.membership_type
+    }
+    // saving the changes made for user (membership_type)
     await user.save({
       transaction,
       user: req.user,
@@ -120,47 +107,10 @@ export async function editUser(req, res) {
     res.status(500).json({ message: 'Failed to edit user due to server error' })
   }
 }
-/*
-async function editGroupsMembership(groupsMembership, req) {
-  for (let group of groupsMembership) {
-    if (group.joined == 0) {
-      await deleteGroupsMembership(group.link_id, req)
-    } else {
-      await addGroupsMembership(group.group_id, req)
-    }
-  }
-}
-
-async function addGroupsMembership(groupId, req) {
-  const linkId = req.params.linkId
-  const [projectMembersXGroup, created] =
-    await models.ProjectMembersXGroup.findOrCreate({
-      where: {
-        membership_id: linkId,
-        group_id: groupId,
-      },
-      user: req.user,
-    })
-  if (created) {
-    await projectMembersXGroup.save({
-      user: req.user,
-    })
-  }
-}
-
-async function deleteGroupsMembership(link_id, req) {
-  await models.ProjectMembersXGroup.destroy({
-    where: {
-      link_id: link_id,
-    },
-    individualHooks: true,
-    user: req.user,
-  })
-}*/
 
 //converts member data from db into its own object
 function convertUser(row, admin) {
-  if((typeof row.joined_groups) == String) {
+  if((typeof row.joined_groups) == 'string') {
     return {
       user_id: parseInt(row.user_id),
       link_id: parseInt(row.link_id),
@@ -180,6 +130,6 @@ function convertUser(row, admin) {
     lname: row.lname,
     membership_type: parseInt(row.membership_type),
     email: row.email,
-    joined_groups: row.joined_groups,
+    joined_groups: (row.joined_groups !== null) ? row.joined_groups: [],
   }
 }
