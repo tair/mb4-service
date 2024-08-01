@@ -49,9 +49,7 @@ export async function editUser(req, res) {
         membership_id: userData.link_id,
       },
     })
-    const joinedGroupIds = joinedGroups.map(
-      (group) => group.group_id
-    )
+    const joinedGroupIds = joinedGroups.map((group) => group.group_id)
     const groupsToAdd = updatedJoinedGroupIds.filter(
       (updatedGroupId) => !joinedGroupIds.includes(updatedGroupId)
     )
@@ -77,7 +75,7 @@ export async function editUser(req, res) {
       await models.ProjectMembersXGroup.destroy({
         where: {
           group_id: groupsToDelete,
-          membership_id: linkId
+          membership_id: linkId,
         },
         transaction: transaction,
         individualHooks: true,
@@ -85,7 +83,7 @@ export async function editUser(req, res) {
       })
     }
     // setting the changes for the member_type in pxu
-    if(userData.membership_type !== undefined) {
+    if (userData.membership_type !== undefined) {
       user.membership_type = userData.membership_type
     }
     // saving the changes made for user (membership_type)
@@ -106,7 +104,7 @@ export async function editUser(req, res) {
 
 //converts member data from db into its own object
 function convertUser(row, admin) {
-  if((typeof row.joined_groups) == 'string') {
+  if (typeof row.joined_groups == 'string') {
     return {
       user_id: parseInt(row.user_id),
       link_id: parseInt(row.link_id),
@@ -115,7 +113,9 @@ function convertUser(row, admin) {
       lname: row.lname,
       membership_type: parseInt(row.membership_type),
       email: row.email,
-      joined_groups: (row.joined_groups.split(',')).map((groupId) => parseInt(groupId)),
+      joined_groups: row.joined_groups
+        .split(',')
+        .map((groupId) => parseInt(groupId)),
     }
   }
   return {
@@ -126,6 +126,6 @@ function convertUser(row, admin) {
     lname: row.lname,
     membership_type: parseInt(row.membership_type),
     email: row.email,
-    joined_groups: (row.joined_groups !== null) ? row.joined_groups: [],
+    joined_groups: row.joined_groups !== null ? row.joined_groups : [],
   }
 }
