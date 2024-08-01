@@ -237,6 +237,7 @@ export async function getMediaFileDump(projectId) {
       obj['downloads'] = downloadMap[mediaObj.media_id]
     }
     obj['user_name'] = User.getName(mediaObj.fname, mediaObj.lname)
+    obj['user_lname'] = mediaObj.lname
     if (mediaObj.is_copyrighted) {
       if (mediaObj.copyright_info) {
         obj['copyright_holder'] = mediaObj.copyright_info
@@ -246,7 +247,15 @@ export async function getMediaFileDump(projectId) {
     obj['license'] = MediaFile.getLicenseImage(mediaObj.is_copyrighted, mediaObj.copyright_permission, mediaObj.copyright_license)
     let taxaNames = taxaMap[mediaObj.media_id]
     if (taxaNames) {
-      obj['taxa_name'] = taxaNames.join(' ') 
+      if (taxaNames.taxaList.length > 0) {
+        obj['taxa_name'] = taxaNames.taxaList.join(' ')
+      }
+      obj['taxa_sort_fields'] = taxaNames.sortFields
+    }
+    obj['specimen'] = {
+      institution_code: mediaObj.institution_code,
+      collection_code: mediaObj.collection_code,
+      catalog_number: mediaObj.catalog_number
     }
     let specimenName = getSpecimenName(mediaObj, taxaNames)
     if (specimenName) {
@@ -284,7 +293,7 @@ export async function getMediaFileDump(projectId) {
 }
 
 async function getTaxaMap(projectId) {
-  const [taxaList] = await sequelizeConn.query(
+  const [allTaxa] = await sequelizeConn.query(
     `
       SELECT m.media_id, t.*
       FROM media_files m
@@ -300,12 +309,34 @@ async function getTaxaMap(projectId) {
     { replacements: [projectId] }
   )
   let taxaMap = {}
-  for (let i = 0; i < taxaList.length; i++) {
-    let taxa = taxaList[i]
+  for (let i = 0; i < allTaxa.length; i++) {
+    let taxa = allTaxa[i]
     if (!taxaMap[taxa.media_id]) {
-      taxaMap[taxa.media_id] = []
+      taxaMap[taxa.media_id] = {
+        taxaList : [],
+        sortFields: {}
+      }
     }
-    taxaMap[taxa.media_id].push(getTaxaName(taxa))
+    const fields = [
+      'higher_taxon_phylum',
+      'higher_taxon_class',
+      'higher_taxon_order',
+      'higher_taxon_superfamily',
+      'higher_taxon_family',
+      'higher_taxon_subfamily',
+      'genus',
+      'specific_epithet'
+    ]
+    let sortVals = {}
+    for (const field of fields) {
+      sortVals[field] = taxa[field]
+    }
+    // scientifically there should be only one taxon per media, but some old projects
+    // has media file that has multiple taxa. To honor that before we are able to correct
+    // the data, we concantenate all taxa for the taxa name, and use the sort fields of one 
+    // of the taxon
+    taxaMap[taxa.media_id].taxaList.push(getTaxaName(taxa))
+    taxaMap[taxa.media_id].sortFields = sortVals
   }
   return taxaMap
 }
@@ -391,8 +422,8 @@ function getTaxaName(row) {
 
 function getSpecimenName(row, taxaNames) {
   let name
-  if (taxaNames) {
-    name = taxaNames.join(', ')
+  if (taxaNames && taxaNames.taxaList.length > 0) {
+    name = taxaNames.taxaList.join(', ')
   }
   // set author label
   if (row['scientific_name_author']) {
