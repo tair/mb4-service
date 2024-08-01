@@ -183,138 +183,165 @@ export default class BibliographicReference extends Model {
   }
 
   static getCitationText(record, modelInstance) {
-    let titles = {};
+    let titles = {}
     let fields = [
-      'article_title', 'journal_title', 'authors', 'secondary_authors',
-      'editors', 'publisher', 'place_of_publication', 'vol', 'num', 'sect',
-      'edition', 'collation'
-    ];
-    
+      'article_title',
+      'journal_title',
+      'authors',
+      'secondary_authors',
+      'editors',
+      'publisher',
+      'place_of_publication',
+      'vol',
+      'num',
+      'sect',
+      'edition',
+      'collation',
+    ]
+
     if (record) {
-      fields.forEach(field => {
-        if (field === 'authors' || field === 'secondary_authors' || field === 'editors') {
-          record[field] = record[field] || [];
+      fields.forEach((field) => {
+        if (
+          field === 'authors' ||
+          field === 'secondary_authors' ||
+          field === 'editors'
+        ) {
+          record[field] = record[field] || []
         } else {
-          record[field] = record[field]?.trim();
+          record[field] = record[field]?.trim()
           if (field === 'article_title' || field === 'journal_title') {
-              if (record[field]) titles[field] = record[field];
+            if (record[field]) titles[field] = record[field]
           }
         }
-      });
+      })
     } else if (modelInstance) {
-      fields.forEach(field => {
-        if (field === 'authors' || field === 'secondary_authors' || field === 'editors') {
-          record[field] = modelInstance.get(field) || [];
-      } else {
-          record[field] = modelInstance.get(field)?.trim();
+      fields.forEach((field) => {
+        if (
+          field === 'authors' ||
+          field === 'secondary_authors' ||
+          field === 'editors'
+        ) {
+          record[field] = modelInstance.get(field) || []
+        } else {
+          record[field] = modelInstance.get(field)?.trim()
           if (field === 'article_title' || field === 'journal_title') {
-              if (record[field]) titles[field] = record[field];
+            if (record[field]) titles[field] = record[field]
           }
         }
-      });
+      })
     }
 
-    let citation = '';
-    let authors = BibliographicReference.formatAuthors([...record.authors, ...record.secondary_authors]);
+    let citation = ''
+    let authors = BibliographicReference.formatAuthors([
+      ...record.authors,
+      ...record.secondary_authors,
+    ])
 
     if (authors) {
-        citation += authors + (authors.endsWith('.') ? ' ' : '. ');
+      citation += authors + (authors.endsWith('.') ? ' ' : '. ')
     }
     if (record.pubyear) {
-        citation += record.pubyear + '. ';
+      citation += record.pubyear + '. '
     }
 
-    Object.keys(titles).forEach(type => {
-        if (type === 'journal_title') {
-            citation += ([5, 3, 2].includes(record.reference_type) ? 'In ' : '') + `<em>${titles[type]}</em>`;
-        } else {
-            citation += titles[type];
-        }
-        if (!titles[type].endsWith('.')) {
-            citation += '.';
-        }
-        citation += ' ';
-    });
+    Object.keys(titles).forEach((type) => {
+      if (type === 'journal_title') {
+        citation +=
+          ([5, 3, 2].includes(record.reference_type) ? 'In ' : '') +
+          `<em>${titles[type]}</em>`
+      } else {
+        citation += titles[type]
+      }
+      if (!titles[type].endsWith('.')) {
+        citation += '.'
+      }
+      citation += ' '
+    })
 
     if (record.vol) {
-        citation += 'Vol. ' + record.vol;
+      citation += 'Vol. ' + record.vol
     }
 
     if (record.num) {
-        citation += '(' + record.num + ')';
+      citation += '(' + record.num + ')'
     }
 
     if (record.collation) {
-        citation += (record.vol ? ', ' : ' ') + (/[,\-]/.test(record.collation) ? ' pp. ' : ' p. ') + record.collation;
+      citation +=
+        (record.vol ? ', ' : ' ') +
+        (/[,\-]/.test(record.collation) ? ' pp. ' : ' p. ') +
+        record.collation
     }
 
-    const editors = BibliographicReference.formatAuthors(record.editors);
+    const editors = BibliographicReference.formatAuthors(record.editors)
     if (editors) {
-        citation += (record.collation ? ', ' : ' in ') + editors + ' <i>ed</i>. ';
+      citation += (record.collation ? ', ' : ' in ') + editors + ' <i>ed</i>. '
     }
 
     if (record.sect) {
-        citation += ' Section: ' + record.sect + '. ';
+      citation += ' Section: ' + record.sect + '. '
     }
     if (record.edition) {
-        citation += ' Edition: ' + record.edition + '. ';
+      citation += ' Edition: ' + record.edition + '. '
     }
 
     if (record.publisher) {
-        citation += record.publisher;
+      citation += record.publisher
     }
     if (record.place_of_publication) {
-        citation += (record.publisher ? ',' : '') + ' ' + record.place_of_publication + '. ';
+      citation +=
+        (record.publisher ? ',' : '') + ' ' + record.place_of_publication + '. '
     } else {
-        if (record.publisher) {
-            citation += '. ';
-        }
+      if (record.publisher) {
+        citation += '. '
+      }
     }
 
-    return citation;
+    return citation
   }
 
   static formatAuthors(authors) {
-    let tmp = [];
+    let tmp = []
     for (let author of authors) {
-        let name = [];
-        
-        if (author.surname) {
-            name.push(author.surname);
+      let name = []
+
+      if (author.surname) {
+        name.push(author.surname)
+      }
+
+      let forename = author.forename
+      let middlename = author.middlename
+
+      if (forename || middlename) {
+        let startNames = []
+
+        if (forename) {
+          startNames.push(forename.length === 1 ? `${forename}.` : forename)
         }
 
-        let forename = author.forename;
-        let middlename = author.middlename;
-        
-        if (forename || middlename) {
-            let startNames = [];
-            
-            if (forename) {
-                startNames.push(forename.length === 1 ? `${forename}.` : forename);
-            }
-            
-            if (middlename) {
-                startNames.push(middlename.length === 1 ? `${middlename}.` : middlename);
-            }
-            
-            name.push(startNames.join(' '));
+        if (middlename) {
+          startNames.push(
+            middlename.length === 1 ? `${middlename}.` : middlename
+          )
         }
 
-        tmp.push(name.join(', '));
+        name.push(startNames.join(' '))
+      }
+
+      tmp.push(name.join(', '))
     }
 
-    let lastAuthor = tmp.pop();
-    let formattedAuthors;
+    let lastAuthor = tmp.pop()
+    let formattedAuthors
     if (tmp.length) {
-      formattedAuthors = tmp.join(', ') + ' and ' + lastAuthor;
+      formattedAuthors = tmp.join(', ') + ' and ' + lastAuthor
     } else {
-      formattedAuthors = lastAuthor;
+      formattedAuthors = lastAuthor
     }
 
-    return formattedAuthors;
+    return formattedAuthors
   }
 
-// Usage:
-// const citationText = await getCitationText(record, modelInstance);
-
+  // Usage:
+  // const citationText = await getCitationText(record, modelInstance);
 }

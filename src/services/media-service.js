@@ -218,10 +218,11 @@ export async function getMediaFileDump(projectId) {
 
   for (let i = 0; i < rows.length; i++) {
     let mediaObj = rows[i]
-    const { original, large, medium, thumbnail, ORIGINAL_FILENAME } = mediaObj.media
+    const { original, large, medium, thumbnail, ORIGINAL_FILENAME } =
+      mediaObj.media
     let obj = {
       media_id: mediaObj.media_id,
-      media: { original, large, medium, thumbnail, ORIGINAL_FILENAME }
+      media: { original, large, medium, thumbnail, ORIGINAL_FILENAME },
     }
     let simpleTextFields = ['view_name', 'url', 'url_description']
     for (let textField of simpleTextFields) {
@@ -242,9 +243,15 @@ export async function getMediaFileDump(projectId) {
       if (mediaObj.copyright_info) {
         obj['copyright_holder'] = mediaObj.copyright_info
       }
-      obj['copyright_permission'] = MediaFile.getCopyrightPermission(mediaObj.copyright_permission)
+      obj['copyright_permission'] = MediaFile.getCopyrightPermission(
+        mediaObj.copyright_permission
+      )
     }
-    obj['license'] = MediaFile.getLicenseImage(mediaObj.is_copyrighted, mediaObj.copyright_permission, mediaObj.copyright_license)
+    obj['license'] = MediaFile.getLicenseImage(
+      mediaObj.is_copyrighted,
+      mediaObj.copyright_permission,
+      mediaObj.copyright_license
+    )
     let taxaNames = taxaMap[mediaObj.media_id]
     if (taxaNames) {
       if (taxaNames.taxaList.length > 0) {
@@ -255,7 +262,7 @@ export async function getMediaFileDump(projectId) {
     obj['specimen'] = {
       institution_code: mediaObj.institution_code,
       collection_code: mediaObj.collection_code,
-      catalog_number: mediaObj.catalog_number
+      catalog_number: mediaObj.catalog_number,
     }
     let specimenName = getSpecimenName(mediaObj, taxaNames)
     if (specimenName) {
@@ -265,7 +272,9 @@ export async function getMediaFileDump(projectId) {
       obj['specimen_notes'] = mediaObj.description.trim()
     }
     if (mediaObj.is_sided) {
-      obj['side_represented'] = MediaFile.getSideRepresentation(mediaObj.is_sided)
+      obj['side_represented'] = MediaFile.getSideRepresentation(
+        mediaObj.is_sided
+      )
     }
 
     let referenceTexts = bibRefMap[mediaObj.media_id]
@@ -277,9 +286,9 @@ export async function getMediaFileDump(projectId) {
     }
     if (mediaObj.ancestor_media_id) {
       let ancestor = {
-        'media_id': mediaObj.ancestor_media_id,
-        'project_id': mediaObj.ancestor_project_id,
-        'project_deleted': mediaObj.ancestor_project_deleted
+        media_id: mediaObj.ancestor_media_id,
+        project_id: mediaObj.ancestor_project_id,
+        project_deleted: mediaObj.ancestor_project_deleted,
       }
       let siblings = siblingMediaMap[mediaObj.media_id]
       if (siblings) {
@@ -313,8 +322,8 @@ async function getTaxaMap(projectId) {
     let taxa = allTaxa[i]
     if (!taxaMap[taxa.media_id]) {
       taxaMap[taxa.media_id] = {
-        taxaList : [],
-        sortFields: {}
+        taxaList: [],
+        sortFields: {},
       }
     }
     const fields = [
@@ -325,7 +334,7 @@ async function getTaxaMap(projectId) {
       'higher_taxon_family',
       'higher_taxon_subfamily',
       'genus',
-      'specific_epithet'
+      'specific_epithet',
     ]
     let sortVals = {}
     for (const field of fields) {
@@ -333,7 +342,7 @@ async function getTaxaMap(projectId) {
     }
     // scientifically there should be only one taxon per media, but some old projects
     // has media file that has multiple taxa. To honor that before we are able to correct
-    // the data, we concantenate all taxa for the taxa name, and use the sort fields of one 
+    // the data, we concantenate all taxa for the taxa name, and use the sort fields of one
     // of the taxon
     taxaMap[taxa.media_id].taxaList.push(getTaxaName(taxa))
     taxaMap[taxa.media_id].sortFields = sortVals
@@ -467,7 +476,7 @@ function getSpecimenName(row, taxaNames) {
     }
   }
   if (name) {
-    name = name.replace(/[\n\r\t]+/g, " ");
+    name = name.replace(/[\n\r\t]+/g, ' ')
   }
   return name
 }
@@ -494,7 +503,9 @@ async function getBibliographicReferencesMap(projectId) {
     if (!referenceMap[ref.media_id]) {
       referenceMap[ref.media_id] = []
     }
-    referenceMap[ref.media_id].push(BibliographicReference.getCitationText(ref, null))
+    referenceMap[ref.media_id].push(
+      BibliographicReference.getCitationText(ref, null)
+    )
   }
   return referenceMap
 }
@@ -521,7 +532,10 @@ async function getSiblingMediaMap(projectId) {
     if (!siblingMediaMap[media.media_id]) {
       siblingMediaMap[media.media_id] = []
     }
-    siblingMediaMap[media.media_id].push({'media_id': media.sibling_media_id, 'project_id': media.sibling_project_id})
+    siblingMediaMap[media.media_id].push({
+      media_id: media.sibling_media_id,
+      project_id: media.sibling_project_id,
+    })
   }
   return siblingMediaMap
 }

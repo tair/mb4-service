@@ -8,7 +8,7 @@ import {
   authenticateORCID,
   resetPassword,
   setNewPassword,
-  validateResetKey
+  validateResetKey,
 } from '../controllers/auth-controller.js'
 import { maybeAuthenticateToken } from './auth-interceptor.js'
 import { signup } from '../controllers/user-controller.js'

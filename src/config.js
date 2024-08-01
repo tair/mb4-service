@@ -41,13 +41,13 @@ const config = {
   auth: {
     accessTokenSecret: process.env.ACCESS_TOKEN_SECRET,
     refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET,
-    jwtTokenExpiresIn: process.env.JWT_TOKEN_EXPIRES_IN
+    jwtTokenExpiresIn: process.env.JWT_TOKEN_EXPIRES_IN,
   },
   email: {
     region: process.env.AWS_REGION,
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  }
+  },
 }
 
 export default config
