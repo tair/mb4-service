@@ -218,6 +218,7 @@ export async function getMediaFileDump(projectId) {
 
   for (let i = 0; i < rows.length; i++) {
     let mediaObj = rows[i]
+
     const { original, large, medium, thumbnail, ORIGINAL_FILENAME } =
       mediaObj.media
     let obj = {
@@ -239,6 +240,7 @@ export async function getMediaFileDump(projectId) {
     }
     obj['user_name'] = User.getName(mediaObj.fname, mediaObj.lname)
     obj['user_lname'] = mediaObj.lname
+
     if (mediaObj.is_copyrighted) {
       if (mediaObj.copyright_info) {
         obj['copyright_holder'] = mediaObj.copyright_info
@@ -318,6 +320,7 @@ async function getTaxaMap(projectId) {
     { replacements: [projectId] }
   )
   let taxaMap = {}
+
   for (let i = 0; i < allTaxa.length; i++) {
     let taxa = allTaxa[i]
     if (!taxaMap[taxa.media_id]) {
@@ -431,6 +434,7 @@ function getTaxaName(row) {
 
 function getSpecimenName(row, taxaNames) {
   let name
+
   if (taxaNames && taxaNames.taxaList.length > 0) {
     name = taxaNames.taxaList.join(', ')
   }
