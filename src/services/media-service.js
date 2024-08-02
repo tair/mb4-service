@@ -143,10 +143,12 @@ export async function getImageProps(projectId, type, exemplarMediaId) {
         `
           SELECT
             m.media_id, m.media, s.specimen_id, s.reference_source, s.institution_code,
-            s.collection_code, s.catalog_number, v.name as view_name
+            s.collection_code, s.catalog_number, v.name as view_name, t.*
           FROM media_files m
           LEFT JOIN media_views v on m.view_id = v.view_id
           LEFT JOIN specimens s ON m.specimen_id = s.specimen_id
+          LEFT JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
+          LEFT JOIN taxa t ON t.taxon_id = ts.taxon_id
           WHERE
             m.project_id = ? AND m.published = 0 AND m.media_id = ?
         `,
@@ -156,10 +158,12 @@ export async function getImageProps(projectId, type, exemplarMediaId) {
         `
           SELECT
             m.media_id, m.media, s.specimen_id, s.reference_source, s.institution_code,
-            s.collection_code, s.catalog_number, v.name as view_name
+            s.collection_code, s.catalog_number, v.name as view_name, t.*
           FROM media_files m
           LEFT JOIN media_views v on m.view_id = v.view_id
           LEFT JOIN specimens s ON m.specimen_id = s.specimen_id
+          LEFT JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
+          LEFT JOIN taxa t ON t.taxon_id = ts.taxon_id
           WHERE m.project_id = ? AND m.media <> '' AND m.published = 0
           ORDER BY m.media_id
           LIMIT 1
@@ -170,8 +174,7 @@ export async function getImageProps(projectId, type, exemplarMediaId) {
   try {
     if (rows && rows.length) {
       let obj = { media: rows[0].media[type] }
-      let taxaNames = await getTaxaNames(projectId, rows[0].media_id)
-      let specimenName = getSpecimenName(rows[0], taxaNames)
+      let specimenName = getSpecimenName(rows[0])
       if (specimenName) {
         obj['specimen_name'] = specimenName
       }
@@ -191,7 +194,7 @@ export async function getMediaFileDump(projectId) {
   const [rows] = await sequelizeConn.query(
     `
       SELECT m.media_id, m.media, s.specimen_id, s.description, s.reference_source,
-      s.institution_code, s.collection_code, s.catalog_number, v.name as view_name, 
+      s.institution_code, s.collection_code, s.catalog_number, t.*, v.name as view_name,
       m.is_sided, m.is_copyrighted, m.copyright_info, m.copyright_permission, m.copyright_license,
       u.fname, u.lname, p.publish_media_notes, m.notes, m.url, m.url_description, m.created_on,
       am.media_id as ancestor_media_id, ap.project_id as ancestor_project_id, ap.deleted as ancestor_project_deleted
@@ -199,6 +202,8 @@ export async function getMediaFileDump(projectId) {
       INNER JOIN projects p ON m.project_id = p.project_id
       LEFT JOIN media_views v on m.view_id = v.view_id
       LEFT JOIN specimens s ON m.specimen_id = s.specimen_id
+      LEFT JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
+      LEFT JOIN taxa t ON t.taxon_id = ts.taxon_id
       LEFT JOIN ca_users u ON m.user_id = u.user_id
       LEFT JOIN media_files am ON m.ancestor_media_id = am.media_id
       LEFT JOIN projects ap ON am.project_id = ap.project_id
@@ -210,7 +215,6 @@ export async function getMediaFileDump(projectId) {
     { replacements: [projectId] }
   )
 
-  const taxaMap = await getTaxaMap(projectId)
   const bibRefMap = await getBibliographicReferencesMap(projectId)
   const siblingMediaMap = await getSiblingMediaMap(projectId)
   const hitMap = await getPublishedHitsMap(projectId)
@@ -254,19 +258,14 @@ export async function getMediaFileDump(projectId) {
       mediaObj.copyright_permission,
       mediaObj.copyright_license
     )
-    let taxaNames = taxaMap[mediaObj.media_id]
-    if (taxaNames) {
-      if (taxaNames.taxaList.length > 0) {
-        obj['taxa_name'] = taxaNames.taxaList.join(' ')
-      }
-      obj['taxa_sort_fields'] = taxaNames.sortFields
-    }
+    obj['taxa_name'] = getTaxaName(mediaObj)
+    obj['taxa_sort_fields'] = getTaxaSortFields(mediaObj)
     obj['specimen'] = {
       institution_code: mediaObj.institution_code,
       collection_code: mediaObj.collection_code,
       catalog_number: mediaObj.catalog_number,
     }
-    let specimenName = getSpecimenName(mediaObj, taxaNames)
+    let specimenName = getSpecimenName(mediaObj)
     if (specimenName) {
       obj['specimen_name'] = specimenName
     }
@@ -353,23 +352,22 @@ async function getTaxaMap(projectId) {
   return taxaMap
 }
 
-async function getTaxaNames(projectId, mediaId) {
-  const [taxaNames] = await sequelizeConn.query(
-    `
-      SELECT t.*
-      FROM media_files m
-      INNER JOIN projects p ON m.project_id = p.project_id
-      INNER JOIN specimens s ON m.specimen_id = s.specimen_id
-      INNER JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
-      INNER JOIN taxa t ON t.taxon_id = ts.taxon_id
-      WHERE m.project_id = ? AND m.media_id = ?
-      AND m.published = 0
-      AND m.media <> ''
-      AND (p.publish_matrix_media_only = 0 OR (p.publish_matrix_media_only = 1 AND m.in_use_in_matrix = 1))
-    `,
-    { replacements: [projectId, mediaId] }
-  )
-  return taxaNames
+function getTaxaSortFields(row) {
+  const fields = [
+    'higher_taxon_phylum',
+    'higher_taxon_class',
+    'higher_taxon_order',
+    'higher_taxon_superfamily',
+    'higher_taxon_family',
+    'higher_taxon_subfamily',
+    'genus',
+    'specific_epithet',
+  ]
+  let sortVals = {}
+  for (const field of fields) {
+    sortVals[field] = row[field]
+  }
+  return sortVals
 }
 
 function getTaxaName(row) {
@@ -429,15 +427,6 @@ function getTaxaName(row) {
   if (row.is_extinct) {
     name = '† ' + name
   }
-  return name
-}
-
-function getSpecimenName(row, taxaNames) {
-  let name
-
-  if (taxaNames && taxaNames.taxaList.length > 0) {
-    name = taxaNames.taxaList.join(', ')
-  }
   // set author label
   if (row['scientific_name_author']) {
     let authorLabel = row['scientific_name_author'].trim()
@@ -453,6 +442,11 @@ function getSpecimenName(row, taxaNames) {
       name = authorLabel
     }
   }
+  return name
+}
+
+function getSpecimenName(row) {
+  let name = getTaxaName(row)
   // set source label
   let referenceSource = row.reference_source
   let sourceLabel
