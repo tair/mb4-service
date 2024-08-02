@@ -23,6 +23,11 @@ export const TAXA_FIELD_NAMES = [
   'subspecific_epithet',
 ]
 
+export function getTaxonNameForPublishedProject(record) {
+  // set show author to true
+  return getTaxonName(record, null, true, true, false)
+}
+
 export function getTaxonName(
   record,
   otu = null,
@@ -92,4 +97,23 @@ export function getTaxonName(
   }
 
   return names.join(' ')
+}
+
+export const TAXA_SORT_FIELDS = [
+  'higher_taxon_phylum',
+  'higher_taxon_class',
+  'higher_taxon_order',
+  'higher_taxon_superfamily',
+  'higher_taxon_family',
+  'higher_taxon_subfamily',
+  'genus',
+  'specific_epithet',
+]
+
+export function getTaxaSortFieldValues(record) {
+  let sortVals = {}
+  for (const field of TAXA_SORT_FIELDS) {
+    sortVals[field] = record[field]
+  }
+  return sortVals
 }

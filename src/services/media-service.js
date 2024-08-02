@@ -1,8 +1,9 @@
 import sequelizeConn from '../util/db.js'
-import { capitalizeFirstLetter } from '../util/util.js'
 import MediaFile from '../models/media-file.js'
 import User from '../models/user.js'
 import BibliographicReference from '../models/bibliographic-reference.js'
+import { getTaxonNameForPublishedProject, getTaxaSortFieldValues } from '../util/taxa.js'
+import { getSpecimenNameForPublishedProject } from '../util/specimen.js'
 
 export async function getMediaByIds(mediaIds) {
   const [media] = await sequelizeConn.query(
@@ -174,7 +175,7 @@ export async function getImageProps(projectId, type, exemplarMediaId) {
   try {
     if (rows && rows.length) {
       let obj = { media: rows[0].media[type] }
-      let specimenName = getSpecimenName(rows[0])
+      let specimenName = getSpecimenNameForPublishedProject(rows[0])
       if (specimenName) {
         obj['specimen_name'] = specimenName
       }
@@ -258,17 +259,16 @@ export async function getMediaFileDump(projectId) {
       mediaObj.copyright_permission,
       mediaObj.copyright_license
     )
-    obj['taxa_name'] = getTaxaName(mediaObj)
-    obj['taxa_sort_fields'] = getTaxaSortFields(mediaObj)
+    obj['taxon_name'] = getTaxonNameForPublishedProject(mediaObj)
+    // provided for js sorting & searching
+    obj['taxon_sort_fields'] = getTaxaSortFieldValues(mediaObj)
+    // provided for js sorting & searching
     obj['specimen'] = {
       institution_code: mediaObj.institution_code,
       collection_code: mediaObj.collection_code,
       catalog_number: mediaObj.catalog_number,
     }
-    let specimenName = getSpecimenName(mediaObj)
-    if (specimenName) {
-      obj['specimen_name'] = specimenName
-    }
+    obj['specimen_name'] = getSpecimenNameForPublishedProject(mediaObj)
     if (mediaObj.description) {
       obj['specimen_notes'] = mediaObj.description.trim()
     }
@@ -300,183 +300,6 @@ export async function getMediaFileDump(projectId) {
     rows[i] = obj
   }
   return rows
-}
-
-async function getTaxaMap(projectId) {
-  const [allTaxa] = await sequelizeConn.query(
-    `
-      SELECT m.media_id, t.*
-      FROM media_files m
-      INNER JOIN projects p ON m.project_id = p.project_id
-      INNER JOIN specimens s ON m.specimen_id = s.specimen_id
-      INNER JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
-      INNER JOIN taxa t ON t.taxon_id = ts.taxon_id
-      WHERE m.project_id = ?
-      AND m.published = 0
-      AND m.media <> ''
-      AND (p.publish_matrix_media_only = 0 OR (p.publish_matrix_media_only = 1 AND m.in_use_in_matrix = 1))
-    `,
-    { replacements: [projectId] }
-  )
-  let taxaMap = {}
-
-  for (let i = 0; i < allTaxa.length; i++) {
-    let taxa = allTaxa[i]
-    if (!taxaMap[taxa.media_id]) {
-      taxaMap[taxa.media_id] = {
-        taxaList: [],
-        sortFields: {},
-      }
-    }
-    const fields = [
-      'higher_taxon_phylum',
-      'higher_taxon_class',
-      'higher_taxon_order',
-      'higher_taxon_superfamily',
-      'higher_taxon_family',
-      'higher_taxon_subfamily',
-      'genus',
-      'specific_epithet',
-    ]
-    let sortVals = {}
-    for (const field of fields) {
-      sortVals[field] = taxa[field]
-    }
-    // scientifically there should be only one taxon per media, but some old projects
-    // has media file that has multiple taxa. To honor that before we are able to correct
-    // the data, we concantenate all taxa for the taxa name, and use the sort fields of one
-    // of the taxon
-    taxaMap[taxa.media_id].taxaList.push(getTaxaName(taxa))
-    taxaMap[taxa.media_id].sortFields = sortVals
-  }
-  return taxaMap
-}
-
-function getTaxaSortFields(row) {
-  const fields = [
-    'higher_taxon_phylum',
-    'higher_taxon_class',
-    'higher_taxon_order',
-    'higher_taxon_superfamily',
-    'higher_taxon_family',
-    'higher_taxon_subfamily',
-    'genus',
-    'specific_epithet',
-  ]
-  let sortVals = {}
-  for (const field of fields) {
-    sortVals[field] = row[field]
-  }
-  return sortVals
-}
-
-function getTaxaName(row) {
-  if (!row) return null
-  // the rule is that we will take the genus + subgenus + specific_epithet + subspecific_epithet combo if exists,
-  // and otherwise take the last field in the array order that has value
-  const fields = [
-    'supraspecific_clade',
-    'higher_taxon_kingdom',
-    'higher_taxon_phylum',
-    'higher_taxon_class',
-    'higher_taxon_subclass',
-    'higher_taxon_infraclass',
-    'higher_taxon_cohort',
-    'higher_taxon_superorder',
-    'higher_taxon_order',
-    'higher_taxon_suborder',
-    'higher_taxon_infraorder',
-    'higher_taxon_superfamily',
-    'higher_taxon_family',
-    'higher_taxon_subfamily',
-    'higher_taxon_tribe',
-    'higher_taxon_subtribe',
-    'genus',
-    'subgenus',
-    'specific_epithet',
-    'subspecific_epithet',
-  ]
-  let lastNameFound
-  let nameList = []
-  let findOtu = false
-  for (const field of fields) {
-    let val = row[field]
-    if (val) {
-      val = val.trim()
-      lastNameFound = val
-    }
-    if (field == 'genus') {
-      findOtu = true
-    }
-    if (findOtu && val) {
-      switch (field) {
-        case 'genus':
-          val = '<i>' + capitalizeFirstLetter(val) + '</i>'
-          break
-        case 'specific_epithet':
-          val = '<i>' + val.toLowerCase() + '</i>'
-          break
-      }
-      nameList.push(val)
-    }
-  }
-  if (nameList.length == 0) {
-    nameList = [lastNameFound]
-  }
-  let name = nameList.join(' ')
-  if (row.is_extinct) {
-    name = '† ' + name
-  }
-  // set author label
-  if (row['scientific_name_author']) {
-    let authorLabel = row['scientific_name_author'].trim()
-    if (row['scientific_name_year']) {
-      authorLabel += ', ' + row['scientific_name_year']
-    }
-    if (row['use_parens_for_author']) {
-      authorLabel = '(' + authorLabel + ')'
-    }
-    if (name) {
-      name += ' ' + authorLabel
-    } else {
-      name = authorLabel
-    }
-  }
-  return name
-}
-
-function getSpecimenName(row) {
-  let name = getTaxaName(row)
-  // set source label
-  let referenceSource = row.reference_source
-  let sourceLabel
-  if (referenceSource == 0) {
-    // institution code must exist when other two columns exist
-    sourceLabel = row.institution_code
-    if (row.collection_code) {
-      sourceLabel += '/' + row.collection_code
-    }
-    if (row.catalog_number) {
-      sourceLabel += ':' + row.catalog_number
-    }
-  } else if (referenceSource == 1) {
-    sourceLabel = 'unvouchered'
-  } else {
-    return 'Unknown specimen reference type ' + referenceSource
-  }
-  if (sourceLabel) {
-    sourceLabel = sourceLabel.trim()
-    if (name) {
-      name = name.trim()
-      name += ' (' + sourceLabel + ')'
-    } else {
-      name = sourceLabel
-    }
-  }
-  if (name) {
-    name = name.replace(/[\n\r\t]+/g, ' ')
-  }
-  return name
 }
 
 async function getBibliographicReferencesMap(projectId) {
