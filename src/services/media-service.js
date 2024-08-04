@@ -17,37 +17,10 @@ export async function getMediaByIds(mediaIds) {
   return media
 }
 
-export async function getMediaByCharacterIds(characterIds) {
-  const [rows] = await sequelizeConn.query(
-    `SELECT media_id
-     FROM characters_x_media 
-     WHERE character_id IN (?)`,
-    { replacements: [characterIds] }
-  )
-  return rows
-}
-export async function getMediaByTaxaIds(taxaIds) {
-  const [rows] = await sequelizeConn.query(
-    `SELECT media_id
-     FROM taxa_x_media 
-     WHERE taxon_id IN (?)`,
-    { replacements: [taxaIds] }
-  )
-  return rows
-}
-
 export async function getMediaFiles(projectId) {
   const [rows] = await sequelizeConn.query(
     `SELECT * FROM media_files WHERE project_id = ?`,
     { replacements: [projectId] }
-  )
-  return rows
-}
-
-export async function getMediaLabels(mediaIds) {
-  const [rows] = await sequelizeConn.query(
-    `SELECT label_id FROM media_labels WHERE media_id IN (?)`,
-    { replacements: [mediaIds] }
   )
   return rows
 }

@@ -115,9 +115,9 @@ export async function getMediaLabelsCount(mediaIds) {
   const [[rows]] = await sequelizeConn.query(
     `
       SELECT COUNT(DISTINCT ml.label_id) AS count
-			FROM media_labels ml
-			INNER JOIN media_files AS mf ON mf.media_id = ml.media_id
-			WHERE ml.media_id IN (?)`,
+      FROM media_labels ml
+      INNER JOIN media_files AS mf ON mf.media_id = ml.media_id
+      WHERE ml.media_id IN (?)`,
     { replacements: [mediaIds] }
   )
 
@@ -128,9 +128,9 @@ export async function getDocumentCount(mediaIds, projectId) {
   const [[rows]] = await sequelizeConn.query(
     `
       SELECT COUNT(DISTINCT d.document_id) AS count
-			FROM project_documents d
-			INNER JOIN media_files_x_documents AS mfd ON d.document_id = mfd.document_id
-			WHERE mfd.media_id IN (?) AND d.project_id = ?`,
+      FROM project_documents d
+      INNER JOIN media_files_x_documents AS mfd ON d.document_id = mfd.document_id
+      WHERE mfd.media_id IN (?) AND d.project_id = ?`,
     { replacements: [mediaIds, projectId] }
   )
 
