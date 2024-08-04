@@ -99,7 +99,7 @@ export async function editUser(req, res) {
     const newGroups = await models.ProjectMembersXGroup.findAll({
       where: {
         membership_id: userData.link_id,
-      }, 
+      },
     })
     const newGroupIds = newGroups.map((group) => group.group_id)
     userData.group_ids = newGroupIds
@@ -123,9 +123,7 @@ function convertUser(row, admin) {
       lname: row.lname,
       membership_type: parseInt(row.membership_type),
       email: row.email,
-      group_ids: row.group_ids
-        .split(',')
-        .map((groupId) => parseInt(groupId)),
+      group_ids: row.group_ids.split(',').map((groupId) => parseInt(groupId)),
     }
   }
   return {
