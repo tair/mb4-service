@@ -36,25 +36,25 @@ export async function editUser(req, res) {
   const linkId = req.params.linkId
   const admin = req.project.user_id
   const user = await models.ProjectsXUser.findByPk(linkId)
-  const userData = req.body.user
+  const userData = req.body.userData
   if (user == null || user.project_id != projectId) {
     res.status(404).json({ message: 'User is not found' })
     return
   }
   const transaction = await sequelizeConn.transaction()
   try {
-    const updatedJoinedGroupIds = req.body.groupsJoined
-    const joinedGroups = await models.ProjectMembersXGroup.findAll({
+    const updatedGroupIds = req.body.group_ids.map((group) => Number(group))
+    const groups = await models.ProjectMembersXGroup.findAll({
       where: {
         membership_id: userData.link_id,
       },
     })
-    const joinedGroupIds = joinedGroups.map((group) => group.group_id)
-    const groupsToAdd = updatedJoinedGroupIds.filter(
-      (updatedGroupId) => !joinedGroupIds.includes(updatedGroupId)
+    const groupIds = groups.map((group) => group.group_id)
+    const groupsToAdd = updatedGroupIds.filter(
+      (updatedGroupId) => !groupIds.includes(updatedGroupId)
     )
-    const groupsToDelete = joinedGroupIds.filter(
-      (joinedGroupId) => !updatedJoinedGroupIds.includes(joinedGroupId)
+    const groupsToDelete = groupIds.filter(
+      (groupId) => !updatedGroupIds.includes(groupId)
     )
     // adding groups member is a part of by creating PMXG row for user
     if (groupsToAdd) {
@@ -83,17 +83,27 @@ export async function editUser(req, res) {
       })
     }
     // setting the changes for the member_type in pxu
-    if (userData.membership_type !== undefined) {
-      user.membership_type = userData.membership_type
+    const membershipType = req.body.membership_type
+    if (membershipType !== undefined) {
+      user.membership_type = membershipType
     }
     // saving the changes made for user (membership_type)
     await user.save({
       transaction,
       user: req.user,
     })
+    await transaction.commit()
+
     userData.membership_type = user.membership_type
 
-    await transaction.commit()
+    const newGroups = await models.ProjectMembersXGroup.findAll({
+      where: {
+        membership_id: userData.link_id,
+      }, 
+    })
+    const newGroupIds = newGroups.map((group) => group.group_id)
+    userData.group_ids = newGroupIds
+
     res.status(200).json({ user: convertUser(userData, admin) })
   } catch (e) {
     console.log(e)
@@ -104,7 +114,7 @@ export async function editUser(req, res) {
 
 //converts member data from db into its own object
 function convertUser(row, admin) {
-  if (typeof row.joined_groups == 'string') {
+  if (typeof row.group_ids == 'string') {
     return {
       user_id: parseInt(row.user_id),
       link_id: parseInt(row.link_id),
@@ -113,7 +123,7 @@ function convertUser(row, admin) {
       lname: row.lname,
       membership_type: parseInt(row.membership_type),
       email: row.email,
-      joined_groups: row.joined_groups
+      group_ids: row.group_ids
         .split(',')
         .map((groupId) => parseInt(groupId)),
     }
@@ -126,6 +136,6 @@ function convertUser(row, admin) {
     lname: row.lname,
     membership_type: parseInt(row.membership_type),
     email: row.email,
-    joined_groups: row.joined_groups !== null ? row.joined_groups : [],
+    group_ids: row.group_ids !== null ? row.group_ids : [],
   }
 }

@@ -7,7 +7,7 @@ export async function getUsersInProjects(projectIds) {
     pxu.link_id, pxu.membership_type,
     (SELECT GROUP_CONCAT( pmxg.group_id )
     FROM project_members_x_groups pmxg
-    WHERE pmxg.membership_id = pxu.link_id) AS joined_groups
+    WHERE pmxg.membership_id = pxu.link_id) AS group_ids
     FROM ca_users AS u
     INNER JOIN projects_x_users AS pxu ON pxu.user_id = u.user_id
     WHERE pxu.project_id IN (?)
