@@ -30,6 +30,36 @@ export async function deleteGroup(req, res) {
   res.status(200).json({ group_id: group_id })
 }
 
+export async function editGroup(req, res) {
+  const projectId = req.project.project_id
+  const groupId = req.params.groupId
+  const group = await models.ProjectMemberGroup.findByPk(groupId)
+  if (group == null || group.project_id != projectId) {
+    res.status(404).json({ message: 'Group is not found' })
+    return
+  }
+
+  const values = req.body
+
+  for (const column in values) {
+    group.set(column, values[column])
+  }
+  const transaction = await sequelizeConn.transaction()
+  try {
+    await group.save({
+      transaction,
+      user: req.user,
+    })
+
+    await transaction.commit()
+    res.status(200).json({ group: convertGroup(group) })
+  } catch (e) {
+    console.log(e)
+    await transaction.rollback()
+    res.status(500).json({ message: 'Failed to edit group with server error' })
+  }
+}
+
 function convertGroup(row) {
   return {
     group_id: parseInt(row.group_id),
