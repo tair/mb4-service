@@ -52,8 +52,17 @@ projectRouter.get(
   '/duplication/request',
   controller.getDuplicationRequestCriteria
 )
+projectRouter.get('/publish/partition', controller.getProjectPartitions)
+projectRouter.get(
+  '/publish/partition/:partitionId',
+  controller.getPartitionSummary
+)
 
 projectRouter.post('/copyright', controller.setCopyright)
 projectRouter.post('/duplication/request', controller.createDuplicationRequest)
+projectRouter.post(
+  '/publish/partition/:partitionId',
+  controller.publishPartition
+)
 
 export default projectsRouter

@@ -17,12 +17,84 @@ export async function getMediaByIds(mediaIds) {
   return media
 }
 
+export async function getMediaByCharacterIds(characterIds) {
+  const [rows] = await sequelizeConn.query(
+    `SELECT media_id
+     FROM characters_x_media 
+     WHERE character_id IN (?)`,
+    { replacements: [characterIds] }
+  )
+  return rows
+}
+export async function getMediaByTaxaIds(taxaIds) {
+  const [rows] = await sequelizeConn.query(
+    `SELECT media_id
+     FROM taxa_x_media 
+     WHERE taxon_id IN (?)`,
+    { replacements: [taxaIds] }
+  )
+  return rows
+}
+
 export async function getMediaFiles(projectId) {
   const [rows] = await sequelizeConn.query(
     `SELECT * FROM media_files WHERE project_id = ?`,
     { replacements: [projectId] }
   )
   return rows
+}
+
+export async function getMediaLabels(mediaIds) {
+  const [rows] = await sequelizeConn.query(
+    `SELECT label_id FROM media_labels WHERE media_id IN (?)`,
+    { replacements: [mediaIds] }
+  )
+  return rows
+}
+
+export async function getMediaSpecimensAndViews(projectId, partitionId) {
+  // query all attrached to cells, taxa, characters
+  // result = {specimen_count: number, view_count: number, onetime_media: number[], media_ids: number[] }
+  const [[result]] = await sequelizeConn.query(
+    `
+      SELECT 
+        COUNT(DISTINCT media.specimen_id) AS specimen_count,
+        COUNT(DISTINCT media.view_id) AS view_count,
+        GROUP_CONCAT(DISTINCT CASE WHEN media.copyright_license = 8 THEN media.media_id END) AS onetime_media,
+        GROUP_CONCAT(DISTINCT media.media_id) AS media_ids
+      FROM (
+        SELECT mf.specimen_id, mf.view_id, mf.media_id, mf.copyright_license
+        FROM media_files mf
+        INNER JOIN cells_x_media cxm ON cxm.media_id = mf.media_id
+        INNER JOIN taxa_x_partitions txp ON cxm.taxon_id = txp.taxon_id
+        INNER JOIN characters_x_partitions cxp ON cxm.character_id = cxp.character_id
+        WHERE mf.project_id = :projectId AND txp.partition_id = :partitionId AND cxp.partition_id = :partitionId
+        UNION
+        SELECT mf.specimen_id, mf.view_id, mf.media_id, mf.copyright_license
+        FROM media_files mf
+        INNER JOIN taxa_x_media txm ON txm.media_id = mf.media_id
+        INNER JOIN taxa_x_partitions txp ON txm.taxon_id = txp.taxon_id
+        WHERE mf.project_id = :projectId AND txp.partition_id = :partitionId
+        UNION
+        SELECT mf.specimen_id, mf.view_id, mf.media_id, mf.copyright_license
+        FROM media_files mf
+        INNER JOIN characters_x_media cxm ON cxm.media_id = mf.media_id
+        INNER JOIN characters_x_partitions cxp ON cxm.character_id = cxp.character_id
+        WHERE mf.project_id = :projectId AND cxp.partition_id = :partitionId
+      ) AS media`,
+    { replacements: { projectId: projectId, partitionId: partitionId } }
+  )
+
+  const specimenCount = result.specimen_count
+  const viewCount = result.view_count
+
+  // Ids are required for other features
+  const onetimeMedia = result.onetime_media
+    ? result.onetime_media.split(',')
+    : []
+  const medias = result.media_ids ? result.media_ids.split(',') : []
+
+  return { medias, viewCount, specimenCount, onetimeMedia }
 }
 
 export async function getOneTimeMediaFiles(projectId) {
