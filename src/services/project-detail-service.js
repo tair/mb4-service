@@ -63,6 +63,8 @@ export async function getProjectDetails(
     )
     const docs = await docsService.getDocuments(projectId)
     const specimen_details = await specimenService.getSpecimenDetails(projectId)
+    const unidentified_specimen_details =
+      await specimenService.getUnidentifiedSpecimenDetails(projectId)
     const media_views = await mediaViewService.getMediaViews(projectId)
     const mediaViewNames = media_views.map((v) => v.name)
 
@@ -75,6 +77,11 @@ export async function getProjectDetails(
       partitions: partitions,
       taxa_details: taxa_details,
     }
+    if (
+      unidentified_specimen_details &&
+      unidentified_specimen_details.length > 0
+    )
+      result['unidentified_specimen_details'] = unidentified_specimen_details
     return result
   } catch (err) {
     console.error(

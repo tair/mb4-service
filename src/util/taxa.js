@@ -99,7 +99,7 @@ export function getTaxonName(
   return names.join(' ')
 }
 
-export const TAXA_SORT_FIELDS = [
+export const MEDIA_TAXA_SORT_FIELDS = [
   'higher_taxon_phylum',
   'higher_taxon_class',
   'higher_taxon_order',
@@ -110,9 +110,31 @@ export const TAXA_SORT_FIELDS = [
   'specific_epithet',
 ]
 
-export function getTaxaSortFieldValues(record) {
+export function getMediaTaxaSortFieldValues(record) {
   let sortVals = {}
-  for (const field of TAXA_SORT_FIELDS) {
+  for (const field of MEDIA_TAXA_SORT_FIELDS) {
+    sortVals[field] = record[field]
+  }
+  return sortVals
+}
+
+export const SPECIMEN_TAXA_SORT_FIELDS = [
+  'supraspecific_clade',
+  'higher_taxon_phylum',
+  'higher_taxon_class',
+  'higher_taxon_suborder',
+  'higher_taxon_order',
+  'higher_taxon_superfamily',
+  'higher_taxon_family',
+  'higher_taxon_subfamily',
+  'genus',
+  'specific_epithet',
+  'subspecific_epithet',
+]
+
+export function getSpecimenTaxaSortFieldValues(record) {
+  let sortVals = {}
+  for (const field of SPECIMEN_TAXA_SORT_FIELDS) {
     sortVals[field] = record[field]
   }
   return sortVals

@@ -2,7 +2,10 @@ import sequelizeConn from '../util/db.js'
 import MediaFile from '../models/media-file.js'
 import User from '../models/user.js'
 import BibliographicReference from '../models/bibliographic-reference.js'
-import { getTaxonNameForPublishedProject, getTaxaSortFieldValues } from '../util/taxa.js'
+import {
+  getTaxonNameForPublishedProject,
+  getMediaTaxaSortFieldValues,
+} from '../util/taxa.js'
 import { getSpecimenNameForPublishedProject } from '../util/specimen.js'
 
 export async function getMediaByIds(mediaIds) {
@@ -261,7 +264,7 @@ export async function getMediaFileDump(projectId) {
     )
     obj['taxon_name'] = getTaxonNameForPublishedProject(mediaObj)
     // provided for js sorting & searching
-    obj['taxon_sort_fields'] = getTaxaSortFieldValues(mediaObj)
+    obj['taxon_sort_fields'] = getMediaTaxaSortFieldValues(mediaObj)
     // provided for js sorting & searching
     obj['specimen'] = {
       institution_code: mediaObj.institution_code,
