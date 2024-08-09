@@ -23,9 +23,14 @@ export const TAXA_FIELD_NAMES = [
   'subspecific_epithet',
 ]
 
-export function getTaxonNameForPublishedProject(record) {
+export function getSpecimenTaxonNameForPublishedProject(record) {
   // set show author to true
   return getTaxonName(record, null, true, true, false)
+}
+
+export function getTaxonNameForPublishedProject(record) {
+  // set show author and skip subgenus to true
+  return getTaxonName(record, null, true, true, true)
 }
 
 export function getTaxonName(
@@ -36,9 +41,6 @@ export function getTaxonName(
   skipSubgenus = false
 ) {
   const names = []
-  if (record.is_extinct && showExtinctMarker) {
-    names.push('†')
-  }
 
   if (
     !TAXA_FIELD_NAMES.includes(otu) ||
@@ -96,7 +98,11 @@ export function getTaxonName(
     }
   }
 
-  return names.join(' ')
+  if (record.is_extinct && showExtinctMarker) {
+    return '†' + names.join(' ')
+  } else {
+    return names.join(' ')
+  }
 }
 
 export const MEDIA_TAXA_SORT_FIELDS = [
@@ -113,7 +119,7 @@ export const MEDIA_TAXA_SORT_FIELDS = [
 export function getMediaTaxaSortFieldValues(record) {
   let sortVals = {}
   for (const field of MEDIA_TAXA_SORT_FIELDS) {
-    sortVals[field] = record[field]
+    if (record[field]) sortVals[field] = record[field]
   }
   return sortVals
 }
@@ -135,7 +141,7 @@ export const SPECIMEN_TAXA_SORT_FIELDS = [
 export function getSpecimenTaxaSortFieldValues(record) {
   let sortVals = {}
   for (const field of SPECIMEN_TAXA_SORT_FIELDS) {
-    sortVals[field] = record[field]
+    if (record[field]) sortVals[field] = record[field]
   }
   return sortVals
 }

@@ -3,7 +3,7 @@ import User from '../models/user.js'
 import BibliographicReference from '../models/bibliographic-reference.js'
 import { getSpecimenNameForPublishedProject } from '../util/specimen.js'
 import {
-  getTaxonNameForPublishedProject,
+  getSpecimenTaxonNameForPublishedProject,
   getSpecimenTaxaSortFieldValues,
 } from '../util/taxa.js'
 
@@ -68,8 +68,8 @@ export async function getSpecimenDetails(projectId) {
       created_on: r.created_on,
       user_name: User.getName(r.fname, r.lname),
       specimen_name: getSpecimenNameForPublishedProject(r),
-      taxon_name: getTaxonNameForPublishedProject(r),
-      taxon_sort_fields: getSpecimenTaxaSortFieldValues(r),
+      taxon_name: getSpecimenTaxonNameForPublishedProject(r),
+      sort_fields: getSpecimenTaxaSortFieldValues(r),
     }
     if (hitMap[r.specimen_id]) {
       obj['hits'] = r.specimen_id
