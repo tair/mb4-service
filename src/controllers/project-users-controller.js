@@ -1,4 +1,5 @@
 import * as projectUserService from '../services/project-user-service.js'
+import * as projectMemberGroupsService from '../services/project-member-groups-service.js'
 import sequelizeConn from '../util/db.js'
 import { models } from '../models/init-models.js'
 
@@ -7,8 +8,17 @@ export async function getProjectUsers(req, res) {
   const admin = req.project.user_id
   try {
     const users = await projectUserService.getUsersInProjects(projectId)
+    // getting groups user is part of
+    const userGroups = await projectMemberGroupsService.getUserGroups(projectId)
+    const groupsMap = new Map()
+    // making a map of userGroups {user_id: new Set([group_ids])}
+    for( let row of userGroups ) {
+      const groupIds = row.group_ids.split(',').map((groupId) => Number(groupId))
+      groupsMap.set(row.user_id, new Set(groupIds))
+    }
+    // sending back a response but with data in desired structure
     res.status(200).json({
-      users: users.map((row) => convertUser(row, admin)),
+      users: users.map((row) => convertUser(row, admin, groupsMap.get(row.user_id))),
     })
   } catch (err) {
     console.error(`Error: Cannot fetch members for ${projectId}`, err)
@@ -34,19 +44,30 @@ export async function deleteUser(req, res) {
 export async function editUser(req, res) {
   const projectId = req.project.project_id
   const linkId = req.params.linkId
-  const admin = req.project.user_id
   const user = await models.ProjectsXUser.findByPk(linkId)
-  const userData = req.body.userData
   if (user == null || user.project_id != projectId) {
     res.status(404).json({ message: 'User is not found' })
     return
   }
   const transaction = await sequelizeConn.transaction()
   try {
-    const updatedGroupIds = req.body.group_ids.map((group) => Number(group))
+    const updatedGroupIds = await Promise.all(req.body.group_ids.map( async (groupId) => {
+      const groupInProject = await models.ProjectMemberGroup.findOne({
+        attributes: ['project_id'],
+        where: {
+          group_id: Number(groupId),
+        },
+      })
+      if (groupInProject == null || groupInProject.project_id != projectId) {
+        res.status(404).json({ message: 'Group not in project' })
+        return
+      }
+      return Number(groupId)
+    }))
     const groups = await models.ProjectMembersXGroup.findAll({
+      attributes: ['group_id'],
       where: {
-        membership_id: userData.link_id,
+        membership_id: linkId,
       },
     })
     const groupIds = groups.map((group) => group.group_id)
@@ -56,12 +77,12 @@ export async function editUser(req, res) {
     const groupsToDelete = groupIds.filter(
       (groupId) => !updatedGroupIds.includes(groupId)
     )
-    // adding groups member is a part of by creating PMXG row for user
+    // adding groups member is a part of by creating PMXG rows for user
     if (groupsToAdd) {
       await models.ProjectMembersXGroup.bulkCreate(
         groupsToAdd.map((id) => ({
           group_id: id,
-          membership_id: userData.link_id,
+          membership_id: linkId,
         })),
         {
           transaction: transaction,
@@ -83,28 +104,18 @@ export async function editUser(req, res) {
       })
     }
     // setting the changes for the member_type in pxu
-    const membershipType = req.body.membership_type
-    if (membershipType !== undefined) {
-      user.membership_type = membershipType
-    }
+    user.membership_type = req.body.membership_type
     // saving the changes made for user (membership_type)
     await user.save({
       transaction,
       user: req.user,
     })
     await transaction.commit()
-
-    userData.membership_type = user.membership_type
-
-    const newGroups = await models.ProjectMembersXGroup.findAll({
-      where: {
-        membership_id: userData.link_id,
-      },
+    // sending updated fields back to update the user in the frontend
+    res.status(200).json({ 
+      group_ids: updatedGroupIds,
+      membership_type: user.membership_type,
     })
-    const newGroupIds = newGroups.map((group) => group.group_id)
-    userData.group_ids = newGroupIds
-
-    res.status(200).json({ user: convertUser(userData, admin) })
   } catch (e) {
     console.log(e)
     await transaction.rollback()
@@ -113,19 +124,7 @@ export async function editUser(req, res) {
 }
 
 //converts member data from db into its own object
-function convertUser(row, admin) {
-  if (typeof row.group_ids == 'string') {
-    return {
-      user_id: parseInt(row.user_id),
-      link_id: parseInt(row.link_id),
-      admin: row.user_id == admin,
-      fname: row.fname,
-      lname: row.lname,
-      membership_type: parseInt(row.membership_type),
-      email: row.email,
-      group_ids: row.group_ids.split(',').map((groupId) => parseInt(groupId)),
-    }
-  }
+function convertUser(row, admin, groupIds) {
   return {
     user_id: parseInt(row.user_id),
     link_id: parseInt(row.link_id),
@@ -134,6 +133,6 @@ function convertUser(row, admin) {
     lname: row.lname,
     membership_type: parseInt(row.membership_type),
     email: row.email,
-    group_ids: row.group_ids !== null ? row.group_ids : [],
+    group_ids: groupIds != undefined ? [...groupIds] : [],
   }
 }

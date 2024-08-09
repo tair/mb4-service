@@ -12,15 +12,15 @@ export async function getGroupsInProject(projectId) {
   return rows
 }
 
-export async function getGroupsForMember(membershipId) {
+export async function getUserGroups(projectId) {
   const [rows] = await sequelizeConn.query(
     `
-    SELECT pmxg.link_id, pmg.group_name, pmg.group_id
-    FROM project_members_x_groups AS pmxg
-    INNER JOIN project_member_groups AS pmg ON pmxg.group_id = pmg.group_id
-    WHERE pmxg.membership_id IN (?)
-    ORDER BY group_name`,
-    { replacements: [membershipId] }
+    SELECT GROUP_CONCAT( pmxg.group_id ) AS group_ids, pxu.user_id
+    FROM project_members_x_groups pmxg
+    INNER JOIN projects_x_users AS pxu ON pmxg.membership_id = pxu.link_id
+    WHERE pxu.project_id IN (?)
+    GROUP BY pmxg.membership_id`,
+    { replacements: [projectId] }
   )
   return rows
 }
