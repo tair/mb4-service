@@ -12,13 +12,17 @@ export async function getProjectUsers(req, res) {
     const userGroups = await projectMemberGroupsService.getUserGroups(projectId)
     const groupsMap = new Map()
     // making a map of userGroups {user_id: new Set([group_ids])}
-    for( let row of userGroups ) {
-      const groupIds = row.group_ids.split(',').map((groupId) => Number(groupId))
+    for (let row of userGroups) {
+      const groupIds = row.group_ids
+        .split(',')
+        .map((groupId) => Number(groupId))
       groupsMap.set(row.user_id, new Set(groupIds))
     }
     // sending back a response but with data in desired structure
     res.status(200).json({
-      users: users.map((row) => convertUser(row, admin, groupsMap.get(row.user_id))),
+      users: users.map((row) =>
+        convertUser(row, admin, groupsMap.get(row.user_id))
+      ),
     })
   } catch (err) {
     console.error(`Error: Cannot fetch members for ${projectId}`, err)
@@ -51,19 +55,21 @@ export async function editUser(req, res) {
   }
   const transaction = await sequelizeConn.transaction()
   try {
-    const updatedGroupIds = await Promise.all(req.body.group_ids.map( async (groupId) => {
-      const groupInProject = await models.ProjectMemberGroup.findOne({
-        attributes: ['project_id'],
-        where: {
-          group_id: Number(groupId),
-        },
+    const updatedGroupIds = await Promise.all(
+      req.body.group_ids.map(async (groupId) => {
+        const groupInProject = await models.ProjectMemberGroup.findOne({
+          attributes: ['project_id'],
+          where: {
+            group_id: Number(groupId),
+          },
+        })
+        if (groupInProject == null || groupInProject.project_id != projectId) {
+          res.status(404).json({ message: 'Group not in project' })
+          return
+        }
+        return Number(groupId)
       })
-      if (groupInProject == null || groupInProject.project_id != projectId) {
-        res.status(404).json({ message: 'Group not in project' })
-        return
-      }
-      return Number(groupId)
-    }))
+    )
     const groups = await models.ProjectMembersXGroup.findAll({
       attributes: ['group_id'],
       where: {
@@ -112,7 +118,7 @@ export async function editUser(req, res) {
     })
     await transaction.commit()
     // sending updated fields back to update the user in the frontend
-    res.status(200).json({ 
+    res.status(200).json({
       group_ids: updatedGroupIds,
       membership_type: user.membership_type,
     })
