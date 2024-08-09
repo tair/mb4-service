@@ -1,5 +1,8 @@
 import sequelizeConn from '../util/db.js'
-import { TAXA_FIELD_NAMES, getTaxonNameForPublishedProject } from '../util/taxa.js'
+import {
+  TAXA_FIELD_NAMES,
+  getTaxonNameForPublishedProject,
+} from '../util/taxa.js'
 
 // for project detail dump
 export async function getTaxaDetails(projectId) {
@@ -13,7 +16,7 @@ export async function getTaxaDetails(projectId) {
     }
     const obj = {
       sort_fields: sortFields,
-      taxon_name: getTaxonNameForPublishedProject(r)
+      taxon_name: getTaxonNameForPublishedProject(r),
     }
     if (r.notes) obj.notes = r.notes
     if (r.lookup_failed_on > 0) obj.lookup_failed = true
