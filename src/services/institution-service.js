@@ -6,7 +6,8 @@ export async function fetchInstitutions(projectId) {
       SELECT ins.name, ins.institution_id
       FROM institutions ins
       INNER JOIN institutions_x_projects insp
-      ON ins.institution_id = insp.institution_id AND insp.project_id = ?`,
+      ON ins.institution_id = insp.institution_id AND insp.project_id = ?
+      ORDER BY ins.name ASC`,
     { replacements: [projectId] }
   )
 
