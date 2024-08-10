@@ -15,10 +15,15 @@ export async function fetchInstitutions(projectId) {
 }
 
 /**
- * returns an array of all Institution references outside current project
- * @param {number[]} institutionIds
- * @param {number} projectId
- * @returns {number[]}
+ * Returns an array of institution IDs based on the given institution IDs that
+ * are referenced outside of the given project.
+ *
+ * @async
+ * @param {number[]} institutionIds The institutions to determine if they are
+ *     referenced outside of a given project.
+ * @param {number} projectId The project to exclude.
+ * @returns {Promise<number[]>} The institution IDs are referenced outside of
+ *     the project.
  */
 export async function getInstitutionIdsReferencedOutsideProject(
   institutionIds,
