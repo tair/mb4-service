@@ -95,6 +95,8 @@ async function resetPassword(req, res) {
   }
 
   const email = req.body.email
+
+  // unlikely to happen, UI requires an email address
   if (!email) {
     res.status(400).json({ message: 'Missing email.' })
     return
