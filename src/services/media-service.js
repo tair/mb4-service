@@ -271,10 +271,12 @@ export async function getMediaFileDump(projectId) {
 
   for (let i = 0; i < rows.length; i++) {
     let mediaObj = rows[i]
-    const { medium, thumbnail } = mediaObj.media
+
+    const { original, large, medium, thumbnail, ORIGINAL_FILENAME } =
+      mediaObj.media
     let obj = {
       media_id: mediaObj.media_id,
-      media: { medium, thumbnail },
+      media: { original, large, medium, thumbnail, ORIGINAL_FILENAME },
     }
     let simpleTextFields = ['view_name', 'url', 'url_description']
     for (let textField of simpleTextFields) {
@@ -290,6 +292,8 @@ export async function getMediaFileDump(projectId) {
       obj['downloads'] = downloadMap[mediaObj.media_id]
     }
     obj['user_name'] = User.getName(mediaObj.fname, mediaObj.lname)
+    obj['user_lname'] = mediaObj.lname
+
     if (mediaObj.is_copyrighted) {
       if (mediaObj.copyright_info) {
         obj['copyright_holder'] = mediaObj.copyright_info
@@ -300,12 +304,20 @@ export async function getMediaFileDump(projectId) {
     }
     obj['license'] = MediaFile.getLicenseImage(
       mediaObj.is_copyrighted,
-      mediaObj.copyright_info,
-      mediaObj.copyright_permission
+      mediaObj.copyright_permission,
+      mediaObj.copyright_license
     )
     let taxaNames = taxaMap[mediaObj.media_id]
     if (taxaNames) {
-      obj['taxa_name'] = taxaNames.join(' ')
+      if (taxaNames.taxaList.length > 0) {
+        obj['taxa_name'] = taxaNames.taxaList.join(' ')
+      }
+      obj['taxa_sort_fields'] = taxaNames.sortFields
+    }
+    obj['specimen'] = {
+      institution_code: mediaObj.institution_code,
+      collection_code: mediaObj.collection_code,
+      catalog_number: mediaObj.catalog_number,
     }
     let specimenName = getSpecimenName(mediaObj, taxaNames)
     if (specimenName) {
@@ -345,7 +357,7 @@ export async function getMediaFileDump(projectId) {
 }
 
 async function getTaxaMap(projectId) {
-  const [taxaList] = await sequelizeConn.query(
+  const [allTaxa] = await sequelizeConn.query(
     `
       SELECT m.media_id, t.*
       FROM media_files m
@@ -361,12 +373,35 @@ async function getTaxaMap(projectId) {
     { replacements: [projectId] }
   )
   let taxaMap = {}
-  for (let i = 0; i < taxaList.length; i++) {
-    let taxa = taxaList[i]
+
+  for (let i = 0; i < allTaxa.length; i++) {
+    let taxa = allTaxa[i]
     if (!taxaMap[taxa.media_id]) {
-      taxaMap[taxa.media_id] = []
+      taxaMap[taxa.media_id] = {
+        taxaList: [],
+        sortFields: {},
+      }
     }
-    taxaMap[taxa.media_id].push(getTaxaName(taxa))
+    const fields = [
+      'higher_taxon_phylum',
+      'higher_taxon_class',
+      'higher_taxon_order',
+      'higher_taxon_superfamily',
+      'higher_taxon_family',
+      'higher_taxon_subfamily',
+      'genus',
+      'specific_epithet',
+    ]
+    let sortVals = {}
+    for (const field of fields) {
+      sortVals[field] = taxa[field]
+    }
+    // scientifically there should be only one taxon per media, but some old projects
+    // has media file that has multiple taxa. To honor that before we are able to correct
+    // the data, we concantenate all taxa for the taxa name, and use the sort fields of one
+    // of the taxon
+    taxaMap[taxa.media_id].taxaList.push(getTaxaName(taxa))
+    taxaMap[taxa.media_id].sortFields = sortVals
   }
   return taxaMap
 }
@@ -452,8 +487,9 @@ function getTaxaName(row) {
 
 function getSpecimenName(row, taxaNames) {
   let name
-  if (taxaNames) {
-    name = taxaNames.join(', ')
+
+  if (taxaNames && taxaNames.taxaList.length > 0) {
+    name = taxaNames.taxaList.join(', ')
   }
   // set author label
   if (row['scientific_name_author']) {
@@ -471,10 +507,9 @@ function getSpecimenName(row, taxaNames) {
     }
   }
   // set source label
+  let referenceSource = row.reference_source
   let sourceLabel
-  if (row.reference_source) {
-    sourceLabel = 'unvouchered'
-  } else if (row.institution_code) {
+  if (referenceSource == 0) {
     // institution code must exist when other two columns exist
     sourceLabel = row.institution_code
     if (row.collection_code) {
@@ -483,13 +518,22 @@ function getSpecimenName(row, taxaNames) {
     if (row.catalog_number) {
       sourceLabel += ':' + row.catalog_number
     }
+  } else if (referenceSource == 1) {
+    sourceLabel = 'unvouchered'
+  } else {
+    return 'Unknown specimen reference type ' + referenceSource
   }
   if (sourceLabel) {
+    sourceLabel = sourceLabel.trim()
     if (name) {
+      name = name.trim()
       name += ' (' + sourceLabel + ')'
     } else {
       name = sourceLabel
     }
+  }
+  if (name) {
+    name = name.replace(/[\n\r\t]+/g, ' ')
   }
   return name
 }
