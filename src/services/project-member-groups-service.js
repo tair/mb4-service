@@ -26,7 +26,6 @@ export async function getUserGroups(projectId) {
   )
   for (const row of rows) {
     map.set(row.user_id, row.group_ids)
-    console.log(row.group_ids)
   }
   return map
 }
