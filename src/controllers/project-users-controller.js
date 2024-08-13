@@ -7,21 +7,14 @@ export async function getProjectUsers(req, res) {
   const projectId = req.params.projectId
   const admin = req.project.user_id
   try {
-    const users = await projectUserService.getUsersInProjects(projectId)
-    // getting groups user is part of
-    const userGroups = await projectMemberGroupsService.getUserGroups(projectId)
-    const groupsMap = new Map()
-    // making a map of userGroups {user_id: new Set([group_ids])}
-    for (let row of userGroups) {
-      const groupIds = row.group_ids
-        .split(',')
-        .map((groupId) => Number(groupId))
-      groupsMap.set(row.user_id, new Set(groupIds))
-    }
+    const [users, userGroups] = await Promise.all([
+      projectUserService.getUsersInProjects(projectId),
+      projectMemberGroupsService.getUserGroups(projectId)
+    ])
     // sending back a response but with data in desired structure
     res.status(200).json({
       users: users.map((row) =>
-        convertUser(row, admin, groupsMap.get(row.user_id))
+        convertUser(row, admin, userGroups.get(row.user_id))
       ),
     })
   } catch (err) {
@@ -55,21 +48,12 @@ export async function editUser(req, res) {
   }
   const transaction = await sequelizeConn.transaction()
   try {
-    const updatedGroupIds = await Promise.all(
-      req.body.group_ids.map(async (groupId) => {
-        const groupInProject = await models.ProjectMemberGroup.findOne({
-          attributes: ['project_id'],
-          where: {
-            group_id: Number(groupId),
-          },
-        })
-        if (groupInProject == null || groupInProject.project_id != projectId) {
-          res.status(404).json({ message: 'Group not in project' })
-          return
-        }
-        return Number(groupId)
-      })
-    )
+    const updatedGroupIds = req.body.group_ids.map((groupId) => Number(groupId))
+    const groupsInProject = await projectMemberGroupsService.isGroupInProject(updatedGroupIds, projectId)
+    if (!groupsInProject) {
+      res.status(404).json({ message: 'Group not in project' })
+      return
+    }
     const groups = await models.ProjectMembersXGroup.findAll({
       attributes: ['group_id'],
       where: {
