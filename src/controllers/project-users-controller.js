@@ -9,7 +9,7 @@ export async function getProjectUsers(req, res) {
   try {
     const [users, userGroups] = await Promise.all([
       projectUserService.getUsersInProjects(projectId),
-      projectMemberGroupsService.getUserGroups(projectId)
+      projectMemberGroupsService.getUserGroups(projectId),
     ])
     // sending back a response but with data in desired structure
     res.status(200).json({
@@ -49,7 +49,10 @@ export async function editUser(req, res) {
   const transaction = await sequelizeConn.transaction()
   try {
     const updatedGroupIds = req.body.group_ids.map((groupId) => Number(groupId))
-    const groupsInProject = await projectMemberGroupsService.isGroupInProject(updatedGroupIds, projectId)
+    const groupsInProject = await projectMemberGroupsService.isGroupInProject(
+      updatedGroupIds,
+      projectId
+    )
     if (!groupsInProject) {
       res.status(404).json({ message: 'Group not in project' })
       return
