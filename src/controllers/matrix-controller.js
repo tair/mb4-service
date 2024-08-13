@@ -16,19 +16,23 @@ import * as partitionService from '../services/partition-service.js'
 export async function getMatrices(req, res) {
   const projectId = req.params.projectId
   try {
-    const matrices = await matrixService.getMatrices(projectId)
-    const partitions = await partitionService.getPartitions(projectId)
+    const [matrices, partitions] = await Promise.all([
+      matrixService.getMatrices(projectId),
+      partitionService.getPartitions(projectId),
+    ])
 
     const matrixIds = matrices.map((matrix) => matrix.matrix_id)
     const counts = await matrixService.getCounts(matrixIds)
 
     const userId = req.user?.user_id || 0
-    const projectUser = await models.ProjectsXUser.findOne({
-      where: {
-        user_id: userId,
-        project_id: projectId,
-      },
-    })
+    const projectUser =
+      req.project?.user ??
+      (await models.ProjectsXUser.findOne({
+        where: {
+          user_id: userId,
+          project_id: projectId,
+        },
+      }))
     if (projectUser) {
       const matrixPreferences = projectUser.getPreferences('matrix')
       if (matrixPreferences) {

@@ -204,7 +204,7 @@ export class NexusExporter extends Exporter {
             const taxonIndex = taxaIndicesMap.get(taxonId)
             const characterIndex = characterIndicesMap.get(characterId)
             this.writeLine(
-              `TEXT TAXON=${taxonIndex} CHARACTER=${characterIndex} TEXT='${note}';`
+              `TEXT CHARACTER=${characterIndex} TAXON=${taxonIndex} TEXT='${note}';`
             )
           }
         }

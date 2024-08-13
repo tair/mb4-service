@@ -22,7 +22,7 @@ export async function getCounts(matrixIds) {
     return {}
   }
 
-  const [cellCount] = await sequelizeConn.query(
+  const cellCountPromise = sequelizeConn.query(
     `
         SELECT matrix_id, count(*) c
         FROM cells
@@ -31,7 +31,7 @@ export async function getCounts(matrixIds) {
     { replacements: [matrixIds] }
   )
 
-  const [taxaCount] = await sequelizeConn.query(
+  const taxaCountPromse = sequelizeConn.query(
     `
         SELECT matrix_id, count(*) c
         FROM matrix_taxa_order
@@ -40,7 +40,7 @@ export async function getCounts(matrixIds) {
     { replacements: [matrixIds] }
   )
 
-  const [characterCount] = await sequelizeConn.query(
+  const characterCountPromise = sequelizeConn.query(
     `
         SELECT matrix_id, count(*) c
         FROM matrix_character_order
@@ -49,7 +49,7 @@ export async function getCounts(matrixIds) {
     { replacements: [matrixIds] }
   )
 
-  const [continuousCharacterCount] = await sequelizeConn.query(
+  const continuousCharacterCountPromise = sequelizeConn.query(
     `
         SELECT mco.matrix_id, count(*) c
         FROM matrix_character_order mco
@@ -59,7 +59,7 @@ export async function getCounts(matrixIds) {
     { replacements: [matrixIds] }
   )
 
-  const [characterRulesCount] = await sequelizeConn.query(
+  const characterRulesCountPromise = sequelizeConn.query(
     `
         SELECT mco.matrix_id, count(*) c
         FROM character_rules cr
@@ -70,7 +70,7 @@ export async function getCounts(matrixIds) {
     { replacements: [matrixIds] }
   )
 
-  const [cellMediaCount] = await sequelizeConn.query(
+  const cellMediaCountPromise = sequelizeConn.query(
     `
         SELECT cxm.matrix_id, count(*) c
         FROM cells_x_media cxm
@@ -79,7 +79,7 @@ export async function getCounts(matrixIds) {
     { replacements: [matrixIds] }
   )
 
-  const [characterMediaCount] = await sequelizeConn.query(
+  const characterMediaCountPromise = sequelizeConn.query(
     `
         SELECT mco.matrix_id, count(*) c
         FROM matrix_character_order AS mco
@@ -90,7 +90,7 @@ export async function getCounts(matrixIds) {
     { replacements: [matrixIds] }
   )
 
-  const [mediaLabelCount] = await sequelizeConn.query(
+  const mediaLabelCountPromise = sequelizeConn.query(
     `
         SELECT cxm.matrix_id, count(*) c
         FROM cells_x_media cxm
@@ -105,7 +105,7 @@ export async function getCounts(matrixIds) {
   // contain '-' and an actual character  score). This is because we don't need
   // the numerical value but rather we only need to check that the matrix does
   // or does not contain that score.
-  const [polymorphoricCellCount] = await sequelizeConn.query(
+  const polymorphoricCellCountPromise = sequelizeConn.query(
     `
        SELECT DISTINCT matrix_id, 1 AS c
         FROM cells
@@ -114,6 +114,28 @@ export async function getCounts(matrixIds) {
         HAVING COUNT(*) > 1 AND COUNT(*) > COUNT(state_id)`,
     { replacements: [matrixIds] }
   )
+
+  const [
+    [cellCount],
+    [taxaCount],
+    [characterCount],
+    [continuousCharacterCount],
+    [characterRulesCount],
+    [cellMediaCount],
+    [characterMediaCount],
+    [mediaLabelCount],
+    [polymorphoricCellCount],
+  ] = await Promise.all ([
+    cellCountPromise,
+    taxaCountPromse,
+    characterCountPromise,
+    continuousCharacterCountPromise,
+    characterRulesCountPromise,
+    cellMediaCountPromise,
+    characterMediaCountPromise,
+    mediaLabelCountPromise,
+    polymorphoricCellCountPromise,
+  ])
 
   const convert = function (rows) {
     const obj = {}
@@ -346,7 +368,7 @@ export async function getCellNotes(matrixId, partitionId = undefined) {
       WHERE
         c.matrix_id = ?
         ${clause}
-      ORDER BY mto.position, mco.position`,
+      ORDER BY mco.position, mto.position`,
     { replacements: replacements }
   )
   return rows
