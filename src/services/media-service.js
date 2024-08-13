@@ -1,8 +1,12 @@
 import sequelizeConn from '../util/db.js'
-import { capitalizeFirstLetter } from '../util/util.js'
 import MediaFile from '../models/media-file.js'
 import User from '../models/user.js'
 import BibliographicReference from '../models/bibliographic-reference.js'
+import {
+  getTaxonNameForPublishedProject,
+  getMediaTaxaSortFieldValues,
+} from '../util/taxa.js'
+import { getSpecimenNameForPublishedProject } from '../util/specimen.js'
 
 export async function getMediaByIds(mediaIds) {
   const [media] = await sequelizeConn.query(
@@ -23,6 +27,51 @@ export async function getMediaFiles(projectId) {
     { replacements: [projectId] }
   )
   return rows
+}
+
+export async function getMediaSpecimensAndViews(projectId, partitionId) {
+  // query all attrached to cells, taxa, characters
+  // result = {specimen_count: number, view_count: number, onetime_media: number[], media_ids: number[] }
+  const [[result]] = await sequelizeConn.query(
+    `
+      SELECT 
+        COUNT(DISTINCT media.specimen_id) AS specimen_count,
+        COUNT(DISTINCT media.view_id) AS view_count,
+        GROUP_CONCAT(DISTINCT CASE WHEN media.copyright_license = 8 THEN media.media_id END) AS onetime_media,
+        GROUP_CONCAT(DISTINCT media.media_id) AS media_ids
+      FROM (
+        SELECT mf.specimen_id, mf.view_id, mf.media_id, mf.copyright_license
+        FROM media_files mf
+        INNER JOIN cells_x_media cxm ON cxm.media_id = mf.media_id
+        INNER JOIN taxa_x_partitions txp ON cxm.taxon_id = txp.taxon_id
+        INNER JOIN characters_x_partitions cxp ON cxm.character_id = cxp.character_id
+        WHERE mf.project_id = :projectId AND txp.partition_id = :partitionId AND cxp.partition_id = :partitionId
+        UNION
+        SELECT mf.specimen_id, mf.view_id, mf.media_id, mf.copyright_license
+        FROM media_files mf
+        INNER JOIN taxa_x_media txm ON txm.media_id = mf.media_id
+        INNER JOIN taxa_x_partitions txp ON txm.taxon_id = txp.taxon_id
+        WHERE mf.project_id = :projectId AND txp.partition_id = :partitionId
+        UNION
+        SELECT mf.specimen_id, mf.view_id, mf.media_id, mf.copyright_license
+        FROM media_files mf
+        INNER JOIN characters_x_media cxm ON cxm.media_id = mf.media_id
+        INNER JOIN characters_x_partitions cxp ON cxm.character_id = cxp.character_id
+        WHERE mf.project_id = :projectId AND cxp.partition_id = :partitionId
+      ) AS media`,
+    { replacements: { projectId: projectId, partitionId: partitionId } }
+  )
+
+  const specimenCount = result.specimen_count
+  const viewCount = result.view_count
+
+  // Ids are required for other features
+  const onetimeMedia = result.onetime_media
+    ? result.onetime_media.split(',')
+    : []
+  const medias = result.media_ids ? result.media_ids.split(',') : []
+
+  return { medias, viewCount, specimenCount, onetimeMedia }
 }
 
 export async function getOneTimeMediaFiles(projectId) {
@@ -151,10 +200,12 @@ export async function getImageProps(projectId, type, exemplarMediaId) {
         `
           SELECT
             m.media_id, m.media, s.specimen_id, s.reference_source, s.institution_code,
-            s.collection_code, s.catalog_number, v.name as view_name
+            s.collection_code, s.catalog_number, v.name as view_name, t.*
           FROM media_files m
           LEFT JOIN media_views v on m.view_id = v.view_id
           LEFT JOIN specimens s ON m.specimen_id = s.specimen_id
+          LEFT JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
+          LEFT JOIN taxa t ON t.taxon_id = ts.taxon_id
           WHERE
             m.project_id = ? AND m.published = 0 AND m.media_id = ?
         `,
@@ -164,10 +215,12 @@ export async function getImageProps(projectId, type, exemplarMediaId) {
         `
           SELECT
             m.media_id, m.media, s.specimen_id, s.reference_source, s.institution_code,
-            s.collection_code, s.catalog_number, v.name as view_name
+            s.collection_code, s.catalog_number, v.name as view_name, t.*
           FROM media_files m
           LEFT JOIN media_views v on m.view_id = v.view_id
           LEFT JOIN specimens s ON m.specimen_id = s.specimen_id
+          LEFT JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
+          LEFT JOIN taxa t ON t.taxon_id = ts.taxon_id
           WHERE m.project_id = ? AND m.media <> '' AND m.published = 0
           ORDER BY m.media_id
           LIMIT 1
@@ -178,8 +231,7 @@ export async function getImageProps(projectId, type, exemplarMediaId) {
   try {
     if (rows && rows.length) {
       let obj = { media: rows[0].media[type] }
-      let taxaNames = await getTaxaNames(projectId, rows[0].media_id)
-      let specimenName = getSpecimenName(rows[0], taxaNames)
+      let specimenName = getSpecimenNameForPublishedProject(rows[0])
       if (specimenName) {
         obj['specimen_name'] = specimenName
       }
@@ -199,7 +251,7 @@ export async function getMediaFileDump(projectId) {
   const [rows] = await sequelizeConn.query(
     `
       SELECT m.media_id, m.media, s.specimen_id, s.description, s.reference_source,
-      s.institution_code, s.collection_code, s.catalog_number, v.name as view_name, 
+      s.institution_code, s.collection_code, s.catalog_number, t.*, v.name as view_name,
       m.is_sided, m.is_copyrighted, m.copyright_info, m.copyright_permission, m.copyright_license,
       u.fname, u.lname, p.publish_media_notes, m.notes, m.url, m.url_description, m.created_on,
       am.media_id as ancestor_media_id, ap.project_id as ancestor_project_id, ap.deleted as ancestor_project_deleted
@@ -207,6 +259,8 @@ export async function getMediaFileDump(projectId) {
       INNER JOIN projects p ON m.project_id = p.project_id
       LEFT JOIN media_views v on m.view_id = v.view_id
       LEFT JOIN specimens s ON m.specimen_id = s.specimen_id
+      LEFT JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
+      LEFT JOIN taxa t ON t.taxon_id = ts.taxon_id
       LEFT JOIN ca_users u ON m.user_id = u.user_id
       LEFT JOIN media_files am ON m.ancestor_media_id = am.media_id
       LEFT JOIN projects ap ON am.project_id = ap.project_id
@@ -218,7 +272,6 @@ export async function getMediaFileDump(projectId) {
     { replacements: [projectId] }
   )
 
-  const taxaMap = await getTaxaMap(projectId)
   const bibRefMap = await getBibliographicReferencesMap(projectId)
   const siblingMediaMap = await getSiblingMediaMap(projectId)
   const hitMap = await getPublishedHitsMap(projectId)
@@ -262,22 +315,16 @@ export async function getMediaFileDump(projectId) {
       mediaObj.copyright_permission,
       mediaObj.copyright_license
     )
-    let taxaNames = taxaMap[mediaObj.media_id]
-    if (taxaNames) {
-      if (taxaNames.taxaList.length > 0) {
-        obj['taxa_name'] = taxaNames.taxaList.join(' ')
-      }
-      obj['taxa_sort_fields'] = taxaNames.sortFields
-    }
+    obj['taxon_name'] = getTaxonNameForPublishedProject(mediaObj)
+    // provided for js sorting & searching
+    obj['taxon_sort_fields'] = getMediaTaxaSortFieldValues(mediaObj)
+    // provided for js sorting & searching
     obj['specimen'] = {
       institution_code: mediaObj.institution_code,
       collection_code: mediaObj.collection_code,
       catalog_number: mediaObj.catalog_number,
     }
-    let specimenName = getSpecimenName(mediaObj, taxaNames)
-    if (specimenName) {
-      obj['specimen_name'] = specimenName
-    }
+    obj['specimen_name'] = getSpecimenNameForPublishedProject(mediaObj)
     if (mediaObj.description) {
       obj['specimen_notes'] = mediaObj.description.trim()
     }
@@ -309,188 +356,6 @@ export async function getMediaFileDump(projectId) {
     rows[i] = obj
   }
   return rows
-}
-
-async function getTaxaMap(projectId) {
-  const [allTaxa] = await sequelizeConn.query(
-    `
-      SELECT m.media_id, t.*
-      FROM media_files m
-      INNER JOIN projects p ON m.project_id = p.project_id
-      INNER JOIN specimens s ON m.specimen_id = s.specimen_id
-      INNER JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
-      INNER JOIN taxa t ON t.taxon_id = ts.taxon_id
-      WHERE m.project_id = ?
-      AND m.published = 0
-      AND m.media <> ''
-      AND (p.publish_matrix_media_only = 0 OR (p.publish_matrix_media_only = 1 AND m.in_use_in_matrix = 1))
-    `,
-    { replacements: [projectId] }
-  )
-  let taxaMap = {}
-
-  for (let i = 0; i < allTaxa.length; i++) {
-    let taxa = allTaxa[i]
-    if (!taxaMap[taxa.media_id]) {
-      taxaMap[taxa.media_id] = {
-        taxaList: [],
-        sortFields: {},
-      }
-    }
-    const fields = [
-      'higher_taxon_phylum',
-      'higher_taxon_class',
-      'higher_taxon_order',
-      'higher_taxon_superfamily',
-      'higher_taxon_family',
-      'higher_taxon_subfamily',
-      'genus',
-      'specific_epithet',
-    ]
-    let sortVals = {}
-    for (const field of fields) {
-      sortVals[field] = taxa[field]
-    }
-    // scientifically there should be only one taxon per media, but some old projects
-    // has media file that has multiple taxa. To honor that before we are able to correct
-    // the data, we concantenate all taxa for the taxa name, and use the sort fields of one
-    // of the taxon
-    taxaMap[taxa.media_id].taxaList.push(getTaxaName(taxa))
-    taxaMap[taxa.media_id].sortFields = sortVals
-  }
-  return taxaMap
-}
-
-async function getTaxaNames(projectId, mediaId) {
-  const [taxaNames] = await sequelizeConn.query(
-    `
-      SELECT t.*
-      FROM media_files m
-      INNER JOIN projects p ON m.project_id = p.project_id
-      INNER JOIN specimens s ON m.specimen_id = s.specimen_id
-      INNER JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
-      INNER JOIN taxa t ON t.taxon_id = ts.taxon_id
-      WHERE m.project_id = ? AND m.media_id = ?
-      AND m.published = 0
-      AND m.media <> ''
-      AND (p.publish_matrix_media_only = 0 OR (p.publish_matrix_media_only = 1 AND m.in_use_in_matrix = 1))
-    `,
-    { replacements: [projectId, mediaId] }
-  )
-  return taxaNames
-}
-
-function getTaxaName(row) {
-  if (!row) return null
-  // the rule is that we will take the genus + subgenus + specific_epithet + subspecific_epithet combo if exists,
-  // and otherwise take the last field in the array order that has value
-  const fields = [
-    'supraspecific_clade',
-    'higher_taxon_kingdom',
-    'higher_taxon_phylum',
-    'higher_taxon_class',
-    'higher_taxon_subclass',
-    'higher_taxon_infraclass',
-    'higher_taxon_cohort',
-    'higher_taxon_superorder',
-    'higher_taxon_order',
-    'higher_taxon_suborder',
-    'higher_taxon_infraorder',
-    'higher_taxon_superfamily',
-    'higher_taxon_family',
-    'higher_taxon_subfamily',
-    'higher_taxon_tribe',
-    'higher_taxon_subtribe',
-    'genus',
-    'subgenus',
-    'specific_epithet',
-    'subspecific_epithet',
-  ]
-  let lastNameFound
-  let nameList = []
-  let findOtu = false
-  for (const field of fields) {
-    let val = row[field]
-    if (val) {
-      val = val.trim()
-      lastNameFound = val
-    }
-    if (field == 'genus') {
-      findOtu = true
-    }
-    if (findOtu && val) {
-      switch (field) {
-        case 'genus':
-          val = '<i>' + capitalizeFirstLetter(val) + '</i>'
-          break
-        case 'specific_epithet':
-          val = '<i>' + val.toLowerCase() + '</i>'
-          break
-      }
-      nameList.push(val)
-    }
-  }
-  if (nameList.length == 0) {
-    nameList = [lastNameFound]
-  }
-  let name = nameList.join(' ')
-  if (row.is_extinct) {
-    name = '† ' + name
-  }
-  return name
-}
-
-function getSpecimenName(row, taxaNames) {
-  let name
-
-  if (taxaNames && taxaNames.taxaList.length > 0) {
-    name = taxaNames.taxaList.join(', ')
-  }
-  // set author label
-  if (row['scientific_name_author']) {
-    let authorLabel = row['scientific_name_author'].trim()
-    if (row['scientific_name_year']) {
-      authorLabel += ', ' + row['scientific_name_year']
-    }
-    if (row['use_parens_for_author']) {
-      authorLabel = '(' + authorLabel + ')'
-    }
-    if (name) {
-      name += ' ' + authorLabel
-    } else {
-      name = authorLabel
-    }
-  }
-  // set source label
-  let referenceSource = row.reference_source
-  let sourceLabel
-  if (referenceSource == 0) {
-    // institution code must exist when other two columns exist
-    sourceLabel = row.institution_code
-    if (row.collection_code) {
-      sourceLabel += '/' + row.collection_code
-    }
-    if (row.catalog_number) {
-      sourceLabel += ':' + row.catalog_number
-    }
-  } else if (referenceSource == 1) {
-    sourceLabel = 'unvouchered'
-  } else {
-    return 'Unknown specimen reference type ' + referenceSource
-  }
-  if (sourceLabel) {
-    sourceLabel = sourceLabel.trim()
-    if (name) {
-      name = name.trim()
-      name += ' (' + sourceLabel + ')'
-    } else {
-      name = sourceLabel
-    }
-  }
-  if (name) {
-    name = name.replace(/[\n\r\t]+/g, ' ')
-  }
-  return name
 }
 
 async function getBibliographicReferencesMap(projectId) {
