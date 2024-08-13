@@ -1,26 +1,86 @@
 import sequelizeConn from '../util/db.js'
+import {
+  TAXA_FIELD_NAMES,
+  getTaxonNameForPublishedProject,
+} from '../util/taxa.js'
 
+// for project detail dump
 export async function getTaxaDetails(projectId) {
-  const taxa_browser = await getTaxaByBrowseType(projectId)
-
-  return {
-    taxa_browser: taxa_browser,
-  }
+  const rows = await getTaxaByBrowseType(projectId)
+  const partitionMap = await getTaxaPartitionMap(projectId)
+  const matrixMap = await getTaxaMatrixMap(projectId)
+  return rows.map((r) => {
+    let sortFields = {}
+    for (const fieldName of TAXA_FIELD_NAMES) {
+      if (r[fieldName]) sortFields[fieldName] = r[fieldName]
+    }
+    const obj = {
+      sort_fields: sortFields,
+      taxon_name: getTaxonNameForPublishedProject(r),
+    }
+    if (r.notes) obj.notes = r.notes
+    if (r.lookup_failed_on > 0) obj.lookup_failed = true
+    if (r.pbdb_taxon_id > 0) obj.pbdb_verified = true
+    if (partitionMap[r.taxon_id]) obj.partitions = partitionMap[r.taxon_id]
+    if (matrixMap[r.taxon_id]) obj.matrices = matrixMap[r.taxon_id]
+    return obj
+  })
 }
 
 async function getTaxaByBrowseType(projectId) {
   const [rows] = await sequelizeConn.query(
     `
-      SELECT taxon_id, genus, specific_epithet, subspecific_epithet,
-          supraspecific_clade, higher_taxon_kingdom, higher_taxon_phylum,
-          higher_taxon_class, higher_taxon_order, higher_taxon_family,
-          higher_taxon_superfamily, higher_taxon_subfamily,
-          higher_taxon_subclass, higher_taxon_suborder
+      SELECT *
       FROM taxa
       WHERE project_id = ?`,
     { replacements: [projectId] }
   )
+
   return rows
+}
+
+async function getTaxaPartitionMap(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT t.taxon_id, p.partition_id
+      FROM taxa t
+      INNER JOIN taxa_x_partitions tp ON t.taxon_id = tp.taxon_id
+      INNER JOIN partitions p ON p.partition_id = tp.partition_id
+      WHERE p.project_id = ?`,
+    { replacements: [projectId] }
+  )
+  let partitionMap = {}
+  for (let i = 0; i < rows.length; i++) {
+    let data = rows[i]
+    if (!partitionMap[data.taxon_id]) {
+      partitionMap[data.taxon_id] = []
+    }
+    partitionMap[data.taxon_id].push(data.partition_id)
+  }
+
+  return partitionMap
+}
+
+async function getTaxaMatrixMap(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT t.taxon_id, m.matrix_id
+      FROM taxa t
+      INNER JOIN matrix_taxa_order mt ON t.taxon_id = mt.taxon_id
+      INNER JOIN matrices m ON m.matrix_id = mt.matrix_id
+      WHERE m.project_id = ?`,
+    { replacements: [projectId] }
+  )
+  let matrixMap = {}
+  for (let i = 0; i < rows.length; i++) {
+    let data = rows[i]
+    if (!matrixMap[data.taxon_id]) {
+      matrixMap[data.taxon_id] = []
+    }
+    matrixMap[data.taxon_id].push(data.matrix_id)
+  }
+
+  return matrixMap
 }
 
 export async function getTaxaInProject(projectId) {
