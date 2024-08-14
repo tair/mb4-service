@@ -5,5 +5,6 @@ const projectMemberGroupsRouter = express.Router({ mergeParams: true })
 
 projectMemberGroupsRouter.get('/', controller.getProjectGroups)
 projectMemberGroupsRouter.post('/delete', controller.deleteGroup)
+projectMemberGroupsRouter.post('/:groupId/edit', controller.editGroup)
 
 export default projectMemberGroupsRouter
