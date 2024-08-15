@@ -23,11 +23,11 @@ export default class ProjectMemberGroup extends Model {
           type: DataTypes.STRING(255),
           allowNull: false,
         },
-        // consider dropping the color column since it's unused
+        // TODO: Consider dropping the color column since it's unused
         color: {
           type: DataTypes.CHAR(6),
           allowNull: false,
-          defaultValue: 'red',
+          defaultValue: '',
         },
         description: {
           type: DataTypes.TEXT,
