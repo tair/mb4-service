@@ -239,7 +239,10 @@ export default class BibliographicReference extends Model {
 
     if (authors) {
       citation += authors + (authors.endsWith('.') ? ' ' : '. ')
+    } else {
+      citation += '[No author given]. '
     }
+
     if (record.pubyear) {
       citation += record.pubyear + '. '
     }
