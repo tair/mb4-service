@@ -63,7 +63,7 @@ export async function editGroup(req, res) {
 export async function createGroup(req, res) {
   const values = req.body.group
   values.project_id = req.project.project_id
-  
+
   const group = models.ProjectMemberGroup.build(values)
 
   const transaction = await sequelizeConn.transaction()
