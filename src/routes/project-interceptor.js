@@ -69,6 +69,28 @@ export async function authorizeProject(req, res, next) {
   next()
 }
 
+/**
+ * Authorize that the project eixsts and is not deleted and is a public project
+ */
+export async function authorizePublishedProject(req, res, next) {
+  const projectId = req.params.projectId
+  const project = await models.Project.findByPk(projectId)
+
+  if (project == null) {
+    return res.status(404).json({ message: 'Project does not exist' })
+  }
+
+  if (project.deleted) {
+    return res.status(404).json({ message: 'Project was deleted' })
+  }
+
+  if (!project.published) {
+    return res.status(404).json({ message: 'Project is not public' })
+  }
+
+  next()
+}
+
 function canRoleAccessAnyProject(role) {
   return role && array_intersect(role, ALL_PROJECT_ACCESS_ROLES).length > 0
 }
