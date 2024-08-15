@@ -60,6 +60,31 @@ export async function editGroup(req, res) {
   }
 }
 
+export async function createGroup(req, res) {
+  const values = req.body.group
+  values.project_id = req.project.project_id
+  
+  const group = models.ProjectMemberGroup.build(values)
+
+  const transaction = await sequelizeConn.transaction()
+  try {
+    await group.save({
+      transaction,
+      user: req.user,
+    })
+
+    await transaction.commit()
+
+    res.status(200).json({ group: convertGroup(group) })
+  } catch (e) {
+    await transaction.rollback()
+    console.log(e)
+    res
+      .status(500)
+      .json({ message: 'Failed to create group with server error' })
+  }
+}
+
 function convertGroup(row) {
   return {
     group_id: parseInt(row.group_id),
