@@ -51,8 +51,8 @@ export async function getSpecimenDetails(projectId) {
           s.collection_code, s.catalog_number, s.created_on, t.*, u.fname, u.lname
       FROM specimens s
       LEFT JOIN ca_users u ON u.user_id = s.user_id
-      LEFT JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
-      LEFT JOIN taxa t ON t.taxon_id = ts.taxon_id
+      INNER JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
+      INNER JOIN taxa t ON t.taxon_id = ts.taxon_id
       WHERE s.project_id = ?`,
     { replacements: [projectId] }
   )
@@ -72,7 +72,7 @@ export async function getSpecimenDetails(projectId) {
       sort_fields: getSpecimenTaxaSortFieldValues(r),
     }
     if (hitMap[r.specimen_id]) {
-      obj['hits'] = r.specimen_id
+      obj['hits'] = hitMap[r.specimen_id]
     }
     if (r.description) {
       obj['specimen_notes'] = r.description.trim()

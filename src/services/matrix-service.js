@@ -125,7 +125,7 @@ export async function getCounts(matrixIds) {
     [characterMediaCount],
     [mediaLabelCount],
     [polymorphoricCellCount],
-  ] = await Promise.all ([
+  ] = await Promise.all([
     cellCountPromise,
     taxaCountPromse,
     characterCountPromise,
