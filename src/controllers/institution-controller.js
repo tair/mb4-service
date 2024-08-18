@@ -84,6 +84,7 @@ export async function editInstitution(req, res) {
     ? await models.Institution.findByPk(selectedInstitutionId)
     : await models.Institution.findOne({ where: { name: name } })
 
+  // Determine whether the current institution is referenced any where else
   const dupeProjectInstitutionIds =
     await institutionService.getInstitutionIdsReferencedOutsideProject(
       [institutionId],
@@ -118,7 +119,6 @@ export async function editInstitution(req, res) {
       })
     }
 
-    // build new institution if not found=
     if (newInstitution == null) {
       newInstitution = await models.Institution.create(
         {
