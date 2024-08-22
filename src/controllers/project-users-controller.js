@@ -116,6 +116,107 @@ export async function editUser(req, res) {
   }
 }
 
+export async function createUser(req, res) {
+  const projectId = req.project.project_id
+  const values = req.body.json
+  const exist = req.body.exist
+  const transaction = await sequelizeConn.transaction()
+  try {
+    if (!exist) {
+      const user = models.User.build({
+        fname: values.fname,
+        lname: values.lname,
+        email: values.email,
+        active: 0,
+        userclass: 0,
+      })
+      await user.save({
+        transaction,
+        user: req.user,
+      })
+
+      const project_x_user = models.ProjectsXUser.build({
+        project_id: projectId,
+        user_id: user.user_id,
+        membership_type: values.membership_type,
+      })
+  
+      await project_x_user.save({
+        transaction,
+        user: req.user,
+      })
+      
+      await transaction.commit()
+      const temp = convertUser(
+        {
+          fname: user.fname,
+          lname: user.lname,
+          email: user.email,
+          user_id: user.user_id,
+          membership_type: project_x_user.membership_type,
+          link_id: project_x_user.link_id,
+        },
+        req.project.user_id,
+        []
+      )
+      res.status(200).json({user: temp})
+    } else {
+      const user = await models.User.findOne({
+        attributes:['fname', 'lname', 'email', 'user_id'],
+        where: { email: values.email },
+      })
+      const project_x_user = models.ProjectsXUser.build({
+        project_id: projectId,
+        user_id: user.user_id,
+        membership_type: values.membership_type,
+      })
+
+      await project_x_user.save({
+        transaction,
+        user: req.user,
+      })
+      
+      await transaction.commit()
+
+      res.status(200).json({user: convertUser(
+        {
+          fname: user.fname,
+          lname: user.lname,
+          email: user.email,
+          user_id: user.user_id,
+          membership_type: project_x_user.membership_type,
+          link_id: project_x_user.link_id,
+        },
+        req.project.user_id,
+        []
+      )})
+  }
+  } catch (err) {
+    await transaction.rollback()
+    console.error(`Error: Error while creating user`, err)
+    res.status(500).json({ message: 'Error while creating user.' })
+  }
+
+}
+
+export async function checkEmail(req, res) {
+  const email = req.body.email
+  try {
+    const user = await models.User.findOne({
+      attributes:['fname', 'lname', 'email', 'user_id'],
+      where: { email: email },
+    })
+    // sending back a response but with data in desired structure
+    res.status(200).json({
+      exist: user ? true: false,
+      user: user ? user: {email: email},
+    })
+  } catch (err) {
+    console.error(`Error: Error while fetching user for ${email}`, err)
+    res.status(500).json({ message: 'Error while fetching user.' })
+  }
+}
+
 //converts member data from db into its own object
 function convertUser(row, admin, groupIds) {
   return {
