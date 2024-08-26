@@ -58,6 +58,9 @@ export async function authorizeProject(req, res, next) {
       default: // Observer, Character Annonator, Bibliography maintainer
         permissions.push('view')
     }
+
+    // Set the project user so that it can be read downstream too.
+    req.project.user = projectUser
   }
 
   req.project = project
