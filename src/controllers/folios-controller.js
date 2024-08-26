@@ -25,7 +25,7 @@ export async function createFolio(req, res) {
     project_id: req.project.project_id,
     user_id: req.user.user_id,
   })
- 
+
   const transaction = await sequelizeConn.transaction()
   try {
     await folio.save({
