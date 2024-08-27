@@ -124,15 +124,10 @@ export async function createUser(req, res) {
     const user = await models.User.findByPk(values.user_id, {
       attributes: ['fname', 'lname', 'email', 'user_id'],
     })
-    const project_x_user = models.ProjectsXUser.build({
+    const project_x_user = models.ProjectsXUser.create({
       project_id: projectId,
       user_id: user.user_id,
       membership_type: values.membership_type,
-    })
-
-    await project_x_user.save({
-      transaction,
-      user: req.user,
     })
 
     await transaction.commit()
@@ -157,7 +152,7 @@ export async function createUser(req, res) {
   }
 }
 // check to see if the user is active and if not deleted
-export async function isAvailable(req, res) {
+export async function isEmailAvailable(req, res) {
   const email = req.body.email
   try {
     const user = await models.User.findOne({
