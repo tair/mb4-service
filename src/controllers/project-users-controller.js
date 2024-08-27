@@ -116,8 +116,73 @@ export async function editUser(req, res) {
   }
 }
 
+export async function createUser(req, res) {
+  const projectId = req.project.project_id
+  const values = req.body.json
+  const transaction = await sequelizeConn.transaction()
+  try {
+    const user = await models.User.findByPk(values.user_id, {
+      attributes: ['fname', 'lname', 'email', 'user_id'],
+    })
+    const project_x_user = await models.ProjectsXUser.create(
+      {
+        project_id: projectId,
+        user_id: user.user_id,
+        membership_type: values.membership_type,
+      },
+      {
+        transaction,
+        user: req.user,
+      }
+    )
+
+    await transaction.commit()
+
+    res.status(200).json({
+      user: convertUser(
+        {
+          fname: user.fname,
+          lname: user.lname,
+          email: user.email,
+          user_id: user.user_id,
+          membership_type: project_x_user.membership_type,
+          link_id: project_x_user.link_id,
+        },
+        req.project.user_id
+      ),
+    })
+  } catch (err) {
+    await transaction.rollback()
+    console.error(`Error: Error while having user join group`, err)
+    res.status(500).json({ message: 'Error while having user join group.' })
+  }
+}
+// check to see if the user is active and if not deleted
+export async function isEmailAvailable(req, res) {
+  const email = req.body.email
+  try {
+    const user = await models.User.findOne({
+      attributes: ['fname', 'lname', 'email', 'user_id', 'active', 'userclass'],
+      where: { email: email },
+    })
+    res.status(200).json({
+      exist: user ? true : false,
+      user: user ? user : { email: email },
+      errorMessage:
+        user.active == 0
+          ? "Was not able to add user as a member because they're inactive"
+          : user.userclass == 255
+          ? 'Was not able to add user as a member because they have been deleted'
+          : false,
+    })
+  } catch (err) {
+    console.error(`Error: Error while fetching user for ${email}`, err)
+    res.status(500).json({ message: 'Error while fetching user.' })
+  }
+}
+
 //converts member data from db into its own object
-function convertUser(row, admin, groupIds) {
+function convertUser(row, admin, groupIds = []) {
   return {
     user_id: parseInt(row.user_id),
     link_id: parseInt(row.link_id),
