@@ -27,6 +27,9 @@ export async function authorizeProject(req, res, next) {
     return res.status(404).json({ message: 'Project was deleted' })
   }
 
+  // Set the project so that it's accessible in the controllers.
+  req.project = project
+
   const permissions = []
   if (req.credential.is_anonymous) {
     if (req.credential.project_id != project.project_id) {
@@ -63,7 +66,6 @@ export async function authorizeProject(req, res, next) {
     req.project.user = projectUser
   }
 
-  req.project = project
   req.project.permissions = permissions
 
   next()
