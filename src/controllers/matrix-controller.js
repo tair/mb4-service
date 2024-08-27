@@ -259,7 +259,15 @@ export async function downloadCharacters(req, res) {
     return
   }
 
-  const filename = `mbank_X${matrixId}_${getFilenameDate()}_character_list.txt`
+  const options = new ExportOptions()
+  options.includeNotes = !!req.query.notes
+  let filename = ''
+  if (!options.includeNotes) {
+    filename = `mbank_X${matrixId}_${getFilenameDate()}_character_list_no_notes.txt`
+  } else {
+    filename = `mbank_X${matrixId}_${getFilenameDate()}_character_list.txt`
+  }
+
   res.set({
     'Content-Type': 'text/plain; charset=utf-8',
     'Content-Disposition': 'attachment; filename=' + filename,
@@ -270,8 +278,6 @@ export async function downloadCharacters(req, res) {
   res.status(200)
 
   const exporter = new CharacterTextExporter((txt) => res.write(txt))
-  const options = new ExportOptions()
-  options.includeNotes = !!req.query.notes
   options.matrix = await matrixService.getMatrix(matrixId)
   options.characters = await matrixService.getCharactersInMatrix(matrixId)
 
