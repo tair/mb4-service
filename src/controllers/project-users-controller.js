@@ -124,11 +124,17 @@ export async function createUser(req, res) {
     const user = await models.User.findByPk(values.user_id, {
       attributes: ['fname', 'lname', 'email', 'user_id'],
     })
-    const project_x_user = models.ProjectsXUser.create({
-      project_id: projectId,
-      user_id: user.user_id,
-      membership_type: values.membership_type,
-    })
+    const project_x_user = await models.ProjectsXUser.create(
+      {
+        project_id: projectId,
+        user_id: user.user_id,
+        membership_type: values.membership_type,
+      },
+      {
+        transaction,
+        user: req.user,
+      }
+    )
 
     await transaction.commit()
 
