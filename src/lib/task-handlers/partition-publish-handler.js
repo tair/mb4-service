@@ -3,6 +3,7 @@ import sequelizeConn from '../../util/db.js'
 import { Handler, HandlerErrors } from './handler.js'
 import { models } from '../../models/init-models.js'
 import { PartitionModelDuplicator } from '../partition-model-duplicator.js'
+import { EmailManager } from '../email-manager.js'
 import { time } from '../../util/util.js'
 
 export class PartitionPublishHandler extends Handler {
@@ -179,7 +180,36 @@ export class PartitionPublishHandler extends Handler {
     //   * Reindex the entire project to allow search.
     //   * Email the user that the project was completed.
 
+    // Create a new task to email the user that the partition publication was successful
+    await models.TaskQueue.create(
+      {
+        user_id: userId,
+        priority: 500,
+        entity_key: null,
+        row_key: null,
+        handler: 'Email',
+        parameters: {
+          template: 'project_partition_request_approved',
+          name: user.fname,
+          to: user.email,
+          clonedProjectId,
+        },
+      },
+      {
+        transaction: transaction,
+        user: user,
+      }
+    )
+
     await transaction.commit()
+
+    const emailManager = new EmailManager()
+    emailManager.email(
+      'project_partition_request_completed',
+      projectId,
+      clonedProjectId
+    )
+
     return {
       result: {
         vn_cloned_project_id: clonedProjectId,

@@ -1,0 +1,10 @@
+Hello $name,
+
+MorphoBank has approved your requested partition publication. Please log on to MorphoBank to see the new 
+Project $clonedProjectId listed in your My Projects list.
+
+MorphoBank is supported by a voluntary institutional membership program wherein institutions become members for an annual fee that is comparable to a journal subscription. Members ensure that everyone in the community has access to this valuable curation and data dissemination platform. MorphoBank will always remain free to all users, and we ask that the community volunteer to contribute a small amount to sustain the site.
+
+It helps enormously if researchers like you who have data in MorphoBank and understand the value of scientific databases can send a supporting email directly to your librarian about this issue and copy <memberships@phxbio.org>. We will continue the conversation with them and researcher input is extremely valuable in their decision making process.
+
+If you have any questions, concerns or suggestions please reach out using the Ask Us form linked from MorphoBank's home page.
