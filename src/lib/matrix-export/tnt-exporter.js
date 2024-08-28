@@ -1,7 +1,7 @@
 import { Exporter } from './exporter.js'
 import { getTaxonName } from '../../util/taxa.js'
 
-const SYMBOLS = '123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+const SYMBOLS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 export class TNTExporter extends Exporter {
   export({ taxa, characters, cellsTable }) {
