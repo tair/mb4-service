@@ -1,5 +1,7 @@
 import sequelizeConn from '../util/db.js'
+import BibliographicReference from '../models/bibliographic-reference.js'
 
+// for project detail dump
 export async function getBibliographiesByProjectId(projectId) {
   const [rows] = await sequelizeConn.query(
     `
@@ -8,7 +10,15 @@ export async function getBibliographiesByProjectId(projectId) {
       WHERE project_id = ? `,
     { replacements: [projectId] }
   )
-  return rows
+  return rows.map((row) => {
+    return {
+      // sort_fields: {
+      //   article: row.article_title,
+      //   journal: row.journal_title,
+      // },
+      title: BibliographicReference.getCitationText(row, null),
+    }
+  })
 }
 
 export async function getBibliographiesByGroupId(groupId) {

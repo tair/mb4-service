@@ -63,6 +63,7 @@ export function getTaxonName(
     }
 
     let name = record[fieldName]
+    if (name) name = name.trim()
     if (gotOtu && name) {
       switch (fieldName) {
         case 'genus':

@@ -6,15 +6,85 @@ export async function getMatrix(matrixId) {
   return models.Matrix.findByPk(matrixId)
 }
 
+// for published project detail dump
 export async function getMatrices(projectId) {
   const [rows] = await sequelizeConn.query(
     `
-      SELECT matrix_id, user_id, title, type
+      SELECT matrix_id, user_id, title, type, matrix_doi
       FROM matrices
       WHERE project_id = ?`,
     { replacements: [projectId] }
   )
-  return rows
+  let matrices = []
+  for (let i = 0; i < rows.length; i++) {
+    let matrix = rows[i]
+    let matrixId = matrix.matrix_id
+    const counts = await getCounts(matrixId)
+
+    const hits = await getPublishedHits(projectId, matrixId)
+    const downloads = await getPublishedDownloads(projectId, matrixId)
+    matrices.push({
+      matrix_id: matrixId,
+      title: matrix.title,
+      doi: matrix.matrix_doi,
+      counts: cleanCounts(counts, matrixId),
+      hits: hits,
+      downloads: downloads,
+    })
+  }
+  return matrices
+}
+
+function cleanCounts(counts, matrixId) {
+  const fields = [
+    'cell',
+    'taxa',
+    'character',
+    'continuous_character',
+    'character_rule',
+    'cell_media',
+    'character_media',
+    'media_label',
+    'polymorphoric_cell',
+  ]
+  const finalCounts = {}
+  for (let field of fields) {
+    if (counts[field] && counts[field][matrixId])
+      finalCounts[field] = counts[field][matrixId]
+  }
+  return finalCounts
+}
+
+// Since there are not many matrices overall,
+// will not create map but just query directly
+async function getPublishedHits(projectId, matrixId) {
+  const [hits] = await sequelizeConn.query(
+    `
+      SELECT row_id, count(*) as count
+      FROM stats_pub_hit_log h
+      WHERE h.project_id = ?
+      AND h.row_id = ?
+      AND h.hit_type = 'X'
+      GROUP BY h.project_id, h.row_id
+    `,
+    { replacements: [projectId, matrixId] }
+  )
+  return hits[0].count
+}
+
+async function getPublishedDownloads(projectId, matrixId) {
+  const [downloads] = await sequelizeConn.query(
+    `
+      SELECT row_id, count(*) as count
+      FROM stats_pub_download_log d
+      WHERE d.project_id = ?
+      AND d.row_id = ?
+      AND d.download_type = 'X'
+      GROUP BY d.project_id, d.row_id
+    `,
+    { replacements: [projectId, matrixId] }
+  )
+  return downloads[0].count
 }
 
 export async function getCounts(matrixIds) {
