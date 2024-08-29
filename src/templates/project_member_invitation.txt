@@ -1,6 +1,6 @@
 Dear $name,
 
-You have been invited to participate in a Morphobank.org project, $projectId, titled '$projectName' by $adminName ($adminEmail).
+You have been invited to participate in a Morphobank.org project, P$projectId, titled '$projectName' by $adminName ($adminEmail).
 
 MorphoBank is a public database for the creation, storage and retrieval of peer-reviewed morphological matrices for phylogenetics, as well as 2D and 3D images associated with taxonomic work.
 
