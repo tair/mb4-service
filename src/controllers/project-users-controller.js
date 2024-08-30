@@ -150,6 +150,7 @@ export async function createUser(req, res) {
           projectName: req.project.name,
           adminName: `${req.user.fname} ${req.user.lname}`,
           adminEmail: req.user.email,
+          message: values.message,
           to: user.email,
         },
       },
