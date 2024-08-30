@@ -3,7 +3,6 @@ import sequelizeConn from '../../util/db.js'
 import { Handler, HandlerErrors } from './handler.js'
 import { models } from '../../models/init-models.js'
 import { PartitionModelDuplicator } from '../partition-model-duplicator.js'
-import { EmailManager } from '../email-manager.js'
 import { time } from '../../util/util.js'
 
 export class PartitionPublishHandler extends Handler {
@@ -192,7 +191,9 @@ export class PartitionPublishHandler extends Handler {
           template: 'project_partition_request_approved',
           name: user.fname,
           to: user.email,
+          projectId,
           clonedProjectId,
+          partition_name: partition.name,
         },
       },
       {
@@ -202,13 +203,6 @@ export class PartitionPublishHandler extends Handler {
     )
 
     await transaction.commit()
-
-    const emailManager = new EmailManager()
-    emailManager.email(
-      'project_partition_request_completed',
-      projectId,
-      clonedProjectId
-    )
 
     return {
       result: {

@@ -1,1 +1,0 @@
-Project partition $clonedProjectId has been published from Project $ProjectId.
