@@ -94,6 +94,11 @@ const DEFAULT_EMAIL_OPTIONS = {
     from: 'no-reply@morphobank.org',
     include_logo: true,
   },
+  project_partition_request_approved: {
+    subject: 'Morphobank Partition Publish Request Approved',
+    from: 'no-reply@morphobank.org',
+    include_logo: true,
+  },
   reset_password_instruction: {
     subject: '[Morphobank] Resetting your site password',
     from: 'no-reply@morphobank.org',
