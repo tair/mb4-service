@@ -20,11 +20,10 @@
                     Dear $name,
                   </p>
                   <p>
-                    You have been invited to participate in a Morphobank.org project, P$projectId, titled '$projectName' by $adminName ($adminEmail).
+                    You have been invited to participate in a Morphobank.org project, P$projectId, titled '$projectName' by $inviteeName ($inviteeEmail).
                   </p>
                   <br />
-                  <p>
-                    $adminName wrote:
+                  <p id="messageStart">
                   </p>
                   <p>
                     $message
@@ -55,3 +54,8 @@
     </tr>
   </table>
 </div>
+<script>
+  if( $message ) {
+    document.getElementById('messageStart').textContent = `${$inviteeName} wrote:`
+  }
+</script>

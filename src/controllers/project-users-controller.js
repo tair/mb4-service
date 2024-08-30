@@ -137,7 +137,7 @@ export async function createUser(req, res) {
     )
     await models.TaskQueue.create(
       {
-        user_id: user.user_id,
+        user_id: req.user.user_id,
         priority: 500,
         entity_key: null,
         row_key: null,
@@ -148,8 +148,8 @@ export async function createUser(req, res) {
           name: `${user.fname} ${user.lname}`,
           projectId: projectId,
           projectName: req.project.name,
-          adminName: `${req.user.fname} ${req.user.lname}`,
-          adminEmail: req.user.email,
+          inviteeName: `${req.user.fname} ${req.user.lname}`,
+          inviteeEmail: req.user.email,
           message: values.message,
           to: user.email,
         },

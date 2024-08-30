@@ -104,5 +104,6 @@ const DEFAULT_EMAIL_OPTIONS = {
   },
   project_member_invitation: {
     from: 'no-reply@morphobank.org',
+    include_logo: true,
   },
 }
