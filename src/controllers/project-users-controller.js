@@ -150,6 +150,7 @@ export async function createUser(req, res) {
           projectName: req.project.name,
           inviteeName: `${req.user.fname} ${req.user.lname}`,
           inviteeEmail: req.user.email,
+          messageStart: values.message ? `${user.fname} ${user.lname} wrote:`: null,
           message: values.message,
           to: user.email,
         },

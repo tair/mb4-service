@@ -23,7 +23,8 @@
                     You have been invited to participate in a Morphobank.org project, P$projectId, titled '$projectName' by $inviteeName ($inviteeEmail).
                   </p>
                   <br />
-                  <p id="messageStart">
+                  <p>
+                    $messageStart
                   </p>
                   <p>
                     $message
@@ -54,8 +55,3 @@
     </tr>
   </table>
 </div>
-<script>
-  if( $message ) {
-    document.getElementById('messageStart').textContent = `${$inviteeName} wrote:`
-  }
-</script>
