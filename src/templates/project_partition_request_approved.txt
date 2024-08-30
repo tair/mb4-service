@@ -1,5 +1,5 @@
 Hello $name,
 
-Your request to create a publishable project from the $partition_name partition in project P$projectId has been completed.
+Your request to create a publishable project from the $partitionName partition in project P$projectId has been completed.
 
 A new project, P$clonedProjectId has been created with the data from the partition.

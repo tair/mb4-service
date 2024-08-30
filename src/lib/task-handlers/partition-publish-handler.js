@@ -193,7 +193,7 @@ export class PartitionPublishHandler extends Handler {
           to: user.email,
           projectId,
           clonedProjectId,
-          partition_name: partition.name,
+          partitionName: partition.name,
         },
       },
       {
