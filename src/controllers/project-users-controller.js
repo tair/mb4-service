@@ -135,7 +135,31 @@ export async function createUser(req, res) {
         user: req.user,
       }
     )
-
+    await models.TaskQueue.create(
+      {
+        user_id: req.user.user_id,
+        priority: 500,
+        entity_key: null,
+        row_key: null,
+        handler: 'Email',
+        parameters: {
+          template: 'project_member_invitation',
+          subject: `Invitation to Morphobank project ${projectId}`,
+          name: `${user.fname} ${user.lname}`,
+          projectId: projectId,
+          projectName: req.project.name,
+          inviteeName: `${req.user.fname} ${req.user.lname}`,
+          inviteeEmail: req.user.email,
+          messageStart: values.message ? `${user.fname} ${user.lname} wrote:`: null,
+          message: values.message,
+          to: user.email,
+        },
+      },
+      {
+        transaction: transaction,
+        user: req.user,
+      }
+    )
     await transaction.commit()
 
     res.status(200).json({

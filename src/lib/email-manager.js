@@ -107,4 +107,8 @@ const DEFAULT_EMAIL_OPTIONS = {
     subject: '[Morphobank] Your password has been reset',
     from: 'no-reply@morphobank.org',
   },
+  project_member_invitation: {
+    from: 'no-reply@morphobank.org',
+    include_logo: true,
+  },
 }
