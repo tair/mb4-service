@@ -119,67 +119,156 @@ export async function editUser(req, res) {
 export async function createUser(req, res) {
   const projectId = req.project.project_id
   const values = req.body.json
+  const existingUser = req.body.existing_user
   const transaction = await sequelizeConn.transaction()
   try {
-    const user = await models.User.findByPk(values.user_id, {
-      attributes: ['fname', 'lname', 'email', 'user_id'],
-    })
-    const project_x_user = await models.ProjectsXUser.create(
-      {
-        project_id: projectId,
-        user_id: user.user_id,
-        membership_type: values.membership_type,
-      },
-      {
-        transaction,
-        user: req.user,
-      }
-    )
-    await models.TaskQueue.create(
-      {
-        user_id: req.user.user_id,
-        priority: 500,
-        entity_key: null,
-        row_key: null,
-        handler: 'Email',
-        parameters: {
-          template: 'project_member_invitation',
-          subject: `Invitation to Morphobank project ${projectId}`,
-          name: `${user.fname} ${user.lname}`,
-          projectId: projectId,
-          projectName: req.project.name,
-          inviteeName: `${req.user.fname} ${req.user.lname}`,
-          inviteeEmail: req.user.email,
-          messageStart: values.message ? `${user.fname} ${user.lname} wrote:`: null,
-          message: values.message,
-          to: user.email,
-        },
-      },
-      {
-        transaction: transaction,
-        user: req.user,
-      }
-    )
-    await transaction.commit()
-
-    res.status(200).json({
-      user: convertUser(
+    if (existingUser) {
+      const user = await models.User.findByPk(values.user_id, {
+        attributes: ['fname', 'lname', 'email', 'user_id'],
+      })
+      const project_x_user = await models.ProjectsXUser.create(
         {
-          fname: user.fname,
-          lname: user.lname,
-          email: user.email,
+          project_id: projectId,
           user_id: user.user_id,
-          membership_type: project_x_user.membership_type,
-          link_id: project_x_user.link_id,
+          membership_type: values.membership_type,
         },
-        req.project.user_id
-      ),
-    })
+        {
+          transaction,
+          user: req.user,
+        }
+      )
+      await models.TaskQueue.create(
+        {
+          user_id: req.user.user_id,
+          priority: 500,
+          entity_key: null,
+          row_key: null,
+          handler: 'Email',
+          parameters: {
+            template: 'project_member_invitation',
+            subject: `Invitation to Morphobank project ${projectId}`,
+            name: `${user.fname} ${user.lname}`,
+            projectId: projectId,
+            projectName: req.project.name,
+            inviteeName: `${req.user.fname} ${req.user.lname}`,
+            inviteeEmail: req.user.email,
+            messageStart: values.message
+              ? `${user.fname} ${user.lname} wrote:`
+              : null,
+            message: values.message,
+            to: user.email,
+          },
+        },
+        {
+          transaction: transaction,
+          user: req.user,
+        }
+      )
+      await transaction.commit()
+
+      res.status(200).json({
+        user: convertUser(
+          {
+            fname: user.fname,
+            lname: user.lname,
+            email: user.email,
+            user_id: user.user_id,
+            membership_type: project_x_user.membership_type,
+            link_id: project_x_user.link_id,
+          },
+          req.project.user_id
+        ),
+      })
+    } else {
+      const password = generateRandomString()
+      const hashedPassword = await models.User.hashPassword(password)
+      const user = await models.User.create(
+        {
+          email: values.email,
+          fname: values.fname,
+          lname: values.lname,
+          password_hash: hashedPassword,
+          active: 0,
+        },
+        {
+          transaction,
+          user: req.user,
+        }
+      )
+
+      const project_x_user = await models.ProjectsXUser.create(
+        {
+          project_id: projectId,
+          user_id: user.user_id,
+          membership_type: values.membership_type,
+        },
+        {
+          transaction,
+          user: req.user,
+        }
+      )
+      await models.TaskQueue.create(
+        {
+          user_id: req.user.user_id,
+          priority: 500,
+          entity_key: null,
+          row_key: null,
+          handler: 'Email',
+          parameters: {
+            template: 'project_member_invitation',
+            subject: `Invitation to Morphobank project ${projectId}`,
+            name: `${user.fname} ${user.lname}`,
+            projectId: projectId,
+            projectName: req.project.name,
+            inviteeName: `${req.user.fname} ${req.user.lname}`,
+            inviteeEmail: req.user.email,
+            messageStart: values.message
+              ? `${user.fname} ${user.lname} wrote:`
+              : null,
+            message: values.message,
+            passwordText: `Your password is ${password}`,
+            to: user.email,
+          },
+        },
+        {
+          transaction: transaction,
+          user: req.user,
+        }
+      )
+      await transaction.commit()
+
+      res.status(200).json({
+        user: convertUser(
+          {
+            fname: user.fname,
+            lname: user.lname,
+            email: user.email,
+            user_id: user.user_id,
+            membership_type: project_x_user.membership_type,
+            link_id: project_x_user.link_id,
+          },
+          req.project.user_id
+        ),
+      })
+    }
   } catch (err) {
     await transaction.rollback()
     console.error(`Error: Error while having user join group`, err)
     res.status(500).json({ message: 'Error while having user join group.' })
   }
+}
+// generates random string (intended for use in creating temp password)
+function generateRandomString() {
+  const characters =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  const charactersLength = characters.length
+
+  for (let i = 0; i < 10; i++) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength))
+  }
+
+  return result
 }
 // check to see if the user is active and if not deleted
 export async function isEmailAvailable(req, res) {
@@ -190,10 +279,12 @@ export async function isEmailAvailable(req, res) {
       where: { email: email },
     })
     res.status(200).json({
-      exist: user ? true : false,
+      existing_user: user ? true : false,
       user: user ? user : { email: email },
       errorMessage:
-        user.active == 0
+        user == null
+          ? false
+          : user.active == 0
           ? "Was not able to add user as a member because they're inactive"
           : user.userclass == 255
           ? 'Was not able to add user as a member because they have been deleted'
