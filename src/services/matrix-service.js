@@ -69,7 +69,7 @@ async function getPublishedHits(projectId, matrixId) {
     `,
     { replacements: [projectId, matrixId] }
   )
-  return hits[0].count
+  return hits[0]?.count
 }
 
 async function getPublishedDownloads(projectId, matrixId) {
@@ -84,7 +84,7 @@ async function getPublishedDownloads(projectId, matrixId) {
     `,
     { replacements: [projectId, matrixId] }
   )
-  return downloads[0].count
+  return downloads[0]?.count
 }
 
 export async function getCounts(matrixIds) {
