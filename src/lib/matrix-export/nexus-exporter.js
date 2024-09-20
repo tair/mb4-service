@@ -1,7 +1,7 @@
 import { Exporter } from './exporter.js'
 import { getTaxonName } from '../../util/taxa.js'
 
-const SYMBOLS = '123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+const SYMBOLS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 export class NexusExporter extends Exporter {
   constructor(writeFunction) {
@@ -72,7 +72,7 @@ export class NexusExporter extends Exporter {
           for (const state of character.states) {
             const stateId = parseInt(state.state_id)
             statesMap.set(stateId, state)
-            const stateName = this.cleanName(state.name)
+            const stateName = this.cleanText(state.name)
             this.write(` '${stateName}'`)
           }
         }
@@ -100,7 +100,7 @@ export class NexusExporter extends Exporter {
           for (const state of character.states) {
             const stateId = parseInt(state.state_id)
             statesMap.set(stateId, state)
-            const stateName = this.cleanName(state.name)
+            const stateName = this.cleanText(state.name)
             this.writeLine(`\t\t\t'${stateName}'`)
           }
         }

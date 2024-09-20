@@ -146,7 +146,7 @@ export class TNTExporter extends Exporter {
         for (const state of character.states) {
           const stateId = parseInt(state.state_id)
           statesMap.set(stateId, state)
-          const stateName = this.cleanName(state.name)
+          const stateName = this.cleanText(state.name)
           this.write(` '${stateName}'`)
         }
       }
