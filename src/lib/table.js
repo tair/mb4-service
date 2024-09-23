@@ -20,6 +20,14 @@ export class Table {
     return false
   }
 
+  getMap(row) {
+    if (!this.map.has(row)) {
+      return undefined
+    }
+
+    return this.map.get(row)
+  }
+
   get(row, col) {
     if (!this.map.has(row)) {
       return undefined

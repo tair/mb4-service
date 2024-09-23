@@ -16,7 +16,7 @@ export class NeXMLExporter extends Exporter {
           charactersMultipleStates.get(characterId).push(taxonId)
         }
         for (const cell of cells) {
-          if (cell.state_id == null) {
+          if (cell.state_id == null && !cell.is_npa) {
             characterGaps.add(characterId)
             break
           }
@@ -80,21 +80,25 @@ export class NeXMLExporter extends Exporter {
 
         for (const taxonId of charactersMultipleStates.get(characterId)) {
           const cells = cellsTable.get(taxonId, characterId)
-          const stateIds = array_unique(
-            cells.map((c) => c.state_id || 0)
-          ).sort()
-          const name = stateIds.join('_')
-          characterMultipleStates.set(name, stateIds)
+          const name = generateNameFromStates(cells)
+          characterMultipleStates.set(name, cells)
         }
 
         let x = 0
-        for (const [stateName, stateIds] of characterMultipleStates.entries()) {
-          writer.startElement('uncertain_state_set')
-          writer.writeAttribute('id', `uncertain_state_${stateName}`)
+        for (const [stateName, cells] of characterMultipleStates.entries()) {
+          const elementName = cells[0].is_uncertain
+            ? 'uncertain_state_set'
+            : 'polymorphic_state_set'
+          writer.startElement(elementName)
+          writer.writeAttribute('id', stateName)
           writer.writeAttribute('symbol', 100 + ++x + character.states?.length)
-          for (const stateId of stateIds) {
+          for (const cell of cells) {
+            const stateId = cell.state_id
+            const state = stateId
+              ? `state${stateId}`
+              : `state_gap${characterId}`
             writer.startElement('member')
-            writer.writeAttribute('state', `state${stateId}`)
+            writer.writeAttribute('state', state)
             writer.endElement() // member
           }
           writer.endElement() // uncertain_state_set
@@ -115,23 +119,30 @@ export class NeXMLExporter extends Exporter {
     writer.startElement('matrix')
     for (const taxon of taxa) {
       const taxonId = parseInt(taxon.taxon_id)
+      const taxonMap = cellsTable.getMap(taxonId)
+      if (taxonMap == undefined) {
+        continue
+      }
+
       writer.startElement('row')
       writer.writeAttribute('id', `row${taxonId}`)
       writer.writeAttribute('otu', `otu${taxonId}`)
+
       for (const character of characters) {
         const characterId = parseInt(character.character_id)
+        const cells = taxonMap.get(characterId)
+        if (cells == undefined || cells.length == 0) {
+          continue
+        }
+
         writer.startElement('cell')
         writer.writeAttribute('char', `char${characterId}`)
 
-        const cells = cellsTable.get(taxonId, characterId)
-        if (
-          cells == undefined ||
-          cells.length == 0 ||
-          cells[0].state_id == null
-        ) {
+        if (cells.length > 1) {
+          const stateName = generateNameFromStates(cells)
+          writer.writeAttribute('state', stateName)
+        } else if (cells[0].state_id == null) {
           writer.writeAttribute('state', `state_gap${characterId}`)
-        } else if (cells.length > 1) {
-          writer.writeAttribute('state', "uncertain_state_{$va_row['name']}")
         } else {
           writer.writeAttribute('state', `state${cells[0].state_id}`)
         }
@@ -146,4 +157,11 @@ export class NeXMLExporter extends Exporter {
     writer.endDocument()
     this.write(writer.toString())
   }
+}
+
+function generateNameFromStates(cells) {
+  const stateIds = array_unique(cells.map((c) => c.state_id)).sort()
+  const name = stateIds.map((id) => id ?? 'gap').join('_')
+  const prefix = cells[0].is_uncertain ? 'state_uncertain' : 'state_polymorphic'
+  return prefix + '_' + name
 }
