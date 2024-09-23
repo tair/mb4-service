@@ -27,6 +27,9 @@ export async function authorizeProject(req, res, next) {
     return res.status(404).json({ message: 'Project was deleted' })
   }
 
+  // Set the project so that it's accessible in the controllers.
+  req.project = project
+
   const permissions = []
   if (req.credential.is_anonymous) {
     if (req.credential.project_id != project.project_id) {
@@ -63,8 +66,29 @@ export async function authorizeProject(req, res, next) {
     req.project.user = projectUser
   }
 
-  req.project = project
   req.project.permissions = permissions
+
+  next()
+}
+
+/**
+ * Authorize that the project eixsts and is not deleted and is a public project
+ */
+export async function authorizePublishedProject(req, res, next) {
+  const projectId = req.params.projectId
+  const project = await models.Project.findByPk(projectId)
+
+  if (project == null) {
+    return res.status(404).json({ message: 'Project does not exist' })
+  }
+
+  if (project.deleted) {
+    return res.status(404).json({ message: 'Project was deleted' })
+  }
+
+  if (!project.published) {
+    return res.status(404).json({ message: 'Project is not public' })
+  }
 
   next()
 }

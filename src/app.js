@@ -7,6 +7,7 @@ import publicProjectsRouter from './routes/public/projects-route.js'
 import publicStatsRouter from './routes/public/stats-route.js'
 import authRouter from './routes/auth-route.js'
 import taskRouter from './routes/tasks-route.js'
+import tilepicRouter from './routes/tilepic-route.js'
 import userRouter from './routes/user-route.js'
 import emailRouter from './routes/email-route.js'
 
@@ -46,6 +47,7 @@ app.use('/public/projects', publicProjectsRouter)
 app.use('/public/stats', publicStatsRouter)
 app.use('/users', userRouter)
 app.use('/tasks', taskRouter)
+app.use('/tilepic', tilepicRouter)
 
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500

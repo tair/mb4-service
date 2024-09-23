@@ -24,7 +24,7 @@ export class CharacterTextExporter extends Exporter {
         let stateIndex = 0
         for (const state of character.states) {
           const stateName = this.cleanName(state.name)
-          stateTexts.push(`${stateName} (${stateIndex})`)
+          stateTexts.push(`${stateName} (${stateIndex++})`)
         }
 
         this.write(' : ' + stateTexts.join(';  '))

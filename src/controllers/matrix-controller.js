@@ -223,7 +223,13 @@ export async function download(req, res) {
       break
   }
 
-  const filename = `mbank_X${matrixId}_${getFilenameDate()}.${fileExtension}`
+  options.includeNotes = !!req.query.notes
+  let filename = ''
+  if (!options.includeNotes) {
+    filename = `mbank_X${matrixId}_${getFilenameDate()}_no_notes.${fileExtension}`
+  } else {
+    filename = `mbank_X${matrixId}_${getFilenameDate()}.${fileExtension}`
+  }
   res.set({
     'Content-Type': 'text/plain; charset=utf-8',
     'Content-Disposition': 'attachment; filename=' + filename,
@@ -237,7 +243,6 @@ export async function download(req, res) {
   options.taxa = await matrixService.getTaxaInMatrix(matrixId)
   options.characters = await matrixService.getCharactersInMatrix(matrixId)
   options.cellsTable = await matrixService.getCells(matrixId)
-  options.includeNotes = !!req.query.notes
   options.cellNotes = options.includeNotes
     ? await matrixService.getCellNotes(matrixId)
     : null
@@ -254,7 +259,15 @@ export async function downloadCharacters(req, res) {
     return
   }
 
-  const filename = `mbank_X${matrixId}_${getFilenameDate()}_character_list.txt`
+  const options = new ExportOptions()
+  options.includeNotes = !!req.query.notes
+  let filename = ''
+  if (!options.includeNotes) {
+    filename = `mbank_X${matrixId}_${getFilenameDate()}_character_list_no_notes.txt`
+  } else {
+    filename = `mbank_X${matrixId}_${getFilenameDate()}_character_list.txt`
+  }
+
   res.set({
     'Content-Type': 'text/plain; charset=utf-8',
     'Content-Disposition': 'attachment; filename=' + filename,
@@ -265,8 +278,6 @@ export async function downloadCharacters(req, res) {
   res.status(200)
 
   const exporter = new CharacterTextExporter((txt) => res.write(txt))
-  const options = new ExportOptions()
-  options.includeNotes = !!req.query.notes
   options.matrix = await matrixService.getMatrix(matrixId)
   options.characters = await matrixService.getCharactersInMatrix(matrixId)
 
