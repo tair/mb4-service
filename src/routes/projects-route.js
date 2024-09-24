@@ -6,9 +6,11 @@ import documentRouter from './document-route.js'
 import eolRouter from './eol-route.js'
 import foliosRouter from './folios-route.js'
 import iDigBioRouter from './idigbio-route.js'
+import institutionRouter from './institution-route.js'
 import matrixRouter from './matrix-route.js'
 import mediaRouter from './media-route.js'
 import mediaViewsRouter from './media-views-route.js'
+import projectMemberGroupsRouter from './project-member-groups-route.js'
 import projectUsersRouter from './project-users-route.js'
 import specimensRouter from './specimens-route.js'
 import taxaRouter from './taxa-route.js'
@@ -35,7 +37,9 @@ projectRouter.use('/characters', characterRouter)
 projectRouter.use('/documents', documentRouter)
 projectRouter.use('/eol', eolRouter)
 projectRouter.use('/folios', foliosRouter)
+projectRouter.use('/groups', projectMemberGroupsRouter)
 projectRouter.use('/idigbio', iDigBioRouter)
+projectRouter.use('/institutions', institutionRouter)
 projectRouter.use('/matrices', matrixRouter)
 projectRouter.use('/media', mediaRouter)
 projectRouter.use('/specimens', specimensRouter)
@@ -44,7 +48,21 @@ projectRouter.use('/users', projectUsersRouter)
 projectRouter.use('/views', mediaViewsRouter)
 
 projectRouter.get('/overview', controller.getOverview)
+projectRouter.get(
+  '/duplication/request',
+  controller.getDuplicationRequestCriteria
+)
+projectRouter.get('/publish/partition', controller.getProjectPartitions)
+projectRouter.get(
+  '/publish/partition/:partitionId',
+  controller.getPartitionSummary
+)
 
 projectRouter.post('/copyright', controller.setCopyright)
+projectRouter.post('/duplication/request', controller.createDuplicationRequest)
+projectRouter.post(
+  '/publish/partition/:partitionId',
+  controller.publishPartition
+)
 
 export default projectsRouter

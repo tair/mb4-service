@@ -1,0 +1,13 @@
+Dear $name,
+
+You have been invited to participate in a Morphobank.org project, P$projectId, titled '$projectName' by $inviteeName ($inviteeEmail).
+
+$messageStart
+$message
+
+If you are not interested in participating in this project please contact $inviteeName ($inviteeEmail). Otherwise log on to the morphobank site at https://morphobank.org and select '$projectName' in the My Projects section of the site. Your login name is your email address.
+$passwordText
+
+MorphoBank is a public database for the creation, storage and retrieval of peer-reviewed morphological matrices for phylogenetics, as well as 2D and 3D images associated with taxonomic work.
+
+Information is deposited by the scientific community and by MorphoBank’s curator.

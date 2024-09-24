@@ -2,6 +2,7 @@ import sequelizeConn from '../util/db.js'
 import { getMedia } from '../util/media.js'
 import { models } from '../models/init-models.js'
 import * as institutionService from '../services/institution-service.js'
+import * as partitionService from '../services/partition-service.js'
 import * as projectService from '../services/projects-service.js'
 import * as projectStatsService from '../services/project-stats-service.js'
 import * as projectUserService from '../services/project-user-service.js'
@@ -119,4 +120,123 @@ export async function setCopyright(req, res) {
   await transaction.commit()
 
   res.status(200).json({ message: 'Project updated' })
+}
+
+export async function createDuplicationRequest(req, res) {
+  const projectId = req.params.projectId
+  const remarks = req.body.remarks
+  const onetimeAction = req.body.onetimeAction
+
+  try {
+    const transaction = await sequelizeConn.transaction()
+    await models.ProjectDuplicationRequest.create(
+      {
+        project_id: projectId,
+        request_remarks: remarks,
+        status: 1,
+        user_id: req.user.user_id,
+        onetime_use_action: onetimeAction,
+        notes: remarks,
+      },
+      { transaction }
+    )
+
+    await transaction.commit()
+    res.status(200)
+  } catch (e) {
+    console.error('Error making duplication request', e)
+    res.status(500).json({ message: 'Could not create duplication request' })
+  }
+}
+
+export async function getDuplicationRequestCriteria(req, res) {
+  const projectId = req.params.projectId
+
+  const oneTimeMedia = await mediaService.getOneTimeMediaFiles(projectId)
+
+  const project = req.project
+  const projectPublished = project.published == 1
+  const hasAccess = project.permissions.includes('edit')
+
+  res.status(200).json({ oneTimeMedia, projectPublished, hasAccess })
+}
+
+export async function getPartitionSummary(req, res) {
+  const projectId = req.params.projectId
+  const partitionId = req.params.partitionId
+
+  const partition = await models.Partition.findByPk(partitionId)
+
+  const characterCount = await partitionService.getCharacterCount(partitionId)
+  const taxaCount = await partitionService.getTaxaCount(partitionId)
+  const bibliographicReferenceCount =
+    await partitionService.getBibliographiesCount(partitionId, projectId)
+
+  const { medias, viewCount, specimenCount, onetimeMedia } =
+    await mediaService.getMediaSpecimensAndViews(projectId, partitionId)
+
+  // functions that require the associated media Ids
+  const documentCount = medias.length
+    ? await partitionService.getDocumentCount(medias, projectId)
+    : 0
+  const labelCount = medias.length
+    ? await partitionService.getMediaLabelsCount(medias)
+    : 0
+
+  const mediaCount = medias.length
+
+  return res.status(200).json({
+    partition,
+    characterCount,
+    taxaCount,
+    mediaCount,
+    onetimeMedia,
+    viewCount,
+    specimenCount,
+    labelCount,
+    documentCount,
+    bibliographicReferenceCount,
+  })
+}
+
+export async function getProjectPartitions(req, res) {
+  const projectId = req.params.projectId
+  const partitions = await partitionService.getPartitions(projectId)
+
+  return res.status(200).json(partitions)
+}
+
+export async function publishPartition(req, res) {
+  const partitionId = req.params.partitionId
+  const onetimeAction = req.body.onetimeAction
+
+  try {
+    const transaction = await sequelizeConn.transaction()
+    await models.TaskQueue.create(
+      {
+        user_id: req.user.user_id,
+        priority: 300,
+        completed_on: null,
+        handler: 'partitionPublish',
+        parameters: {
+          user_id: req.user.user_id,
+          project_id: req.project.project_id,
+          partition_id: partitionId,
+          onetimeAction: onetimeAction,
+        },
+      },
+      {
+        transaction: transaction,
+        user: req.user,
+      }
+    )
+
+    await transaction.commit()
+    res.status(200).json({ message: 'success' })
+  } catch (e) {
+    console.error('Could not process partition publication request\n', e)
+    return res
+      .status(500)
+      .json({ message: 'Could not process partition publication request' })
+  }
 }
