@@ -58,7 +58,7 @@ export async function getProjectDetails(
     )
     const taxa_details = await taxaService.getTaxaDetails(projectId)
     const partitions = await partitionService.getPartitions(projectId)
-    const bibliography = await bibService.getBibliographiesByProjectId(
+    const bibliography = await bibService.getBibliographiesDetails(
       projectId
     )
     const docs = await docsService.getDocuments(projectId)
