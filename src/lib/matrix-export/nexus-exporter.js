@@ -151,9 +151,9 @@ export class NexusExporter extends Exporter {
               outputCells.push('-')
             }
           }
-          this.write(cells[0].is_certain ? '{' : '(')
+          this.write(cells[0].is_uncertain ? '{' : '(')
           this.write(outputCells.join(','))
-          this.write(cells[0].is_certain ? '}' : ')')
+          this.write(cells[0].is_uncertain ? '}' : ')')
         }
       }
       this.write('\n')
