@@ -17,6 +17,7 @@ export class Exporter {
     this.write('\n')
   }
 
+  // remove html tag
   cleanName(name) {
     return name
       .replace(/<\/?[^>]+(>|$)/g, '')

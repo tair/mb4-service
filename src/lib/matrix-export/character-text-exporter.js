@@ -23,7 +23,7 @@ export class CharacterTextExporter extends Exporter {
 
         let stateIndex = 0
         for (const state of character.states) {
-          const stateName = this.cleanName(state.name)
+          const stateName = this.cleanText(state.name)
           stateTexts.push(`${stateName} (${stateIndex++})`)
         }
 
