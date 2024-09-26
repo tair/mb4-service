@@ -59,9 +59,7 @@ export async function getProjectDetails(
     )
     const taxa_details = await taxaService.getTaxaDetails(projectId)
     const partitions = await partitionService.getPartitions(projectId)
-    const bibliography = await bibService.getBibliographiesDetails(
-      projectId
-    )
+    const bibliography = await bibService.getBibliographiesDetails(projectId)
     const docs = await docsService.getDocuments(projectId)
     const specimen_details = await specimenService.getSpecimenDetails(projectId)
     const unidentified_specimen_details =
@@ -79,7 +77,8 @@ export async function getProjectDetails(
       partitions: partitions,
       taxa_details: taxa_details,
     }
-    if (folios_details && folios_details.length > 0) result['folios'] = folios_details
+    if (folios_details && folios_details.length > 0)
+      result['folios'] = folios_details
     if (
       unidentified_specimen_details &&
       unidentified_specimen_details.length > 0

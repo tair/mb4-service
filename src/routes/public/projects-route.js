@@ -25,10 +25,7 @@ projectsRouter.get(
   projectsController.getInstitutionsWithProjects
 )
 
-projectsRouter.get(
-  '/folios/:folioId',
-  getPublishedFolio
-)
+projectsRouter.get('/folios/:folioId', getPublishedFolio)
 
 projectsRouter.get('/taxonomy', projectsController.getProjectTaxonomy)
 

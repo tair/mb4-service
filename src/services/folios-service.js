@@ -11,11 +11,11 @@ export async function getFolioDetails(projectId) {
     { replacements: [projectId] }
   )
   // Initialize an empty object to group by folio_id
-  const groupedByFolio = {};
+  const groupedByFolio = {}
 
   // Loop through the results and organize the data
-  rows.forEach(row => {
-    const { folio_id, name, description, media_id } = row;
+  rows.forEach((row) => {
+    const { folio_id, name, description, media_id } = row
 
     // Check if the folio_id already exists in the groupedByFolio object
     if (!groupedByFolio[folio_id]) {
@@ -24,15 +24,15 @@ export async function getFolioDetails(projectId) {
         folio_id: folio_id,
         name: name,
         description: description,
-        media_files: []
-      };
+        media_files: [],
+      }
     }
 
     // Append the media_id to the media_files array
-    groupedByFolio[folio_id].media_files.push(media_id);
-  });
+    groupedByFolio[folio_id].media_files.push(media_id)
+  })
 
-  return Object.values(groupedByFolio);
+  return Object.values(groupedByFolio)
 }
 
 export async function getFolios(projectId) {

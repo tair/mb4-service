@@ -84,7 +84,8 @@ export async function deleteFolios(req, res) {
 export async function getPublishedFolio(req, res) {
   const folioId = req.params.folioId
   const folio = await models.Folio.findByPk(folioId)
-  if (folio == null || folio.published != 0) { // the published = 0 logic is adopted from V3
+  if (folio == null || folio.published != 0) {
+    // the published = 0 logic is adopted from V3
     res.status(404).json({ message: 'Folio is not found' })
     return
   }
@@ -95,7 +96,9 @@ export async function getPublishedFolio(req, res) {
     return
   }
 
-  res.status(200).json({ folio_id: folio.folio_id, project_id: project.project_id })
+  res
+    .status(200)
+    .json({ folio_id: folio.folio_id, project_id: project.project_id })
 }
 
 export async function getFolio(req, res) {
