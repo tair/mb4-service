@@ -1,5 +1,40 @@
 import sequelizeConn from '../util/db.js'
 
+// for published project data dump
+export async function getFolioDetails(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `SELECT f.folio_id, f.name, f.description, fm.media_id
+    FROM folios AS f
+    INNER JOIN folios_x_media_files AS fm ON fm.folio_id = f.folio_id
+    WHERE  project_id = ?
+    ORDER BY folio_id, media_id;`,
+    { replacements: [projectId] }
+  )
+  // Initialize an empty object to group by folio_id
+  const groupedByFolio = {}
+
+  // Loop through the results and organize the data
+  rows.forEach((row) => {
+    const { folio_id, name, description, media_id } = row
+
+    // Check if the folio_id already exists in the groupedByFolio object
+    if (!groupedByFolio[folio_id]) {
+      // If not, create a new entry for this folio_id
+      groupedByFolio[folio_id] = {
+        folio_id: folio_id,
+        name: name,
+        description: description,
+        media_files: [],
+      }
+    }
+
+    // Append the media_id to the media_files array
+    groupedByFolio[folio_id].media_files.push(media_id)
+  })
+
+  return Object.values(groupedByFolio)
+}
+
 export async function getFolios(projectId) {
   const [rows] = await sequelizeConn.query(
     'SELECT * FROM folios WHERE project_id = ?',
