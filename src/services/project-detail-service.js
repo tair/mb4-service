@@ -11,6 +11,7 @@ import * as projectStatsService from './project-stats-service.js'
 import * as specimenService from '../services/specimen-service.js'
 import * as statsService from './published-stats-service.js'
 import * as taxaService from '../services/taxa-service.js'
+import * as foliosService from '../services/folios-service.js'
 
 export async function getMatrixMap() {
   const [rows] = await sequelizeConn.query(
@@ -67,6 +68,7 @@ export async function getProjectDetails(
       await specimenService.getUnidentifiedSpecimenDetails(projectId)
     const media_views = await mediaViewService.getMediaViews(projectId)
     const mediaViewNames = media_views.map((v) => v.name)
+    const folios_details = await foliosService.getFolioDetails(projectId)
 
     const result = {
       overview: overview,
@@ -77,6 +79,7 @@ export async function getProjectDetails(
       partitions: partitions,
       taxa_details: taxa_details,
     }
+    if (folios_details && folios_details.length > 0) result['folios'] = folios_details
     if (
       unidentified_specimen_details &&
       unidentified_specimen_details.length > 0
@@ -158,7 +161,7 @@ async function getProjectViews(projectId, matrixMap, folioMap) {
       if (!details[type]) {
         details[type] = []
       }
-      details[type].push({ name, val })
+      details[type].push({ rowId, name, val })
     }
   }
   views['total'] = total
