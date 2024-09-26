@@ -1,6 +1,6 @@
 import sequelizeConn from '../util/db.js'
 
-// for project data dump
+// for published project data dump
 export async function getFolioDetails(projectId) {
   const [rows] = await sequelizeConn.query(
     `SELECT f.folio_id, f.name, f.description, fm.media_id

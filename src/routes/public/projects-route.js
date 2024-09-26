@@ -3,6 +3,7 @@ import * as projectsController from '../../controllers/published-projects-contro
 import * as mediaController from '../../controllers/media-controller.js'
 import * as dataDumpController from '../../controllers/datadump-controller.js'
 import * as matrixController from '../../controllers/matrix-controller.js'
+import { getPublishedFolio } from '../../controllers/folios-controller.js'
 import matrixEditorRouter from '../matrix-editor-route.js'
 import { authorizePublishedProject } from '../project-interceptor.js'
 
@@ -22,6 +23,11 @@ projectsRouter.get(
 projectsRouter.get(
   '/institutions',
   projectsController.getInstitutionsWithProjects
+)
+
+projectsRouter.get(
+  '/folios/:folioId',
+  getPublishedFolio
 )
 
 projectsRouter.get('/taxonomy', projectsController.getProjectTaxonomy)
