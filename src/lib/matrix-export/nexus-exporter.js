@@ -162,9 +162,9 @@ export class NexusExporter extends Exporter {
     this.writeLine('ENDBLOCK;')
 
     if (includeNotes) {
-      const hasTaxonNotes = taxa.some((t) => t.notes.trim().length > 0)
+      const hasTaxonNotes = taxa.some((t) => t.notes?.trim().length > 0)
       const hasCharacterNotes = characters.some(
-        (c) => c.description.trim().length > 0
+        (c) => c.description?.trim().length > 0
       )
       if (cellNotes.length || hasTaxonNotes || hasCharacterNotes) {
         this.writeLine('BEGIN NOTES;')

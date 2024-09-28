@@ -1,0 +1,56 @@
+#NEXUS
+[ File output by Morphobank v4.0 (http://www.morphobank.org); 2024-4-5 12.34.56 ]
+BEGIN TAXA;
+  DIMENSIONS NTAX=2;
+  TAXLABELS
+    'Homo sapien'
+    'Homo erectus'
+  ;
+ENDBLOCK;
+
+BEGIN CHARACTERS;
+  DIMENSIONS NCHAR=3;
+  FORMAT DATATYPE=STANDARD GAP=- MISSING=? SYMBOLS=123;
+  CHARLABELS
+    [1] 'Bipedal'
+    [2] 'Toes'
+    [3] 'Fingers'
+  ;
+  STATELABELS
+  1
+    'yes'
+    'no'
+  ,
+  2
+    '10 or more'
+    'under 10'
+  ,
+  3
+    '9 or less'
+    '10'
+    '11 or more'
+  ,
+;
+MATRIX
+  'Homo sapien'   1(1,2,-){1,2,3}
+  'Homo erectus'  ???
+;
+ENDBLOCK;
+
+BEGIN NOTES;
+  [Taxon comments]
+  TEXT TAXON=2 TEXT='Test comment';
+
+  [Character comments]
+  TEXT CHARACTER=1 TEXT='Whether you can walk';
+  TEXT CHARACTER=2 TEXT='How many toes?';
+  TEXT CHARACTER=3 TEXT='How many fingers';
+
+  [Attribute comments]
+  TEXT CHARACTER=1 TAXON=1 TEXT='Walker!';
+  TEXT CHARACTER=2 TAXON=1 TEXT='Lots of toes';
+ENDBLOCK;
+
+BEGIN ASSUMPTIONS;
+  TYPESET * UNTITLED = ord: 1 3, irreversible: 2;
+ENDBLOCK;
