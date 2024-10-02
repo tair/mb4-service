@@ -1,0 +1,14 @@
+nstates num 3
+xread
+'File output by Morphobank v4.0 (http://www.morphobank.org); 2024-4-5 12.34.56'
+3 2
+&[num]
+'Homo sapien' 0[01-][012]
+'Homo erectus' ???
+;
+cnames
+{ 0 'Bipedal' 'yes' 'no';
+{ 1 'Toes' '10 or more' 'under 10';
+{ 2 'Fingers' '9 or less' '10' '11 or more';
+;
+ccode + 0 2;

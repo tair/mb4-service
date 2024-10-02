@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nex:nexml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:nex="http://www.nexml.org/2009" xmlns:xml="http://www.w3.org/XML/1998/namespace" xsi:schemaLocation="http://www.nexml.org/2009 ../xsd/nexml.xsd">
+    <otus id="tax1">
+        <otu id="otu1" label="Homo sapien"/>
+        <otu id="otu2" label="Homo erectus"/>
+    </otus>
+    <characters otus="tax1" xsi:type="nex:StandardCells">
+        <format>
+            <states id="states1">
+                <state id="state1" label="yes" symbol="0"/>
+                <state id="state2" label="no" symbol="1"/>
+            </states>
+            <states id="states2">
+                <state id="state3" label="10 or more" symbol="0"/>
+                <state id="state4" label="under 10" symbol="1"/>
+                <uncertain_state_set id="state_gap2" symbol="102"/>
+                <polymorphic_state_set id="state_polymorphic_1_2_gap" symbol="103">
+                    <member state="state1"/>
+                    <member state="state2"/>
+                    <member state="state_gap2"/>
+                </polymorphic_state_set>
+            </states>
+            <states id="states3">
+                <state id="state5" label="9 or less" symbol="0"/>
+                <state id="state6" label="10" symbol="1"/>
+                <state id="state7" label="11 or more" symbol="2"/>
+                <uncertain_state_set id="state_uncertain_5_6_7" symbol="104">
+                    <member state="state5"/>
+                    <member state="state6"/>
+                    <member state="state7"/>
+                </uncertain_state_set>
+            </states>
+            <char id="char1" label="Bipedal" states="states1"/>
+            <char id="char2" label="Toes" states="states2"/>
+            <char id="char3" label="Fingers" states="states3"/>
+        </format>
+        <matrix>
+            <row id="row1" otu="otu1">
+                <cell char="char1" state="state1"/>
+                <cell char="char2" state="state_polymorphic_1_2_gap"/>
+                <cell char="char3" state="state_uncertain_5_6_7"/>
+            </row>
+        </matrix>
+    </characters>
+</nex:nexml>
