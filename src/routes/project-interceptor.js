@@ -79,15 +79,17 @@ export async function authorizePublishedProject(req, res, next) {
   const project = await models.Project.findByPk(projectId)
 
   if (project == null) {
-    return res.status(404).json({ message: 'Project does not exist' })
+    return res.status(404).json({ message: 'This project does not exist.' })
   }
 
   if (project.deleted) {
-    return res.status(404).json({ message: 'Project was deleted' })
+    return res.status(404).json({ message: 'This project was deleted.' })
   }
 
   if (!project.published) {
-    return res.status(404).json({ message: 'Project is not public' })
+    return res
+      .status(404)
+      .json({ message: 'This project is not yet publicly available.' })
   }
 
   next()
