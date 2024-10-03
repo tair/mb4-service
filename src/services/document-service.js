@@ -64,12 +64,12 @@ export async function getDocuments(projectId) {
     }
   })
 
-  // Sort documents without folder by title
-  documentsWithoutFolder.sort((a, b) => a.title.localeCompare(b.title))
-
   // Return the documentFolders and documentsWithoutFolder
   return {
-    folders: Object.values(documentFolders),
+    // Sort folders alphabetically by title
+    folders: Object.values(documentFolders).sort((a, b) =>
+      a.title.localeCompare(b.title)
+    ),
     documents: documentsWithoutFolder,
   }
 }
