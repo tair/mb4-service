@@ -86,13 +86,13 @@ export async function getPublishedFolio(req, res) {
   const folio = await models.Folio.findByPk(folioId)
   if (folio == null || folio.published != 0) {
     // the published = 0 logic is adopted from V3
-    res.status(404).json({ message: 'Folio is not found' })
+    res.status(404).json({ message: 'This Folio is not found' })
     return
   }
 
   const project = await folio.getProjects()
   if (project.published != 1) {
-    res.status(404).json({ message: 'Folio is not found' })
+    res.status(404).json({ message: 'This folio is not published yet.' })
     return
   }
 
