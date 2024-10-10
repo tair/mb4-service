@@ -47,6 +47,7 @@ export async function getDocuments(projectId) {
       document_id: document.document_id,
       title: document.title,
       description: document.description,
+      file_name: json['original_filename'],
       url: getDocumentUrl(json),
     }
 
