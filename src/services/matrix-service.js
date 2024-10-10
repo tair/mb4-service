@@ -6,8 +6,20 @@ export async function getMatrix(matrixId) {
   return models.Matrix.findByPk(matrixId)
 }
 
-// for published project detail dump
 export async function getMatrices(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT matrix_id, user_id, title, type
+      FROM matrices
+      WHERE project_id = ?`,
+    { replacements: [projectId] }
+  )
+
+  return rows
+}
+
+// for published project detail dump
+export async function getMatricesDetails(projectId) {
   const [rows] = await sequelizeConn.query(
     `
       SELECT matrix_id, user_id, title, type, matrix_doi
