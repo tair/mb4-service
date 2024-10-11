@@ -152,7 +152,7 @@ export class NexusExporter extends Exporter {
             }
           }
           this.write(cells[0].is_uncertain ? '{' : '(')
-          this.write(outputCells.join(','))
+          this.write(outputCells.join(' '))
           this.write(cells[0].is_uncertain ? '}' : ')')
         }
       }
