@@ -9,7 +9,7 @@ DIMENSIONS NTAX=2;
 ENDBLOCK;
 BEGIN CHARACTERS;
   DIMENSIONS NCHAR=3;
-  FORMAT DATATYPE=STANDARD GAP=- MISSING=? SYMBOLS=123;
+  FORMAT DATATYPE=STANDARD GAP=- MISSING=? SYMBOLS=012;
   CHARLABELS
     [1] 'Bipedal'
     [2] 'Toes'
@@ -31,7 +31,7 @@ BEGIN CHARACTERS;
       ,
   ;
   MATRIX
-  'Homo sapien'       1(1,2,-){1,2,3}
+  'Homo sapien'       0(0 1 -){0 1 2}
   'Homo erectus'      ???
 ;
 ENDBLOCK;
