@@ -190,12 +190,11 @@ export async function getAuthorsWithProjects() {
 export async function getJournalsWithProjects() {
   const [rows] = await sequelizeConn.query(`
     SELECT
-      DISTINCT p.project_id, p.name, TRIM(b.journal_title) as journal,
-      UPPER(TRIM(b.journal_title))
-    FROM bibliographic_references AS b
-    INNER JOIN projects AS p ON p.project_id = b.project_id
-    WHERE p.published = 1 AND p.deleted = 0 AND b.journal_title != ''
-    ORDER BY UPPER(TRIM(b.journal_title)), p.project_id`)
+      DISTINCT p.project_id, p.name, TRIM(p.journal_title) as journal,
+      UPPER(TRIM(p.journal_title))
+    FROM projects AS p
+    WHERE p.published = 1 AND p.deleted = 0
+    ORDER BY UPPER(TRIM(p.journal_title)), p.project_id;`)
 
   const journals = {}
   const chars = []
