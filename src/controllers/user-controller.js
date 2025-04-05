@@ -151,12 +151,16 @@ function searchInstitutions(req, res) {
 }
 
 function signup(req, res, next) {
-  const errors = validationResult(req.body)
+  const errors = validationResult(req)
   if (!errors.isEmpty()) {
-    const error = new Error('Validation failed.')
-    error.statusCode = 422
-    error.data = errors.array()
-    throw error
+    // Convert validation errors into a single message
+    const errorMessages = errors
+      .array()
+      .map((error) => error.msg)
+      .join('. ')
+    return res.status(422).json({
+      message: errorMessages,
+    })
   }
 
   const email = req.body.email
@@ -166,8 +170,27 @@ function signup(req, res, next) {
   const orcid = req.body.orcid
   const accessToken = req.body.accessToken
   const refreshToken = req.body.refreshToken
-  models.User.hashPassword(password)
+
+  // First check if the email already exists
+  models.User.findOne({ where: { email: email } })
+    .then((existingUser) => {
+      if (existingUser) {
+        // Email already exists, return a 400 error
+        return res.status(400).json({
+          message: 'E-Mail address already exists!',
+        })
+      }
+
+      // Email doesn't exist, proceed with password hashing and user creation
+      return models.User.hashPassword(password)
+    })
     .then((passwordHash) => {
+      if (!passwordHash) {
+        return res.status(500).json({
+          message: 'Error hashing password',
+        })
+      }
+
       const userModel = new models.User({
         email: email,
         password_hash: passwordHash,
@@ -181,16 +204,23 @@ function signup(req, res, next) {
       return userModel.save({ user: userModel })
     })
     .then((result) => {
+      if (!result) {
+        return res.status(500).json({
+          message: 'Error creating user',
+        })
+      }
+
       res.status(201).json({
         message: 'User created!',
         userId: result._id,
       })
     })
     .catch((err) => {
-      if (!err.statusCode) {
-        err.statusCode = 500
-      }
-      next(err)
+      console.error('Error in signup:', err)
+      return res.status(500).json({
+        message: 'An error occurred during user registration',
+        error: err.message,
+      })
     })
 }
 

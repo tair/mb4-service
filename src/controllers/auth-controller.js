@@ -30,10 +30,7 @@ async function login(req, res, next) {
   const password = req.body.password
 
   if (!email || !password) {
-    const error = new Error('Missing email or password.')
-    error.statusCode = 401
-    next(error)
-    return
+    return res.status(401).json({ message: 'Missing email or password.' })
   }
 
   try {
@@ -71,12 +68,11 @@ async function login(req, res, next) {
       }
     }
 
-    const error = new Error('Not a valid user name')
-    error.statusCode = 401
-    next(error)
-    return
+    return res.status(401).json({ message: 'Not a valid user name' })
   } catch (e) {
-    next(e)
+    // Format error response as JSON
+    const statusCode = e.statusCode || 500
+    return res.status(statusCode).json({ message: e.message })
   }
 }
 

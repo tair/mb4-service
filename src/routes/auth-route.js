@@ -27,6 +27,7 @@ authRouter.post(
             if (userDoc) {
               return Promise.reject('E-Mail address already exists!')
             }
+            return true
           }
         )
       }),
@@ -34,7 +35,8 @@ authRouter.post(
       .trim()
       .isLength({ min: 5 })
       .withMessage('Password should be of length 5 characters.'),
-    body('name').trim().not().isEmpty(),
+    body('fname').trim().not().isEmpty().withMessage('First name is required.'),
+    body('lname').trim().not().isEmpty().withMessage('Last name is required.'),
   ],
   signup
 )
