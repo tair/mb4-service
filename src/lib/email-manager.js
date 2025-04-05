@@ -111,4 +111,9 @@ const DEFAULT_EMAIL_OPTIONS = {
     from: 'no-reply@morphobank.org',
     include_logo: true,
   },
+  registration_confirmation: {
+    subject: '[Morphobank] Welcome to MorphoBank!',
+    from: 'no-reply@morphobank.org',
+    include_logo: true,
+  },
 }

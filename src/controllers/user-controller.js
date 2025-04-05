@@ -1,6 +1,7 @@
 import { validationResult } from 'express-validator'
 import { models } from '../models/init-models.js'
 import { Sequelize } from 'sequelize'
+import { EmailManager } from '../lib/email-manager.js'
 
 function getUsers(req, res, next) {
   models.User.findAll({ attributes: ['user_id', 'email'] })
@@ -171,6 +172,13 @@ function signup(req, res, next) {
   const accessToken = req.body.accessToken
   const refreshToken = req.body.refreshToken
 
+  // Check if ORCID is present
+  if (!orcid) {
+    return res.status(400).json({
+      message: 'ORCID is required for account creation.',
+    })
+  }
+
   // First check if the email already exists
   models.User.findOne({ where: { email: email } })
     .then((existingUser) => {
@@ -210,10 +218,19 @@ function signup(req, res, next) {
         })
       }
 
-      res.status(201).json({
-        message: 'User created!',
-        userId: result._id,
-      })
+      // Send welcome email
+      const emailManager = new EmailManager()
+      return emailManager
+        .email('registration_confirmation', {
+          name: `${firstName} ${lastName}`,
+          to: email,
+        })
+        .then(() => {
+          res.status(201).json({
+            message: 'User created!',
+            userId: result._id,
+          })
+        })
     })
     .catch((err) => {
       console.error('Error in signup:', err)
