@@ -1,5 +1,5 @@
 import express from 'express'
-import { body } from 'express-validator'
+import { body, validationResult } from 'express-validator'
 import { models } from '../models/init-models.js'
 import {
   login,
@@ -27,6 +27,7 @@ authRouter.post(
             if (userDoc) {
               return Promise.reject('E-Mail address already exists!')
             }
+            return true
           }
         )
       }),
@@ -34,9 +35,20 @@ authRouter.post(
       .trim()
       .isLength({ min: 5 })
       .withMessage('Password should be of length 5 characters.'),
-    body('name').trim().not().isEmpty(),
+    body('fname').trim().not().isEmpty().withMessage('First name is required.'),
+    body('lname').trim().not().isEmpty().withMessage('Last name is required.'),
+    body('orcid').trim().not().isEmpty().withMessage('ORCID is required.'),
   ],
-  signup
+  (req, res, next) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: 'Validation failed',
+        errors: errors.array(),
+      })
+    }
+    signup(req, res, next)
+  }
 )
 
 authRouter.post(

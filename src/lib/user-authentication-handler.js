@@ -11,27 +11,37 @@ export default class UserAuthenticationHandler {
   }
 
   async handle(email, password) {
-    const user = await models.User.findOne({
-      where: { email: email },
-    })
+    try {
+      const user = await models.User.findOne({
+        where: { email: email },
+      })
 
-    if (!user) {
-      const error = new Error('A user with this email could not be found.')
-      error.statusCode = 401
+      if (!user) {
+        const error = new Error('A user with this email could not be found.')
+        error.statusCode = 401
+        error.response = { message: error.message }
+        throw error
+      }
+
+      const passwordMatch = await user.validatePassword(password)
+      if (!passwordMatch) {
+        const error = new Error('Wrong password!')
+        error.statusCode = 401
+        error.response = { message: error.message }
+        throw error
+      }
+
+      return {
+        name: user.getName(),
+        email: user.email,
+        user_id: user.user_id,
+      }
+    } catch (error) {
+      // Ensure error has proper response format
+      if (!error.response) {
+        error.response = { message: error.message }
+      }
       throw error
-    }
-
-    const passwordMatch = await user.validatePassword(password)
-    if (!passwordMatch) {
-      const error = new Error('Wrong password!')
-      error.statusCode = 401
-      throw error
-    }
-
-    return {
-      name: user.getName(),
-      email: user.email,
-      user_id: user.user_id,
     }
   }
 }
