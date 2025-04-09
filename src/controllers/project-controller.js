@@ -240,3 +240,24 @@ export async function publishPartition(req, res) {
       .json({ message: 'Could not process partition publication request' })
   }
 }
+
+export async function getCuratorProjects(req, res) {
+  // Check if the user has curator permissions
+  const userAccess = await req.user?.getAccess() || []
+  if (!userAccess.includes('curator')) {
+    return res.status(200).json({ projects: [] })
+  }
+
+  try {
+    // Execute the SQL query to retrieve projects
+    const projects = await models.Project.findAll({
+      // where: { deleted: 0, published: 0 },
+      where: { deleted: 0 },
+      order: [['project_id', 'ASC']],
+    })
+    res.status(200).json({ projects })
+  } catch (error) {
+    console.error('Error retrieving curator projects:', error)
+    res.status(500).json({ message: 'Error retrieving curator projects' })
+  }
+}

@@ -332,10 +332,12 @@ async function authenticateORCID(req, res) {
       }
 
       if (userWithOrcid) {
+        const access = await userWithOrcid.getAccess()
         let userResponse = {
           name: userWithOrcid.getName(),
           email: userWithOrcid.email,
           user_id: userWithOrcid.user_id,
+          access: access,
         }
         const accessToken = generateAccessToken(userResponse)
         const expiry = getTokenExpiry(accessToken)

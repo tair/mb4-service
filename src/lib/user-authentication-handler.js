@@ -31,10 +31,14 @@ export default class UserAuthenticationHandler {
         throw error
       }
 
+      // Get user access roles
+      const access = await user.getAccess()
+
       return {
         name: user.getName(),
         email: user.email,
         user_id: user.user_id,
+        access: access,
       }
     } catch (error) {
       // Ensure error has proper response format

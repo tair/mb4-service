@@ -26,6 +26,9 @@ projectsRouter.use(authorizeUser)
 
 projectsRouter.get('/', controller.getProjects)
 
+// Add a new route for retrieving curator projects
+projectsRouter.get('/curator-projects', controller.getCuratorProjects)
+
 // This is a sub-route focused on /projects/<ID>
 const projectRouter = express.Router({ mergeParams: true })
 projectsRouter.use('/:projectId/', projectRouter)
