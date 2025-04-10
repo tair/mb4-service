@@ -2,7 +2,6 @@ import _sequelize from 'sequelize'
 const { Model } = _sequelize
 import crypto from 'crypto'
 import bcrypt from 'bcrypt'
-import { models } from './init-models.js'
 
 // TODO(kenzley): We store the last_login and last_logout as numbers in the vars
 //     column. We should move them in their own column so that they can be easily
@@ -227,22 +226,5 @@ export default class User extends Model {
     // Concatenate userId and passwordHash with '/'
     const resetKey = `${this.user_id}/${this.password_hash || ''}`
     return User.md5HashPassword(resetKey)
-  }
-
-  async getAccess() {
-    // Use the association 'ca_users_x_roles' defined in init-models.js
-    const userRoleLinks = await this.getCa_users_x_roles({
-      // Include the associated UserRole model using the alias 'role'
-      include: [{
-        model: models.UserRole,
-        as: 'role',
-        attributes: ['code'], // Only select the 'code' attribute
-        required: true // Ensures an INNER JOIN like the original query
-      }],
-      attributes: [] // We don't need any attributes from the join table itself
-    });
-
-    // Map the results to extract the role code from the included 'role' object
-    return userRoleLinks.map(link => link.role.code);
   }
 }

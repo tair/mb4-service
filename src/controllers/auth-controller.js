@@ -7,6 +7,7 @@ import { validationResult } from 'express-validator'
 import { models } from '../models/init-models.js'
 import { EmailManager } from '../lib/email-manager.js'
 import { getFormattedDateTime } from '../util/util.js'
+import { getRoles } from '../services/user-roles-service.js'
 import UserAuthenticationHandler from '../lib/user-authentication-handler.js'
 import ReviewerAuthenticationHandler from '../lib/reviewer-authentication-handler.js'
 import config from '../config.js'
@@ -332,7 +333,7 @@ async function authenticateORCID(req, res) {
       }
 
       if (userWithOrcid) {
-        const access = await userWithOrcid.getAccess()
+        const access = await getRoles(userWithOrcid.user_id)
         let userResponse = {
           name: userWithOrcid.getName(),
           email: userWithOrcid.email,

@@ -1,6 +1,7 @@
 import sequelizeConn from '../util/db.js'
 import { getMedia } from '../util/media.js'
 import { models } from '../models/init-models.js'
+import { getRoles } from '../services/user-roles-service.js'
 import * as institutionService from '../services/institution-service.js'
 import * as partitionService from '../services/partition-service.js'
 import * as projectService from '../services/projects-service.js'
@@ -243,7 +244,7 @@ export async function publishPartition(req, res) {
 
 export async function getCuratorProjects(req, res) {
   // Check if the user has curator permissions
-  const userAccess = await req.user?.getAccess() || []
+  const userAccess = (await getRoles(req.user?.user_id)) || []
   if (!userAccess.includes('curator')) {
     return res.status(200).json({ projects: [] })
   }
@@ -251,8 +252,8 @@ export async function getCuratorProjects(req, res) {
   try {
     // Execute the SQL query to retrieve projects
     const projects = await models.Project.findAll({
-      // where: { deleted: 0, published: 0 },
-      where: { deleted: 0 },
+      // only show projects that are not deleted and not published
+      where: { deleted: 0, published: 0 },
       order: [['project_id', 'ASC']],
     })
     res.status(200).json({ projects })

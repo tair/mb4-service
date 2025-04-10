@@ -1,4 +1,5 @@
 import { models } from '../models/init-models.js'
+import { getRoles } from '../services/user-roles-service.js'
 
 const EMAIL_PATTERN = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/
 
@@ -31,8 +32,8 @@ export default class UserAuthenticationHandler {
         throw error
       }
 
-      // Get user access roles
-      const access = await user.getAccess()
+      // Get user access roles using the service
+      const access = await getRoles(user.user_id)
 
       return {
         name: user.getName(),
