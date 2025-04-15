@@ -55,6 +55,12 @@ import _Taxon from './taxon.js'
 import _User from './user.js'
 import _UserRole from './user-role.js'
 import _UsersXRole from './users-x-role.js'
+import _FeaturedProject from './featured-project.js'
+import _MatrixImage from './matrix-image.js'
+import _Announcement from './announcement.js'
+import _Tool from './tool.js'
+import _Press from './press.js'
+import _ApplicationVar from './application-var.js'
 import sequelizeConn from '../util/db.js'
 import { logCellChange } from './hooks/cell-hooks.js'
 import { logChange } from './hooks/changelog-hook.js'
@@ -162,6 +168,12 @@ function initModels(sequelizeConn) {
   const User = _User.init(sequelizeConn, DataTypes)
   const UserRole = _UserRole.init(sequelizeConn, DataTypes)
   const UsersXRole = _UsersXRole.init(sequelizeConn, DataTypes)
+  const FeaturedProject = _FeaturedProject.init(sequelizeConn, DataTypes)
+  const MatrixImage = _MatrixImage.init(sequelizeConn, DataTypes)
+  const Announcement = _Announcement.init(sequelizeConn, DataTypes)
+  const Tool = _Tool.init(sequelizeConn, DataTypes)
+  const Press = _Press.init(sequelizeConn, DataTypes)
+  const ApplicationVar = _ApplicationVar.init(sequelizeConn, DataTypes)
 
   AnnotationEvent.belongsTo(Annotation, {
     as: 'annotation',
@@ -694,6 +706,15 @@ function initModels(sequelizeConn) {
     as: 'taxa_x_specimens',
     foreignKey: 'taxon_id',
   })
+  FeaturedProject.belongsTo(Project, {
+    as: 'project',
+    foreignKey: 'project_id'
+  });
+
+  MatrixImage.belongsTo(Project, {
+    as: 'project',
+    foreignKey: 'project_id'
+  });
 
   const cellTables = [
     Cell,
@@ -802,6 +823,12 @@ function initModels(sequelizeConn) {
     User,
     UserRole,
     UsersXRole,
+    FeaturedProject,
+    MatrixImage,
+    Announcement,
+    Tool,
+    Press,
+    ApplicationVar
   }
 }
 
