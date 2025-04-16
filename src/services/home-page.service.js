@@ -1,4 +1,4 @@
-const { Project, MediaFile, Announcement, Tool, Press, ApplicationVar, FeaturedProject } = require('../models');
+const { Project, MediaFile, Announcement, Tool, Press, ApplicationVar, MatrixImage } = require('../models');
 const { Op } = require('sequelize');
 
 class HomePageService {
@@ -32,17 +32,14 @@ class HomePageService {
 
   async getMatrixImages() {
     try {
-      const matrixImages = await MediaFile.findAll({
-        where: {
-          media_type: 'matrix_image'
-        },
-        order: MediaFile.sequelize.random(),
+      const matrixImages = await MatrixImage.findAll({
+        order: MatrixImage.sequelize.random(),
         limit: 1
       });
 
       return matrixImages.map(image => ({
         media: image.media,
-        image_id: image.media_id,
+        image_id: image.matrix_image_id,
         project_id: image.project_id
       }));
     } catch (error) {

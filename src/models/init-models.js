@@ -55,7 +55,6 @@ import _Taxon from './taxon.js'
 import _User from './user.js'
 import _UserRole from './user-role.js'
 import _UsersXRole from './users-x-role.js'
-import _FeaturedProject from './featured-project.js'
 import _MatrixImage from './matrix-image.js'
 import _Announcement from './announcement.js'
 import _Tool from './tool.js'
@@ -168,7 +167,6 @@ function initModels(sequelizeConn) {
   const User = _User.init(sequelizeConn, DataTypes)
   const UserRole = _UserRole.init(sequelizeConn, DataTypes)
   const UsersXRole = _UsersXRole.init(sequelizeConn, DataTypes)
-  const FeaturedProject = _FeaturedProject.init(sequelizeConn, DataTypes)
   const MatrixImage = _MatrixImage.init(sequelizeConn, DataTypes)
   const Announcement = _Announcement.init(sequelizeConn, DataTypes)
   const Tool = _Tool.init(sequelizeConn, DataTypes)
@@ -706,10 +704,6 @@ function initModels(sequelizeConn) {
     as: 'taxa_x_specimens',
     foreignKey: 'taxon_id',
   })
-  FeaturedProject.belongsTo(Project, {
-    as: 'project',
-    foreignKey: 'project_id'
-  });
 
   MatrixImage.belongsTo(Project, {
     as: 'project',
@@ -823,7 +817,6 @@ function initModels(sequelizeConn) {
     User,
     UserRole,
     UsersXRole,
-    FeaturedProject,
     MatrixImage,
     Announcement,
     Tool,

@@ -1,52 +1,61 @@
-import { getStats } from '../util/stats-cache.js';
+import * as statsService from '../services/published-stats-service.js'
 
-export const getStatsController = async (req, res) => {
+export async function getProjectViewsForLast30Days(req, res) {
   try {
-    const stats = await getStats();
-    res.json(stats);
-  } catch (error) {
-    console.error('Error fetching stats:', error);
-    res.status(500).json({ error: 'Failed to fetch statistics' });
+    const result = await statsService.getProjectViewsForLast30Days()
+    res.status(200).json(result)
+  } catch (e) {
+    console.error(
+      'Error while getting Project Views For Last 30 Days (controller).',
+      e
+    )
+    res.status(500).json({
+      message: 'Error while fetching Project Views For Last 30 Days.',
+    })
   }
-};
+}
 
-// Individual stats endpoints for public access
-export const getProjectViewsForLast30Days = async (req, res) => {
+export async function getMediaViewsForLast30Days(req, res) {
   try {
-    const stats = await getStats();
-    res.json({ count: stats.numProjectViews });
-  } catch (error) {
-    console.error('Error fetching project views:', error);
-    res.status(500).json({ error: 'Failed to fetch project views' });
+    const result = await statsService.getMediaViewsForLast30Days()
+    res.status(200).json(result)
+  } catch (e) {
+    console.error(
+      'Error while getting Media Views For Last 30 Days (controller).',
+      e
+    )
+    res.status(500).json({
+      message: 'Error while fetching Media Views For Last 30 Days.',
+    })
   }
-};
+}
 
-export const getMediaViewsForLast30Days = async (req, res) => {
+export async function getMatrixDownloadsForLast30Days(req, res) {
   try {
-    const stats = await getStats();
-    res.json({ count: stats.numMediaViews });
-  } catch (error) {
-    console.error('Error fetching media views:', error);
-    res.status(500).json({ error: 'Failed to fetch media views' });
+    const result = await statsService.getMatrixDownloadsForLast30Days()
+    res.status(200).json(result)
+  } catch (e) {
+    console.error(
+      'Error while getting Matrix downloads For Last 30 Days (controller).',
+      e
+    )
+    res.status(500).json({
+      message: 'Error while fetching Matrix downloads For Last 30 Days.',
+    })
   }
-};
+}
 
-export const getMatrixDownloadsForLast30Days = async (req, res) => {
+export async function getDocDownloadsForLast30Days(req, res) {
   try {
-    const stats = await getStats();
-    res.json({ count: stats.numMatrixDownloads });
-  } catch (error) {
-    console.error('Error fetching matrix downloads:', error);
-    res.status(500).json({ error: 'Failed to fetch matrix downloads' });
+    const result = await statsService.getDocDownloadsForLast30Days()
+    res.status(200).json(result)
+  } catch (e) {
+    console.error(
+      'Error while getting Doc downloads For Last 30 Days (controller).',
+      e
+    )
+    res.status(500).json({
+      message: 'Error while fetching Doc downloads For Last 30 Days.',
+    })
   }
-};
-
-export const getDocDownloadsForLast30Days = async (req, res) => {
-  try {
-    const stats = await getStats();
-    res.json({ count: stats.numProjectDownloads });
-  } catch (error) {
-    console.error('Error fetching document downloads:', error);
-    res.status(500).json({ error: 'Failed to fetch document downloads' });
-  }
-};
+}
