@@ -58,11 +58,25 @@ router.get('/', async (req, res) => {
     })
 
     // Get maintenance mode status
-    const maintenanceMode = await models.ApplicationVar.findOne({
-      where: {
-        name: 'maintenance_mode'
+    const appVars = await models.CaApplicationVar.findOne({
+      attributes: ['vars'],
+      raw: true
+    });
+    let vars = {};
+    if (appVars && appVars.vars) {
+      try {
+        vars = typeof appVars.vars === 'string' ? JSON.parse(appVars.vars) : appVars.vars;
+      } catch (e) {
+        console.error('Error parsing vars JSON:', e);
       }
-    })
+    }
+
+    // Calculate next maintenance date (second Friday of next month)
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const day = nextMonth.getDay();
+    const daysUntilFriday = (5 - day + 7) % 7;
+    const secondFriday = new Date(nextMonth);
+    secondFriday.setDate(secondFriday.getDate() + daysUntilFriday + 7);
 
     res.json({
       featuredProjects: featuredProjects.map(fp => ({
@@ -100,9 +114,10 @@ router.get('/', async (req, res) => {
         link: p.link
       })),
       maintenanceStatus: {
-        enabled: maintenanceMode?.value === 'true',
-        message: maintenanceMode?.value === 'true' ? 'The system is currently in maintenance mode. Please try again later.' : '',
-        nextDate: maintenanceMode?.value === 'true' ? 'TBD' : ''
+        enabled: vars.maintenance_mode === '1',
+        message: vars.maintenance_message || '',
+        nextDate: secondFriday.toISOString(),
+        scheduleEnabled: vars.maintenance_mode_schedule_enabled === 1
       }
     })
   } catch (error) {

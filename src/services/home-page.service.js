@@ -1,4 +1,4 @@
-const { Project, MediaFile, Announcement, Tool, Press, ApplicationVar, MatrixImage } = require('../models');
+const { Project, MediaFile, Announcement, Tool, Press, CaApplicationVar, MatrixImage } = require('../models');
 const { Op } = require('sequelize');
 
 class HomePageService {
@@ -122,23 +122,19 @@ class HomePageService {
 
   async getMaintenanceStatus() {
     try {
-      const maintenanceMode = await ApplicationVar.findOne({
-        where: {
-          name: 'maintenance_mode'
+      const [results] = await CaApplicationVar.sequelize.query(
+        'SELECT vars FROM ca_application_vars LIMIT 1',
+        { type: CaApplicationVar.sequelize.QueryTypes.SELECT }
+      );
+      
+      let vars = {};
+      if (results && results.vars) {
+        try {
+          vars = typeof results.vars === 'string' ? JSON.parse(results.vars) : results.vars;
+        } catch (e) {
+          console.error('Error parsing vars JSON:', e);
         }
-      });
-
-      const maintenanceMessage = await ApplicationVar.findOne({
-        where: {
-          name: 'maintenance_message'
-        }
-      });
-
-      const scheduleEnabled = await ApplicationVar.findOne({
-        where: {
-          name: 'maintenance_mode_schedule_enabled'
-        }
-      });
+      }
 
       // Calculate next maintenance date (second Friday of next month)
       const now = new Date();
@@ -149,10 +145,10 @@ class HomePageService {
       secondFriday.setDate(secondFriday.getDate() + daysUntilFriday + 7);
 
       return {
-        enabled: maintenanceMode ? maintenanceMode.value === '1' : false,
-        message: maintenanceMessage ? maintenanceMessage.value : '',
+        enabled: vars.maintenance_mode === '1',
+        message: vars.maintenance_message || '',
         nextDate: secondFriday.toISOString(),
-        scheduleEnabled: scheduleEnabled ? scheduleEnabled.value === '1' : false
+        scheduleEnabled: vars.maintenance_mode_schedule_enabled === 1
       };
     } catch (error) {
       console.error('Error fetching maintenance status:', error);

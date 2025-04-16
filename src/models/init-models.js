@@ -59,7 +59,7 @@ import _MatrixImage from './matrix-image.js'
 import _Announcement from './announcement.js'
 import _Tool from './tool.js'
 import _Press from './press.js'
-import _ApplicationVar from './application-var.js'
+import _CaApplicationVar from './ca-application-var.js'
 import sequelizeConn from '../util/db.js'
 import { logCellChange } from './hooks/cell-hooks.js'
 import { logChange } from './hooks/changelog-hook.js'
@@ -171,7 +171,7 @@ function initModels(sequelizeConn) {
   const Announcement = _Announcement.init(sequelizeConn, DataTypes)
   const Tool = _Tool.init(sequelizeConn, DataTypes)
   const Press = _Press.init(sequelizeConn, DataTypes)
-  const ApplicationVar = _ApplicationVar.init(sequelizeConn, DataTypes)
+  const CaApplicationVar = _CaApplicationVar.init(sequelizeConn, DataTypes)
 
   AnnotationEvent.belongsTo(Annotation, {
     as: 'annotation',
@@ -821,7 +821,7 @@ function initModels(sequelizeConn) {
     Announcement,
     Tool,
     Press,
-    ApplicationVar
+    CaApplicationVar
   }
 }
 
