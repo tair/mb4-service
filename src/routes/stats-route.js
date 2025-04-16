@@ -3,11 +3,11 @@ import { getHomeStatsController } from '../controllers/home-stats-controller.js'
 
 const router = express.Router();
 
-// Add logging middleware
-router.use((req, res, next) => {
-  console.log('Stats route hit:', req.method, req.url);
-  next();
-});
+// // Add logging middleware
+// router.use((req, res, next) => {
+//   console.log('Home Stats route hit:', req.method, req.url);
+//   next();
+// });
 
 // Home stats routes
 router.get('/home', getHomeStatsController);
