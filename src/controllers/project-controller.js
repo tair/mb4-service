@@ -8,6 +8,8 @@ import * as projectService from '../services/projects-service.js'
 import * as projectStatsService from '../services/project-stats-service.js'
 import * as projectUserService from '../services/project-user-service.js'
 import * as mediaService from '../services/media-service.js'
+import axios from 'axios'
+import { MembershipType } from '../models/projects-x-user.js'
 
 export async function getProjects(req, res) {
   const userId = req.user?.user_id
@@ -260,5 +262,175 @@ export async function getCuratorProjects(req, res) {
   } catch (error) {
     console.error('Error retrieving curator projects:', error)
     res.status(500).json({ message: 'Error retrieving curator projects' })
+  }
+}
+
+export async function getJournalList(req, res, next) {
+  try {
+    const journals = await projectService.getJournalList()
+    res.json(journals)
+  } catch (error) {
+    console.error('Error retrieving journal list:', error)
+    res.status(500).json({ message: 'Error retrieving journals' })
+  }
+}
+
+export async function getJournalCover(req, res, next) {
+  try {
+    const { journalTitle } = req.query
+    if (!journalTitle) {
+      return res.status(400).json({ message: 'Journal title is required' })
+    }
+
+    const coverPath = projectService.getJournalCoverPath(journalTitle)
+    res.json({ coverPath })
+  } catch (error) {
+    next(error)
+  }
+}
+
+// Create a new project
+export async function createProject(req, res, next) {
+  try {
+    // Extract data from request body
+    const {
+      name,
+      nsf_funded,
+      exemplar_media_id,
+      allow_reviewer_login,
+      reviewer_login_password,
+      journal_title,
+      journal_title_other,
+      article_authors,
+      article_title,
+      article_doi,
+      journal_year,
+      journal_volume,
+      journal_url,
+      article_pp,
+      description,
+    } = req.body
+
+    // Validate required fields
+    if (!name || !nsf_funded) {
+      return res.status(400).json({
+        message: 'Project name and NSF funding status are required',
+      })
+    }
+
+    // Create project with user object for changelog hook
+    const project = await models.Project.create(
+      {
+        name,
+        nsf_funded,
+        exemplar_media_id,
+        allow_reviewer_login,
+        reviewer_login_password,
+        journal_title: journal_title_other || journal_title,
+        article_authors,
+        article_title,
+        article_doi,
+        journal_year,
+        journal_volume,
+        journal_url,
+        article_pp,
+        description,
+        user_id: req.user.id,
+        published: 0,
+      },
+      {
+        user: req.user, // Pass the user object for the changelog hook
+      }
+    )
+
+    console.log('create project project done')
+    // Add user as project admin
+    await models.ProjectsXUser.create(
+      {
+        project_id: project.project_id,
+        user_id: req.user.user_id,
+        membership_type: MembershipType.ADMIN,
+      },
+      {
+        user: req.user, // Pass the user object for the changelog hook
+      }
+    )
+
+    res.status(201).json(project)
+  } catch (error) {
+    console.error('create project error', error)
+    next(error)
+  }
+}
+
+// Helper function to format author names
+function getFormattedName(given, family, lastNameFirst = false) {
+  let formattedName = ''
+  const givenNames = given.split(' ')
+  formattedName += givenNames[0].substring(0, 1) + '.'
+  formattedName +=
+    givenNames.length > 1 ? ' ' + givenNames[1].substring(0, 1) + '. ' : ' '
+  formattedName += family
+  return formattedName
+}
+
+// Retrieve article information from DOI
+export async function retrieveDOI(req, res, next) {
+  try {
+    const { article_doi } = req.body
+
+    if (!article_doi) {
+      return res.status(400).json({
+        status: 'error',
+        errors: ['DOI is required'],
+      })
+    }
+
+    // Validate DOI format
+    if (!article_doi.match(/^10\..*\/\S+$/)) {
+      return res.status(400).json({
+        status: 'error',
+        errors: ['Invalid DOI format'],
+      })
+    }
+
+    // Call CrossRef API to get article metadata
+    const response = await axios.get(
+      `https://api.crossref.org/works/${encodeURIComponent(article_doi)}`
+    )
+    const data = response.data.message
+
+    // Format author names
+    const formattedAuthors =
+      data.author
+        ?.map((author) => {
+          return getFormattedName(author.given || '', author.family || '')
+        })
+        .join(', ') || ''
+
+    // Format the response
+    const fields = {
+      article_title: data.title?.[0] || '',
+      article_authors: formattedAuthors,
+      journal_title: data['container-title']?.[0] || '',
+      journal_year: data.published?.['date-parts']?.[0]?.[0] || '',
+      journal_volume: data.volume || '',
+      journal_number: data.issue || '',
+      article_pp: data.page || '',
+      journal_url: data.URL || `https://doi.org/${article_doi}`,
+    }
+
+    res.json({
+      status: 'ok',
+      fields,
+    })
+  } catch (error) {
+    if (error.response?.status === 404) {
+      return res.status(404).json({
+        status: 'error',
+        errors: ['Article not found'],
+      })
+    }
+    next(error)
   }
 }
