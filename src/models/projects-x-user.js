@@ -2,6 +2,14 @@ import _sequelize from 'sequelize'
 import { time } from '../util/util.js'
 const { Model } = _sequelize
 
+// Membership type enum
+export const MembershipType = {
+  ADMIN: 0, // ADMIN membership (can edit everything)
+  OBSERVER: 1, // Observer (cannot edit)
+  CHARACTER_ANNOTATOR: 2, // Character annotater (can edit characters and states only)
+  BIBLIOGRAPHY_MAINTAINER: 3, // Bibliography maintainer (can edit bibliography only)
+}
+
 export default class ProjectsXUser extends Model {
   static init(sequelize, DataTypes) {
     return super.init(
@@ -34,14 +42,14 @@ export default class ProjectsXUser extends Model {
         membership_type: {
           type: DataTypes.TINYINT.UNSIGNED,
           allowNull: false,
-          defaultValue: 0,
+          defaultValue: MembershipType.ADMIN,
           validate: {
             isIn: [
               [
-                0, // Full membership (can edit everything)
-                1, // Observer (cannot edit)
-                2, // Character annotater (can edit characters and states only)
-                3, // Bibliography maintainer (can edit bibliography only)
+                MembershipType.ADMIN,
+                MembershipType.OBSERVER,
+                MembershipType.CHARACTER_ANNOTATOR,
+                MembershipType.BIBLIOGRAPHY_MAINTAINER,
               ],
             ],
           },

@@ -152,18 +152,6 @@ function searchInstitutions(req, res) {
 }
 
 function signup(req, res, next) {
-  const errors = validationResult(req)
-  if (!errors.isEmpty()) {
-    // Convert validation errors into a single message
-    const errorMessages = errors
-      .array()
-      .map((error) => error.msg)
-      .join('. ')
-    return res.status(422).json({
-      message: errorMessages,
-    })
-  }
-
   const email = req.body.email
   const firstName = req.body.fname
   const lastName = req.body.lname
@@ -172,26 +160,8 @@ function signup(req, res, next) {
   const accessToken = req.body.accessToken
   const refreshToken = req.body.refreshToken
 
-  // Check if ORCID is present
-  if (!orcid) {
-    return res.status(400).json({
-      message: 'ORCID is required for account creation.',
-    })
-  }
-
-  // First check if the email already exists
-  models.User.findOne({ where: { email: email } })
-    .then((existingUser) => {
-      if (existingUser) {
-        // Email already exists, return a 400 error
-        return res.status(400).json({
-          message: 'E-Mail address already exists!',
-        })
-      }
-
-      // Email doesn't exist, proceed with password hashing and user creation
-      return models.User.hashPassword(password)
-    })
+  // Hash password and create user
+  models.User.hashPassword(password)
     .then((passwordHash) => {
       if (!passwordHash) {
         return res.status(500).json({

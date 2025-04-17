@@ -1,4 +1,5 @@
 import express from 'express'
+import multer from 'multer'
 
 import bibliographyRouter from './bibliography-route.js'
 import characterRouter from './characters-route.js'
@@ -19,12 +20,33 @@ import { authenticateToken } from './auth-interceptor.js'
 import { authorizeProject } from './project-interceptor.js'
 import { authorizeUser } from './user-interceptor.js'
 
+// Configure multer for handling form data
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 9 * 1024 * 1024, // 9MB limit
+  },
+})
+
 // This route focuses on /projects
 const projectsRouter = express.Router({ mergeParams: true })
 projectsRouter.use(authenticateToken)
 projectsRouter.use(authorizeUser)
 
 projectsRouter.get('/', controller.getProjects)
+
+// Add a new route for retrieving curator projects
+projectsRouter.get('/curator-projects', controller.getCuratorProjects)
+
+// Add a new route for retrieving journals
+projectsRouter.get('/journals', controller.getJournalList)
+
+// Add a new route for retrieving journal cover
+projectsRouter.get('/journal-cover', controller.getJournalCover)
+
+// Project creation and DOI retrieval routes
+projectsRouter.post('/create', upload.single('file'), controller.createProject)
+projectsRouter.post('/doi', controller.retrieveDOI)
 
 // This is a sub-route focused on /projects/<ID>
 const projectRouter = express.Router({ mergeParams: true })
