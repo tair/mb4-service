@@ -11,7 +11,7 @@ import taskRouter from './routes/tasks-route.js'
 import tilepicRouter from './routes/tilepic-route.js'
 import userRouter from './routes/user-route.js'
 import emailRouter from './routes/email-route.js'
-import homePageRouter from './routes/home-page.routes.js'
+import homePageRouter from './routes/home-page-routes.js'
 import { initializeCache } from './util/stats-cache.js'
 
 const app = express()

@@ -1,4 +1,4 @@
-const homePageService = require('../services/home-page.service');
+const homePageService = require('../services/home-page-service.js');
 
 class HomePageController {
   async getHomePageData(req, res) {
