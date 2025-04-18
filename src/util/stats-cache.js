@@ -1,10 +1,10 @@
-import sequelizeConn from './db.js';
+import sequelizeConn from './db.js'
 
 // Cache object to store stats
 let statsCache = {
   data: null,
-  lastUpdated: null
-};
+  lastUpdated: null,
+}
 
 // Function to fetch fresh stats from database
 const fetchFreshStats = async () => {
@@ -15,8 +15,8 @@ const fetchFreshStats = async () => {
       FROM stats_login_log 
       WHERE datetime_started >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
       AND datetime_started <= UNIX_TIMESTAMP(NOW())
-    `;
-    
+    `
+
     // Get anonymous sessions in last 30 days
     const anonymousSessionsQuery = `
       WITH login_sessions AS (
@@ -32,8 +32,8 @@ const fetchFreshStats = async () => {
          OR (sl.datetime_ended >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY) AND sl.datetime_ended <= UNIX_TIMESTAMP(NOW()))
          OR (sl.datetime_started <= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY) AND sl.datetime_ended >= UNIX_TIMESTAMP(NOW())))
          AND sl.session_key NOT IN (SELECT session_key FROM login_sessions)
-    `;
-    
+    `
+
     // Get total cells scored
     const cellsQuery = `
       SELECT count(*) as count
@@ -42,8 +42,8 @@ const fetchFreshStats = async () => {
       INNER JOIN projects p ON m.project_id = p.project_id
       WHERE m.deleted = 0 AND p.deleted = 0
       AND m.created_on >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `;
-    
+    `
+
     // Get total media uploaded
     const mediaQuery = `
       SELECT COUNT(*) as count 
@@ -51,52 +51,52 @@ const fetchFreshStats = async () => {
       INNER JOIN projects p ON m.project_id = p.project_id
       WHERE p.deleted = 0
       AND m.created_on >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `;
-    
+    `
+
     // Get project views/downloads in last 30 days
     const projectViewsQuery = `
       SELECT COUNT(*) as views
       FROM stats_pub_hit_log
       WHERE hit_type = 'P'
       AND hit_datetime >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `;
+    `
 
     const projectDownloadsQuery = `
       SELECT COUNT(*) as downloads
       FROM stats_pub_download_log
       WHERE download_type = 'P'
       AND download_datetime >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `;
-    
+    `
+
     // Get matrix views/downloads in last 30 days
     const matrixViewsQuery = `
       SELECT COUNT(*) as views
       FROM stats_pub_hit_log
       WHERE hit_type = 'X'
       AND hit_datetime >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `;
+    `
 
     const matrixDownloadsQuery = `
       SELECT COUNT(*) as downloads
       FROM stats_pub_download_log
       WHERE download_type = 'X'
       AND download_datetime >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `;
-    
+    `
+
     // Get media views/downloads in last 30 days
     const mediaViewsQuery = `
       SELECT COUNT(*) as views
       FROM stats_pub_hit_log
       WHERE hit_type = 'M'
       AND hit_datetime >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `;
+    `
 
     const mediaDownloadsQuery = `
       SELECT COUNT(*) as downloads
       FROM stats_pub_download_log
       WHERE download_type = 'M'
       AND download_datetime >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `;
+    `
 
     // Execute all queries in parallel
     const [
@@ -109,19 +109,39 @@ const fetchFreshStats = async () => {
       matrixViewsResult,
       matrixDownloadsResult,
       mediaViewsResult,
-      mediaDownloadsResult
+      mediaDownloadsResult,
     ] = await Promise.all([
-      sequelizeConn.query(uniqueLoginsQuery, { type: sequelizeConn.QueryTypes.SELECT }),
-      sequelizeConn.query(anonymousSessionsQuery, { type: sequelizeConn.QueryTypes.SELECT }),
-      sequelizeConn.query(cellsQuery, { type: sequelizeConn.QueryTypes.SELECT }),
-      sequelizeConn.query(mediaQuery, { type: sequelizeConn.QueryTypes.SELECT }),
-      sequelizeConn.query(projectViewsQuery, { type: sequelizeConn.QueryTypes.SELECT }),
-      sequelizeConn.query(projectDownloadsQuery, { type: sequelizeConn.QueryTypes.SELECT }),
-      sequelizeConn.query(matrixViewsQuery, { type: sequelizeConn.QueryTypes.SELECT }),
-      sequelizeConn.query(matrixDownloadsQuery, { type: sequelizeConn.QueryTypes.SELECT }),
-      sequelizeConn.query(mediaViewsQuery, { type: sequelizeConn.QueryTypes.SELECT }),
-      sequelizeConn.query(mediaDownloadsQuery, { type: sequelizeConn.QueryTypes.SELECT })
-    ]);
+      sequelizeConn.query(uniqueLoginsQuery, {
+        type: sequelizeConn.QueryTypes.SELECT,
+      }),
+      sequelizeConn.query(anonymousSessionsQuery, {
+        type: sequelizeConn.QueryTypes.SELECT,
+      }),
+      sequelizeConn.query(cellsQuery, {
+        type: sequelizeConn.QueryTypes.SELECT,
+      }),
+      sequelizeConn.query(mediaQuery, {
+        type: sequelizeConn.QueryTypes.SELECT,
+      }),
+      sequelizeConn.query(projectViewsQuery, {
+        type: sequelizeConn.QueryTypes.SELECT,
+      }),
+      sequelizeConn.query(projectDownloadsQuery, {
+        type: sequelizeConn.QueryTypes.SELECT,
+      }),
+      sequelizeConn.query(matrixViewsQuery, {
+        type: sequelizeConn.QueryTypes.SELECT,
+      }),
+      sequelizeConn.query(matrixDownloadsQuery, {
+        type: sequelizeConn.QueryTypes.SELECT,
+      }),
+      sequelizeConn.query(mediaViewsQuery, {
+        type: sequelizeConn.QueryTypes.SELECT,
+      }),
+      sequelizeConn.query(mediaDownloadsQuery, {
+        type: sequelizeConn.QueryTypes.SELECT,
+      }),
+    ])
 
     // Format the response
     return {
@@ -134,43 +154,47 @@ const fetchFreshStats = async () => {
       numMatrixViews: parseInt(matrixViewsResult[0].views || 0),
       numMatrixDownloads: parseInt(matrixDownloadsResult[0].downloads || 0),
       numMediaViews: parseInt(mediaViewsResult[0].views || 0),
-      numMediaDownloads: parseInt(mediaDownloadsResult[0].downloads || 0)
-    };
+      numMediaDownloads: parseInt(mediaDownloadsResult[0].downloads || 0),
+    }
   } catch (error) {
-    console.error('Error fetching fresh stats:', error);
-    throw error;
+    console.error('Error fetching fresh stats:', error)
+    throw error
   }
-};
+}
 
 // Function to get stats (either from cache or fresh)
 export const getStats = async () => {
-  const now = Date.now();
-  const oneHour = 60 * 60 * 1000; // 1 hour in milliseconds
+  const now = Date.now()
+  const oneHour = 60 * 60 * 1000 // 1 hour in milliseconds
 
   // If cache is empty or older than 1 hour, fetch fresh data
-  if (!statsCache.data || !statsCache.lastUpdated || (now - statsCache.lastUpdated) > oneHour) {
+  if (
+    !statsCache.data ||
+    !statsCache.lastUpdated ||
+    now - statsCache.lastUpdated > oneHour
+  ) {
     try {
-      statsCache.data = await fetchFreshStats();
-      statsCache.lastUpdated = now;
+      statsCache.data = await fetchFreshStats()
+      statsCache.lastUpdated = now
     } catch (error) {
       // If there's an error fetching fresh data and we have cached data, return the cached data
       if (statsCache.data) {
-        return statsCache.data;
+        return statsCache.data
       }
-      throw error;
+      throw error
     }
   }
 
-  return statsCache.data;
-};
+  return statsCache.data
+}
 
 // Initialize the cache on startup
 export const initializeCache = async () => {
   try {
-    statsCache.data = await fetchFreshStats();
-    statsCache.lastUpdated = Date.now();
-    console.log('Stats cache initialized');
+    statsCache.data = await fetchFreshStats()
+    statsCache.lastUpdated = Date.now()
+    console.log('Stats cache initialized')
   } catch (error) {
-    console.error('Error initializing stats cache:', error);
+    console.error('Error initializing stats cache:', error)
   }
-}; 
+}

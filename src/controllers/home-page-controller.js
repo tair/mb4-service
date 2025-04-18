@@ -1,4 +1,4 @@
-const homePageService = require('../services/home-page-service.js');
+const homePageService = require('../services/home-page-service.js')
 
 class HomePageController {
   async getHomePageData(req, res) {
@@ -9,15 +9,15 @@ class HomePageController {
         announcements,
         tools,
         press,
-        maintenanceStatus
+        maintenanceStatus,
       ] = await Promise.all([
         homePageService.getFeaturedProjects(),
         homePageService.getMatrixImages(),
         homePageService.getAnnouncements(),
         homePageService.getTools(),
         homePageService.getPress(),
-        homePageService.getMaintenanceStatus()
-      ]);
+        homePageService.getMaintenanceStatus(),
+      ])
 
       res.json({
         featuredProjects,
@@ -25,13 +25,13 @@ class HomePageController {
         announcements,
         tools,
         press,
-        maintenanceStatus
-      });
+        maintenanceStatus,
+      })
     } catch (error) {
-      console.error('Error fetching home page data:', error);
-      res.status(500).json({ error: 'Failed to fetch home page data' });
+      console.error('Error fetching home page data:', error)
+      res.status(500).json({ error: 'Failed to fetch home page data' })
     }
   }
 }
 
-module.exports = new HomePageController(); 
+module.exports = new HomePageController()
