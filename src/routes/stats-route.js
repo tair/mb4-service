@@ -1,7 +1,7 @@
-import express from 'express';
-import { getHomeStatsController } from '../controllers/home-stats-controller.js';
+import express from 'express'
+import { getHomeStatsController } from '../controllers/home-stats-controller.js'
 
-const router = express.Router();
+const router = express.Router()
 
 // // Add logging middleware
 // router.use((req, res, next) => {
@@ -10,6 +10,6 @@ const router = express.Router();
 // });
 
 // Home stats routes
-router.get('/home', getHomeStatsController);
+router.get('/home', getHomeStatsController)
 
-export default router; 
+export default router

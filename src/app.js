@@ -55,7 +55,7 @@ app.use('/tilepic', tilepicRouter)
 app.use('/home-page', homePageRouter)
 
 // Initialize stats cache
-initializeCache().catch(error => {
+initializeCache().catch((error) => {
   console.error('Failed to initialize stats cache:', error)
 })
 

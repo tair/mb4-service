@@ -707,8 +707,8 @@ function initModels(sequelizeConn) {
 
   MatrixImage.belongsTo(Project, {
     as: 'project',
-    foreignKey: 'project_id'
-  });
+    foreignKey: 'project_id',
+  })
 
   const cellTables = [
     Cell,
@@ -821,7 +821,7 @@ function initModels(sequelizeConn) {
     Announcement,
     Tool,
     Press,
-    CaApplicationVar
+    CaApplicationVar,
   }
 }
 
