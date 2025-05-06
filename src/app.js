@@ -10,6 +10,7 @@ import taskRouter from './routes/tasks-route.js'
 import tilepicRouter from './routes/tilepic-route.js'
 import userRouter from './routes/user-route.js'
 import emailRouter from './routes/email-route.js'
+import searchRouter from './routes/search-route.js'
 
 const app = express()
 
@@ -48,6 +49,7 @@ app.use('/public/stats', publicStatsRouter)
 app.use('/users', userRouter)
 app.use('/tasks', taskRouter)
 app.use('/tilepic', tilepicRouter)
+app.use('/search', searchRouter)
 
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500
