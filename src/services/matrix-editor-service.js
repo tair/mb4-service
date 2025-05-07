@@ -2518,7 +2518,8 @@ export default class MatrixEditorService {
         ca.character_id = cra.character_id AND
         ca.taxon_id = c.taxon_id
       WHERE
-        mco.matrix_id = ? AND NOT ca.state_id <=> cra.state_id
+        mco.matrix_id = ? AND
+        NOT (ca.state_id <=> cra.state_id AND ca.is_npa <=> 0)
       ORDER BY
         mcoa.position, mto.position`,
       { replacements: [this.matrix.matrix_id] }
