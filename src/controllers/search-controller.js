@@ -54,9 +54,9 @@ function searchProjects(req, res) {
 
 function searchMedia(req, res) {
   const searchTerm = req.query.searchTerm
-  const query = `SELECT m.*, p.name as project_name FROM media_files m
+  const query = `SELECT m.media_id, m.media, m.notes, p.name as project_name, p.project_id FROM media_files m
     LEFT JOIN projects p ON m.project_id = p.project_id
-    WHERE m.notes LIKE :searchTerm`
+    WHERE (m.notes LIKE :searchTerm) AND p.deleted = 0`
 
   sequelizeConn
     .query(query, {
