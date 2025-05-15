@@ -6,7 +6,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon --legacy-watch --ignore data/ --ignore db-dev/ src/server.js",
+    "dev": "nodemon --ignore data/ --ignore db-dev/ src/server.js",
     "debug": "nodemon --inspect=0.0.0.0:9229 --ignore data/ --ignore db-dev/ --trace-uncaught src/server.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:one": "node --experimental-vm-modules node_modules/jest/bin/jest.js -t",
@@ -31,7 +31,6 @@
     "express-validator": "^6.14.0",
     "https": "^1.0.0",
     "jsonwebtoken": "^9.0.0",
-    "mb4-services": "file:",
     "mime": "^4.0.3",
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.10.0",
