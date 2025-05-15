@@ -33,3 +33,35 @@ export async function getProject(projectId) {
   )
   return rows.length > 0 ? rows[0] : {}
 }
+
+export async function getJournalList() {
+  const rows = await sequelizeConn.query(
+    `
+    SELECT DISTINCT journal_title
+    FROM projects
+    WHERE deleted < 1
+    ORDER BY journal_title`,
+    { type: sequelizeConn.QueryTypes.SELECT }
+  )
+  return rows
+    .map((row) => row.journal_title?.trim())
+    .filter((title) => title && title.length > 0)
+}
+
+export function getJournalCoverPath(journalTitle) {
+  if (!journalTitle) return null
+
+  // Clean the journal title similar to the PHP code
+  let cleanTitle = journalTitle.trim()
+  cleanTitle = cleanTitle.replace(/:/g, '')
+  cleanTitle = cleanTitle.replace(/ /g, '_')
+  cleanTitle = cleanTitle.replace(/\./g, '')
+  cleanTitle = cleanTitle.replace(/&/g, 'and')
+  cleanTitle = cleanTitle.toLowerCase()
+
+  // Construct the path to the journal cover
+  // TODO: this is a temporary solution, we need to move the journal covers to S3 and use the new URL
+  const coverPath = `https://morphobank.org/themes/default/graphics/journalIcons/${cleanTitle}.jpg`
+
+  return coverPath
+}

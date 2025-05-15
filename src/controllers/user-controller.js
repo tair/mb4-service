@@ -1,6 +1,7 @@
 import { validationResult } from 'express-validator'
 import { models } from '../models/init-models.js'
 import { Sequelize } from 'sequelize'
+import { EmailManager } from '../lib/email-manager.js'
 
 function getUsers(req, res, next) {
   models.User.findAll({ attributes: ['user_id', 'email'] })
@@ -151,14 +152,6 @@ function searchInstitutions(req, res) {
 }
 
 function signup(req, res, next) {
-  const errors = validationResult(req.body)
-  if (!errors.isEmpty()) {
-    const error = new Error('Validation failed.')
-    error.statusCode = 422
-    error.data = errors.array()
-    throw error
-  }
-
   const email = req.body.email
   const firstName = req.body.fname
   const lastName = req.body.lname
@@ -166,8 +159,16 @@ function signup(req, res, next) {
   const orcid = req.body.orcid
   const accessToken = req.body.accessToken
   const refreshToken = req.body.refreshToken
+
+  // Hash password and create user
   models.User.hashPassword(password)
     .then((passwordHash) => {
+      if (!passwordHash) {
+        return res.status(500).json({
+          message: 'Error hashing password',
+        })
+      }
+
       const userModel = new models.User({
         email: email,
         password_hash: passwordHash,
@@ -181,16 +182,32 @@ function signup(req, res, next) {
       return userModel.save({ user: userModel })
     })
     .then((result) => {
-      res.status(201).json({
-        message: 'User created!',
-        userId: result._id,
-      })
+      if (!result) {
+        return res.status(500).json({
+          message: 'Error creating user',
+        })
+      }
+
+      // Send welcome email
+      const emailManager = new EmailManager()
+      return emailManager
+        .email('registration_confirmation', {
+          name: `${firstName} ${lastName}`,
+          to: email,
+        })
+        .then(() => {
+          res.status(201).json({
+            message: 'User created!',
+            userId: result._id,
+          })
+        })
     })
     .catch((err) => {
-      if (!err.statusCode) {
-        err.statusCode = 500
-      }
-      next(err)
+      console.error('Error in signup:', err)
+      return res.status(500).json({
+        message: 'An error occurred during user registration',
+        error: err.message,
+      })
     })
 }
 

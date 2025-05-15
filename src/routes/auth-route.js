@@ -1,5 +1,5 @@
 import express from 'express'
-import { body } from 'express-validator'
+import { body, validationResult } from 'express-validator'
 import { models } from '../models/init-models.js'
 import {
   login,
@@ -15,29 +15,62 @@ import { signup } from '../controllers/user-controller.js'
 
 const authRouter = express.Router()
 
-authRouter.post(
-  '/signup',
-  [
-    body('email')
-      .isEmail()
-      .withMessage('Please enter a valid email.')
-      .custom((value) => {
-        return models.User.findOne({ where: { email: value } }).then(
-          (userDoc) => {
-            if (userDoc) {
-              return Promise.reject('E-Mail address already exists!')
-            }
-          }
+// Validation middleware for signup
+const validateSignup = [
+  // Email validation
+  body('email')
+    .isEmail()
+    .withMessage('Please enter a valid email.')
+    .custom(async (value) => {
+      const existingUser = await models.User.findOne({
+        where: { email: value },
+      })
+      if (existingUser) {
+        throw new Error(
+          'This email is already in our system. Please reset your password instead of creating a new account.'
         )
-      }),
-    body('password')
-      .trim()
-      .isLength({ min: 5 })
-      .withMessage('Password should be of length 5 characters.'),
-    body('name').trim().not().isEmpty(),
-  ],
-  signup
-)
+      }
+      return true
+    }),
+
+  // Password validation
+  body('password')
+    .trim()
+    .isLength({ min: 5 })
+    .withMessage('Password should be of length 5 characters.'),
+
+  // First name validation
+  body('fname').trim().not().isEmpty().withMessage('First name is required.'),
+
+  // Last name validation
+  body('lname').trim().not().isEmpty().withMessage('Last name is required.'),
+
+  // ORCID validation
+  body('orcid')
+    .trim()
+    .not()
+    .isEmpty()
+    .withMessage('ORCID is required for account creation.'),
+
+  // Validation result handler
+  (req, res, next) => {
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) {
+      // Convert validation errors into a single message
+      const errorMessages = errors
+        .array()
+        .map((error) => error.msg)
+        .join('. ')
+      return res.status(400).json({
+        message: errorMessages,
+      })
+    }
+    next()
+  },
+]
+
+// Routes
+authRouter.post('/signup', validateSignup, signup)
 
 authRouter.post(
   '/login',

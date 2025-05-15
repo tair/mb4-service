@@ -7,6 +7,7 @@ import { validationResult } from 'express-validator'
 import { models } from '../models/init-models.js'
 import { EmailManager } from '../lib/email-manager.js'
 import { getFormattedDateTime } from '../util/util.js'
+import { getRoles } from '../services/user-roles-service.js'
 import UserAuthenticationHandler from '../lib/user-authentication-handler.js'
 import ReviewerAuthenticationHandler from '../lib/reviewer-authentication-handler.js'
 import config from '../config.js'
@@ -30,10 +31,7 @@ async function login(req, res, next) {
   const password = req.body.password
 
   if (!email || !password) {
-    const error = new Error('Missing email or password.')
-    error.statusCode = 401
-    next(error)
-    return
+    return res.status(401).json({ message: 'Missing email or password.' })
   }
 
   try {
@@ -75,12 +73,11 @@ async function login(req, res, next) {
       }
     }
 
-    const error = new Error('Not a valid user name')
-    error.statusCode = 401
-    next(error)
-    return
+    return res.status(401).json({ message: 'Not a valid user name' })
   } catch (e) {
-    next(e)
+    // Format error response as JSON
+    const statusCode = e.statusCode || 500
+    return res.status(statusCode).json({ message: e.message })
   }
 }
 
@@ -340,10 +337,12 @@ async function authenticateORCID(req, res) {
       }
 
       if (userWithOrcid) {
+        const access = await getRoles(userWithOrcid.user_id)
         let userResponse = {
           name: userWithOrcid.getName(),
           email: userWithOrcid.email,
           user_id: userWithOrcid.user_id,
+          access: access,
         }
         const accessToken = generateAccessToken(userResponse)
         const expiry = getTokenExpiry(accessToken)

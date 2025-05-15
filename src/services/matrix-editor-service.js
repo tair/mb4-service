@@ -2518,7 +2518,8 @@ export default class MatrixEditorService {
         ca.character_id = cra.character_id AND
         ca.taxon_id = c.taxon_id
       WHERE
-        mco.matrix_id = ? AND ca.state_id != cra.state_id
+        mco.matrix_id = ? AND
+        NOT (ca.state_id <=> cra.state_id AND ca.is_npa <=> 0)
       ORDER BY
         mcoa.position, mto.position`,
       { replacements: [this.matrix.matrix_id] }
@@ -6451,7 +6452,7 @@ export default class MatrixEditorService {
   async checkCanEditTaxa(taxaIds) {
     const [[{ count }]] = await sequelizeConn.query(
       `
-      SELECT COUNT(mto.taxon_id) AS count
+      SELECT COUNT(DISTINCT mto.taxon_id) AS count
       FROM matrix_taxa_order mto
       INNER JOIN matrices AS m ON mto.matrix_id = m.matrix_id
       INNER JOIN projects_x_users AS pxu ON m.project_id = pxu.project_id
