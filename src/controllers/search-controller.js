@@ -29,10 +29,14 @@ function searchInstitutions(req, res) {
 
 function searchProjects(req, res) {
   const searchTerm = req.query.searchTerm
-  console.log(searchTerm)
+  const published = req.query.published == 'false' ? 0 : 1
 
-  const query =
-    'SELECT project_id, name, article_authors, journal_year, article_title, journal_title, journal_volume article_pp FROM projects WHERE name LIKE :searchTerm AND deleted = 0 AND published = 1'
+  let query =
+    'SELECT project_id, name, article_authors, journal_year, article_title, journal_title, journal_volume article_pp, published FROM projects WHERE (name LIKE :searchTerm OR description LIKE :searchTerm OR journal_title LIKE :searchTerm OR article_title LIKE :searchTerm) AND deleted = 0'
+  if (published === 1) {
+    query += ' AND published = 1'
+  }
+  query += ' ORDER BY published_on desc'
 
   sequelizeConn
     .query(query, {
@@ -54,13 +58,24 @@ function searchProjects(req, res) {
 
 function searchMedia(req, res) {
   const searchTerm = req.query.searchTerm
-  const query = `SELECT m.media_id, m.media, m.notes, p.name as project_name, p.project_id FROM media_files m
+  const published = req.query.published == 'false' ? 0 : 1
+  let query = `SELECT m.media_id, m.media, m.notes, 
+    p.name as project_name, p.project_id, p.published,
+    s.specimen_id, s.description, s.reference_source, s.institution_code, s.collection_code, s.catalog_number,
+    t.genus, t.specific_epithet
+    FROM media_files m
+    INNER JOIN specimens s ON m.specimen_id = s.specimen_id
+    INNER JOIN taxa_x_specimens AS txs ON s.specimen_id = txs.specimen_id
+    INNER JOIN taxa AS t ON t.taxon_id = txs.taxon_id
     LEFT JOIN projects p ON m.project_id = p.project_id
-    WHERE (m.notes LIKE :searchTerm) AND p.deleted = 0`
+    WHERE (m.notes LIKE :searchTerm OR s.description LIKE :searchTerm OR t.genus LIKE :searchTerm OR t.specific_epithet LIKE :searchTerm) AND p.deleted = 0`
+  if (published === 1) {
+    query += ' AND p.published = 1'
+  }
 
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%` },
+      replacements: { searchTerm: `%${searchTerm}%`, published: published },
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((media) => {
@@ -78,21 +93,26 @@ function searchMedia(req, res) {
 
 function searchMediaViews(req, res) {
   const searchTerm = req.query.searchTerm
-  const query = `SELECT
+  const published = req.query.published == 'false' ? 0 : 1
+  let query = `SELECT
     mv.view_id,
     mv.name AS view_name,
     p.name AS project_name,
-    p.project_id AS project_id
+    p.project_id AS project_id,
+    p.published
   FROM
     media_views mv
   INNER JOIN
     projects p ON mv.project_id = p.project_id
   WHERE
-    mv.name LIKE :searchTerm`
+    (mv.name LIKE :searchTerm OR p.name LIKE :searchTerm) AND p.deleted = 0`
+  if (published === 1) {
+    query += ' AND p.published = :published'
+  }
 
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%` },
+      replacements: { searchTerm: `%${searchTerm}%`, published: published },
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((mediaViews) => {
@@ -110,12 +130,12 @@ function searchMediaViews(req, res) {
 
 function searchSpecimens(req, res) {
   const searchTerm = req.query.searchTerm
-  const query = `SELECT 
-    s.specimen_id,
-    s.description,
-    s.reference_source,
+  const published = req.query.published == 'false' ? 0 : 1
+  let query = `SELECT 
+    s.specimen_id, s.description, s.reference_source, s.institution_code, s.collection_code, s.catalog_number,
     p.name as project_name,
     p.project_id,
+    p.published,
     t.genus,
     t.specific_epithet
     FROM specimens s
@@ -127,13 +147,19 @@ function searchSpecimens(req, res) {
      s.institution_code LIKE :searchTerm OR
      s.catalog_number LIKE :searchTerm OR
      s.collection_code LIKE :searchTerm OR
-     s.occurrence_id LIKE :searchTerm
-     )
+     s.occurrence_id LIKE :searchTerm OR
+     t.genus LIKE :searchTerm OR
+     t.specific_epithet LIKE :searchTerm OR
+     t.notes LIKE :searchTerm OR
+     p.name LIKE :searchTerm)
     AND p.deleted = 0`
+  if (published === 1) {
+    query += ' AND p.published = :published'
+  }
 
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%` },
+      replacements: { searchTerm: `%${searchTerm}%`, published: published },
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((specimens) => {
@@ -151,16 +177,21 @@ function searchSpecimens(req, res) {
 
 function searchCharacters(req, res) {
   const searchTerm = req.query.searchTerm
-  const query = `SELECT c.character_id, c.name, c.description, p.name as project_name, p.project_id FROM characters c
+  const published = req.query.published == 'false' ? 0 : 1
+  let query = `SELECT c.character_id, c.name, c.description, p.name as project_name, p.project_id, p.published FROM characters c
     INNER JOIN projects p ON c.project_id = p.project_id
     WHERE
       (c.name LIKE :searchTerm OR
-      c.description LIKE :searchTerm) AND
+      c.description LIKE :searchTerm OR
+      p.name LIKE :searchTerm) AND
       p.deleted = 0`
+  if (published === 1) {
+    query += ' AND p.published = :published'
+  }
 
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%` },
+      replacements: { searchTerm: `%${searchTerm}%`, published: published },
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((characters) => {
@@ -178,18 +209,23 @@ function searchCharacters(req, res) {
 
 function searchTaxa(req, res) {
   const searchTerm = req.query.searchTerm
-  const query = `SELECT t.taxon_id, t.genus, t.specific_epithet, t.notes, p.name as project_name, p.project_id FROM taxa t
+  const published = req.query.published == 'false' ? 0 : 1
+  let query = `SELECT t.taxon_id, t.genus, t.specific_epithet, t.notes, p.name as project_name, p.project_id, p.published FROM taxa t
     INNER JOIN projects p ON t.project_id = p.project_id
     WHERE
       (t.genus LIKE :searchTerm OR
       t.notes LIKE :searchTerm OR
       t.specific_epithet LIKE :searchTerm OR
-      t.otu LIKE :searchTerm) AND
+      t.otu LIKE :searchTerm OR
+      p.name LIKE :searchTerm) AND
       p.deleted = 0`
+  if (published === 1) {
+    query += ' AND p.published = :published'
+  }
 
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%` },
+      replacements: { searchTerm: `%${searchTerm}%`, published: published },
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((taxa) => {
@@ -207,18 +243,22 @@ function searchTaxa(req, res) {
 
 function searchMatrices(req, res) {
   const searchTerm = req.query.searchTerm
-  const query = `SELECT m.matrix_id, m.title, p.name as project_name, p.project_id FROM matrices m
+  const published = req.query.published == 'false' ? 0 : 1
+  let query = `SELECT m.matrix_id, m.title, p.name as project_name, p.project_id, p.published FROM matrices m
     INNER JOIN projects p ON m.project_id = p.project_id
     WHERE
       (m.title LIKE :searchTerm OR
       m.title_extended LIKE :searchTerm OR
       m.notes LIKE :searchTerm OR
       m.otu LIKE :searchTerm) AND
-      p.deleted = 0 AND m.published = 1`
+      p.deleted = 0`
+  if (published === 1) {
+    query += ' AND p.published = :published'
+  }
 
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%` },
+      replacements: { searchTerm: `%${searchTerm}%`, published: published },
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((matrices) => {
@@ -236,21 +276,26 @@ function searchMatrices(req, res) {
 
 function searchReferences(req, res) {
   const searchTerm = req.query.searchTerm
-  const query = `SELECT b.*, p.name as project_name FROM bibliographic_references b
+  const published = req.query.published == 'false' ? 0 : 1
+  let query = `SELECT b.*, p.name as project_name, p.published FROM bibliographic_references b
     INNER JOIN projects p ON b.project_id = p.project_id
     WHERE
-      b.article_title LIKE :searchTerm OR
+      (b.article_title LIKE :searchTerm OR
       b.journal_title LIKE :searchTerm OR
       b.monograph_title LIKE :searchTerm OR
       b.publisher LIKE :searchTerm OR
       b.abstract LIKE :searchTerm OR
       b.description LIKE :searchTerm OR
       b.keywords LIKE :searchTerm OR
-      p.name LIKE :searchTerm`
+      p.name LIKE :searchTerm) AND
+      p.deleted = 0`
+  if (published === 1) {
+    query += ' AND p.published = :published'
+  }
 
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%` },
+      replacements: { searchTerm: `%${searchTerm}%`, published: published },
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((references) => {

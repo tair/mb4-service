@@ -40,6 +40,10 @@ async function login(req, res, next) {
     for (const handler of authenticationHandlers) {
       if (handler.canHandle(email)) {
         const userResponse = await handler.handle(email, password)
+        // If this is a regular user (not anonymous reviewer), add role
+        if (userResponse.user_id) {
+          userResponse.access = await getRole(userResponse.user_id)
+        }
         // link with orcid profile
         if (req.body.orcid) {
           let user = await models.User.findOne({ where: { email: email } })
@@ -449,6 +453,19 @@ function getTokenExpiry(token) {
   const payload = Buffer.from(token.split('.')[1], 'base64')
   const expiry = JSON.parse(payload).exp // expiry in seconds
   return expiry
+}
+
+// Utility to get the user's role
+async function getRole(user_id) {
+  // Find the first role for the user (if multiple, pick the first)
+  const userRole = await models.UsersXRole.findOne({
+    where: { user_id },
+    include: [{ model: models.UserRole, as: 'role' }],
+  })
+  if (userRole && userRole.role) {
+    return userRole.role.code
+  }
+  return null
 }
 
 export {
