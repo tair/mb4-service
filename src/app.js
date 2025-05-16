@@ -13,6 +13,7 @@ import userRouter from './routes/user-route.js'
 import emailRouter from './routes/email-route.js'
 import homePageRouter from './routes/home-page-routes.js'
 import { initializeCache } from './util/stats-cache.js'
+import searchRouter from './routes/search-route.js'
 
 const app = express()
 
@@ -53,6 +54,7 @@ app.use('/users', userRouter)
 app.use('/tasks', taskRouter)
 app.use('/tilepic', tilepicRouter)
 app.use('/home-page', homePageRouter)
+app.use('/search', searchRouter)
 
 // Initialize stats cache
 initializeCache().catch((error) => {
