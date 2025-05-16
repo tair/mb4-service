@@ -10,27 +10,87 @@ export async function getMediaViews(req, res) {
 
 export async function createViews(req, res) {
   const values = req.body
-  const mediaView = models.MediaView.build(values)
+  const { name, ...otherData } = values
 
-  mediaView.set({
-    project_id: req.project.project_id,
-    user_id: req.user.user_id,
-  })
+  // Split names and create views
+  const viewNames = name
+    .split(',')
+    .map((n) => n.trim())
+    .filter((n) => n)
 
-  try {
-    const transaction = await sequelizeConn.transaction()
-    await mediaView.save({
-      transaction,
-      user: req.user,
+  if (viewNames.length === 0) {
+    res.status(400).json({
+      status: 'error',
+      message: 'At least one view name is required',
     })
-    await transaction.commit()
-  } catch (e) {
-    console.log(e)
-    res.status(500).json({ message: 'Failed to create view with server error' })
     return
   }
 
-  res.status(200).json({ view: mediaView })
+  // Check for duplicate names in the input
+  const uniqueNames = new Set(viewNames)
+  if (uniqueNames.size !== viewNames.length) {
+    res.status(400).json({
+      status: 'error',
+      message: 'Duplicate view names are not allowed in the input',
+    })
+    return
+  }
+
+  // Check for existing view names in the project
+  const existingViews = await models.MediaView.findAll({
+    where: {
+      project_id: req.project.project_id,
+      name: viewNames,
+    },
+  })
+
+  if (existingViews.length > 0) {
+    const existingNames = existingViews.map((view) => view.name)
+    res.status(400).json({
+      status: 'error',
+      message: 'Some view names already exist in this project',
+      existingNames,
+    })
+    return
+  }
+
+  const createdViews = []
+  try {
+    const transaction = await sequelizeConn.transaction()
+
+    for (const viewName of viewNames) {
+      const mediaView = models.MediaView.build({
+        ...otherData,
+        name: viewName,
+        project_id: req.project.project_id,
+        user_id: req.user.user_id,
+      })
+
+      await mediaView.save({
+        transaction,
+        user: req.user,
+      })
+      createdViews.push(mediaView)
+    }
+
+    await transaction.commit()
+
+    if (createdViews.length === 1) {
+      res.status(200).json({ view: createdViews[0] })
+    } else {
+      res.status(200).json({
+        status: 'ok',
+        message: `Successfully created ${createdViews.length} views`,
+        views: createdViews,
+      })
+    }
+  } catch (e) {
+    console.error('Error creating media views:', e)
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to create media views with server error',
+    })
+  }
 }
 
 export async function deleteViews(req, res) {
