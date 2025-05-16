@@ -76,6 +76,11 @@ export default class Folio extends Model {
             fields: [{ name: 'project_id' }],
           },
         ],
+        hooks: {
+          beforeUpdate: (folio) => {
+            folio.last_modified_on = time()
+          },
+        },
       }
     )
   }

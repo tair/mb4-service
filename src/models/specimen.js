@@ -127,6 +127,11 @@ export default class Specimen extends Model {
             fields: [{ name: 'project_id' }],
           },
         ],
+        hooks: {
+          beforeUpdate: (specimen) => {
+            specimen.last_modified_on = time()
+          },
+        },
       }
     )
   }
