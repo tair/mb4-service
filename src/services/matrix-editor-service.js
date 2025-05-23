@@ -1382,7 +1382,7 @@ export default class MatrixEditorService {
     }
   }
 
-  async setTaxaAccess(taxaIds, userId, groupId) {
+  async setTaxaAccess(taxaIds, groupId) {
     await this.checkCanDo(
       'editTaxon',
       'You are not allowed to modify taxa in this matrix'
@@ -1398,7 +1398,6 @@ export default class MatrixEditorService {
 
     await models.MatrixTaxaOrder.update(
       {
-        user_id: userId,
         group_id: groupId,
       },
       {
@@ -1415,7 +1414,6 @@ export default class MatrixEditorService {
     await transaction.commit()
     return {
       taxa_ids: taxaIds,
-      user_id: userId,
       group_id: groupId,
     }
   }
@@ -2764,13 +2762,9 @@ export default class MatrixEditorService {
         pmxg.membership_id = pxu.link_id
       WHERE
         m.matrix_id = ? AND pxu.user_id = ? AND
-      (mto.group_id = pmxg.group_id OR mto.group_id IS NULL OR mto.user_id IS NULL OR mto.user_id = ?)`,
+      (mto.group_id = pmxg.group_id OR mto.group_id IS NULL)`,
       {
-        replacements: [
-          this.matrix.matrix_id,
-          this.user.user_id,
-          this.user.user_id,
-        ],
+        replacements: [this.matrix.matrix_id, this.user.user_id],
       }
     )
     if (allowedTaxaRows.length == 0) {
@@ -5399,14 +5393,10 @@ export default class MatrixEditorService {
       LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
       WHERE
         ccl.matrix_id = ? AND pxu.user_id = ? AND
-        (mto.group_id = pmxg.group_id OR mto.user_id = ? OR mto.user_id IS NULL OR mto.group_id IS NULL)
+        (mto.group_id = pmxg.group_id OR mto.group_id IS NULL)
       GROUP BY ccl.character_id`,
       {
-        replacements: [
-          this.matrix.matrix_id,
-          this.user.user_id,
-          this.user.user_id,
-        ],
+        replacements: [this.matrix.matrix_id, this.user.user_id],
       }
     )
 
@@ -6157,7 +6147,7 @@ export default class MatrixEditorService {
       WHERE
         (c.state_id IS NULL OR c.is_npa = 1) AND
         pxu.user_id = ? AND cxm.matrix_id = ? AND cxm.set_by_automation = 1 AND
-        (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id IS NULL OR mto.user_id = pxu.user_id) AND
+        (mto.group_id = pmxg.group_id OR mto.group_id IS NULL) AND
         cxm.taxon_id IN (?) AND cxm.character_id IN (?)`,
       {
         replacements: [
@@ -6244,13 +6234,12 @@ export default class MatrixEditorService {
       LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
       WHERE
         cxm.matrix_id = ? AND cxm.set_by_automation = 1 AND
-        (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id IS NULL OR mto.user_id = ?) AND
+        (mto.group_id = pmxg.group_id OR mto.group_id IS NULL) AND
         cxm.taxon_id IN (?) AND cxm.character_id IN (?)`,
       {
         replacements: [
           this.user.user_id,
           this.matrix.matrix_id,
-          this.user.user_id,
           taxaIds,
           characterIds,
         ],
@@ -6459,14 +6448,9 @@ export default class MatrixEditorService {
       LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
       WHERE
         m.matrix_id = ? AND pxu.user_id = ? AND mto.taxon_id IN (?) AND
-        (mto.group_id = pmxg.group_id OR mto.group_id IS NULL OR mto.user_id IS NULL OR mto.user_id = ?)`,
+        (mto.group_id = pmxg.group_id OR mto.group_id IS NULL)`,
       {
-        replacements: [
-          this.matrix.matrix_id,
-          this.user.user_id,
-          taxaIds,
-          this.user.user_id,
-        ],
+        replacements: [this.matrix.matrix_id, this.user.user_id, taxaIds],
       }
     )
     if (count != taxaIds.length) {
