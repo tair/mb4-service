@@ -19,6 +19,7 @@ bibliographyRouter.post('/delete', controller.deleteBibliographies)
 bibliographyRouter.post('/edit', controller.editBibliographies)
 bibliographyRouter.post('/search', controller.search)
 bibliographyRouter.post('/upload', controller.uploadEndNoteXML)
+bibliographyRouter.get('/export', controller.exportEndNoteAsTabFile)
 
 bibliographyRouter.get('/:referenceId', controller.getBibliography)
 bibliographyRouter.post('/:referenceId/edit', controller.editBibliography)

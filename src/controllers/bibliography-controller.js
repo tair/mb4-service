@@ -228,6 +228,32 @@ export async function uploadEndNoteXML(req, res) {
           return keywordArray.map((k) => k.style['#text']).join(', ')
         }
 
+        const processAuthors = (authors) => {
+          const authorList = []
+          if (authors?.author) {
+            const authorArray = Array.isArray(authors.author)
+              ? authors.author
+              : [authors.author]
+
+            for (const author of authorArray) {
+              const authorName = author.style['#text']
+              const authorParts = authorName.split(',')
+              const surname = authorParts[0]?.trim()
+              const forename = authorParts[1]?.trim()
+              const middlename = authorParts[2]?.trim() || ''
+
+              if (surname) {
+                authorList.push({
+                  surname,
+                  forename: forename || '',
+                  middlename: middlename || '',
+                })
+              }
+            }
+          }
+          return authorList
+        }
+
         const bibliographyData = {
           project_id: projectId,
           user_id: req.user.user_id,
@@ -238,21 +264,43 @@ export async function uploadEndNoteXML(req, res) {
           monograph_title: '', // Required field, default empty string
           description: '', // Required field, default empty string
           place_of_publication: '', // Required field, default empty string
-          author_address: '', // Not present in the XML
+          author_address: getText(record['auth-address']),
           reference_type: parseInt(record['ref-type']?.['#text']) || 0,
           electronic_resource_num: getText(record['electronic-resource-num']),
-          lang: '', // Not present in the XML
-          worktype: '', // Not present in the XML
+          lang: getText(record['language']),
+          worktype: getText(record['work-type']),
           vol: getText(record.volume),
           num: getText(record.number),
           pubyear: getText(record.dates?.year),
-          publisher: getText(record.publisher),
-          collation: getText(record.pages),
+          publisher: (() => {
+            const publisher = getText(record.publisher)
+            const pubLocation = getText(record['pub-location'])
+            return pubLocation ? `${publisher}, ${pubLocation}` : publisher
+          })(),
+          collation: (() => {
+            if (!record.pages) return ''
+            const pages = Array.isArray(record.pages)
+              ? record.pages
+              : [record.pages]
+            return pages
+              .map((page) => getText(page))
+              .filter(Boolean)
+              .join('; ')
+          })(),
           isbn: getText(record.isbn),
           abstract: getText(record.abstract),
-          edition: '', // Not present in the XML
-          sect: '', // Not present in the XML
-          urls: record.urls?.['pdf-urls']?.url || '',
+          edition: getText(record.edition),
+          sect: getText(record.section),
+          urls: (() => {
+            if (!record.urls?.url) return ''
+            const urls = Array.isArray(record.urls.url)
+              ? record.urls.url
+              : [record.urls.url]
+            return urls
+              .map((url) => getText(url))
+              .filter(Boolean)
+              .join('\n')
+          })(),
           keywords: getKeywords(record.keywords),
           authors: JSON.stringify([]), // Initialize empty authors array
           secondary_authors: JSON.stringify([]), // Initialize empty secondary authors array
@@ -278,58 +326,12 @@ export async function uploadEndNoteXML(req, res) {
         }
 
         // Process primary authors
-        const primaryAuthors = []
-        if (record.contributors?.authors?.author) {
-          const authors = Array.isArray(record.contributors.authors.author)
-            ? record.contributors.authors.author
-            : [record.contributors.authors.author]
-
-          for (const author of authors) {
-            const authorName = author.style['#text']
-            const authorParts = authorName.split(',')
-            const surname = authorParts[0]?.trim()
-            const forename = authorParts[1]?.trim()
-            const middlename = authorParts[2]?.trim() || ''
-
-            if (surname) {
-              // Also add to primary authors array
-              primaryAuthors.push({
-                surname,
-                forename: forename || '',
-                middlename: middlename || '',
-              })
-              // No need to save to bibliography-author table
-            }
-          }
-        }
+        const primaryAuthors = processAuthors(record.contributors?.authors)
 
         // Process secondary authors
-        const secondaryAuthors = []
-        if (record.contributors?.['secondary-authors']?.author) {
-          const authors = Array.isArray(
-            record.contributors['secondary-authors'].author
-          )
-            ? record.contributors['secondary-authors'].author
-            : [record.contributors['secondary-authors'].author]
-
-          for (const author of authors) {
-            const authorName = author.style['#text']
-            const authorParts = authorName.split(',')
-            const surname = authorParts[0]?.trim()
-            const forename = authorParts[1]?.trim()
-            const middlename = authorParts[2]?.trim() || ''
-
-            if (surname) {
-              // Also add to secondary authors array
-              secondaryAuthors.push({
-                surname,
-                forename: forename || '',
-                middlename: middlename || '',
-              })
-              // No need to save to bibliography-author table
-            }
-          }
-        }
+        const secondaryAuthors = processAuthors(
+          record.contributors?.['secondary-authors']
+        )
 
         await bibliography.update(
           {
@@ -364,6 +366,95 @@ export async function uploadEndNoteXML(req, res) {
     console.error('Error processing EndNote XML:', error)
     res.status(500).json({
       message: 'Error processing EndNote XML file',
+      error: error.message,
+    })
+  }
+}
+
+export async function exportEndNoteAsTabFile(req, res) {
+  const projectId = req.project.project_id
+
+  try {
+    // Get all bibliographic references for the project
+    // no need for group_id
+    const [references] = await sequelizeConn.query(
+      `
+      SELECT br.*
+      FROM bibliographic_references br
+      INNER JOIN projects AS p ON p.project_id = br.project_id
+      WHERE p.project_id = ?
+    `,
+      {
+        replacements: [projectId],
+      }
+    )
+
+    // Start building the tab file content
+    let buffer = '*Generic\n'
+    buffer +=
+      'Reference Type\tAuthor\tSecondary Author\tYear\tTitle\tSecondary Title\tJournal\tPublisher\tVolume\tNumber\tPages\tSection\tISBN/ISSN\tAbstract\tAuthor Address\tKeywords\tLanguage\tEdition\tDOI\tURL\n'
+
+    // Process each reference
+    for (const ref of references) {
+      const row = []
+
+      // Reference Type
+      row.push(ref.reference_type)
+
+      // Primary Authors
+      const primaryAuthors =
+        typeof ref.authors === 'string'
+          ? JSON.parse(ref.authors || '[]')
+          : ref.authors || []
+      const primaryAuthorList = primaryAuthors.map((author) =>
+        `${author.surname}, ${author.forename} ${author.middlename}`.trim()
+      )
+      row.push(primaryAuthorList.join(';'))
+
+      // Secondary Authors
+      const secondaryAuthors =
+        typeof ref.secondary_authors === 'string'
+          ? JSON.parse(ref.secondary_authors || '[]')
+          : ref.secondary_authors || []
+      const secondaryAuthorList = secondaryAuthors.map((author) =>
+        `${author.surname}, ${author.forename} ${author.middlename}`.trim()
+      )
+      row.push(secondaryAuthorList.join(';'))
+
+      // Add remaining fields
+      row.push(ref.pubyear || '')
+      row.push(ref.article_title || '')
+      row.push(ref.article_secondary_title || '')
+      row.push(ref.journal_title || '')
+      row.push(ref.publisher || '')
+      row.push(ref.vol || '')
+      row.push(ref.num || '')
+      row.push(ref.collation || '')
+      row.push(ref.sect || '')
+      row.push(ref.isbn || '')
+      row.push(ref.abstract || '')
+      row.push(ref.author_address || '')
+      row.push(ref.keywords || '')
+      row.push(ref.lang || '')
+      row.push(ref.edition || '')
+      row.push(ref.electronic_resource_num || '')
+      row.push(ref.urls || '')
+
+      // Join fields with tabs and replace newlines with spaces
+      buffer += row.join('\t').replace(/[\n\r]/g, ' ') + '\n'
+    }
+
+    // Set response headers for file download
+    res.setHeader('Content-Type', 'text/tab-separated-values')
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=morphobank_bibliography_for_P${projectId}.txt`
+    )
+    res.send(buffer)
+  } catch (error) {
+    console.error('Error exporting EndNote tab file:', error)
+    res.status(500).json({
+      message: 'Error exporting EndNote tab file',
       error: error.message,
     })
   }
