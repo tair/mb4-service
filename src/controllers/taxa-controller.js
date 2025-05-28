@@ -365,8 +365,8 @@ export async function createCitation(req, res) {
   const existingCitation = await models.TaxaXBibliographicReference.findOne({
     where: {
       taxon_id: taxon.taxon_id,
-      reference_id: bibliography.reference_id
-    }
+      reference_id: bibliography.reference_id,
+    },
   })
 
   if (existingCitation) {

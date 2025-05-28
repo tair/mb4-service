@@ -179,13 +179,13 @@ export async function search(req, res) {
         `%${searchText}%`,
         `%${searchText}%`,
         `%${searchText}%`,
-        `%${searchText}%`
-      ]
+        `%${searchText}%`,
+      ],
     }
   )
 
   res.status(200).json({
-    results: rows.map(row => row.reference_id)
+    results: rows.map((row) => row.reference_id),
   })
 }
 

@@ -385,12 +385,13 @@ export async function createCitation(req, res) {
   }
 
   // Check for duplicate citation
-  const existingCitation = await models.SpecimensXBibliographicReference.findOne({
-    where: {
-      specimen_id: specimen.specimen_id,
-      reference_id: bibliography.reference_id
-    }
-  })
+  const existingCitation =
+    await models.SpecimensXBibliographicReference.findOne({
+      where: {
+        specimen_id: specimen.specimen_id,
+        reference_id: bibliography.reference_id,
+      },
+    })
 
   if (existingCitation) {
     res.status(400).json({ message: 'This citation already exists' })
