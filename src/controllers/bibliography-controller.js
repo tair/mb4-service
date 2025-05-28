@@ -142,15 +142,50 @@ export async function editBibliography(req, res) {
 }
 
 export async function search(req, res) {
-  // TODO(kenzley): Implement a real search instead of a random selection.
   const projectId = req.project.project_id
-  const bibliographies = await service.getBibliographiesByProjectId(projectId)
-  const bibliographyIds = bibliographies
-    .map((b) => b.reference_id)
-    .sort(() => 0.5 - Math.random())
-    .splice(0, 15)
+  const searchText = req.body.text || ''
+
+  if (!searchText.trim()) {
+    res.status(200).json({ results: [] })
+    return
+  }
+
+  const [rows] = await sequelizeConn.query(
+    `
+    SELECT reference_id
+    FROM bibliographic_references
+    WHERE project_id = ?
+    AND (
+      LOWER(article_title) LIKE LOWER(?) OR
+      LOWER(journal_title) LIKE LOWER(?) OR
+      LOWER(monograph_title) LIKE LOWER(?) OR
+      LOWER(publisher) LIKE LOWER(?) OR
+      LOWER(abstract) LIKE LOWER(?) OR
+      LOWER(description) LIKE LOWER(?) OR
+      LOWER(keywords) LIKE LOWER(?) OR
+      LOWER(authors) LIKE LOWER(?) OR
+      LOWER(secondary_authors) LIKE LOWER(?)
+    )
+    LIMIT 15
+    `,
+    {
+      replacements: [
+        projectId,
+        `%${searchText}%`,
+        `%${searchText}%`,
+        `%${searchText}%`,
+        `%${searchText}%`,
+        `%${searchText}%`,
+        `%${searchText}%`,
+        `%${searchText}%`,
+        `%${searchText}%`,
+        `%${searchText}%`
+      ]
+    }
+  )
+
   res.status(200).json({
-    results: bibliographyIds,
+    results: rows.map(row => row.reference_id)
   })
 }
 
