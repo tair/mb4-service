@@ -61,6 +61,7 @@ export async function getSpecimenDetails(projectId) {
   // biblicoreferences
   return rows.map((r) => {
     const obj = {
+      specimen_id: r.specimen_id, // need specimen_id for analytic logging
       reference_source: getReferenceSourceText(r.reference_source),
       institution_code: r.institution_code,
       collection_code: r.collection_code,
