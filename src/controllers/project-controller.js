@@ -434,3 +434,63 @@ export async function retrieveDOI(req, res, next) {
     next(error)
   }
 }
+
+export async function createBulkMediaViews(req, res) {
+  try {
+    const { projectId } = req.params
+    const { name, ...otherData } = req.body
+
+    // Validate project exists and user has access
+    const project = await models.Project.findByPk(projectId)
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' })
+    }
+
+    // Check if user has access to the project
+    const projectUser = await models.ProjectsXUser.findOne({
+      where: {
+        project_id: projectId,
+        user_id: req.user.id,
+      },
+    })
+
+    if (!projectUser) {
+      return res.status(403).json({ message: 'Access denied' })
+    }
+
+    // Split names and create views
+    const viewNames = name
+      .split(',')
+      .map((n) => n.trim())
+      .filter((n) => n)
+
+    if (viewNames.length === 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'At least one view name is required',
+      })
+    }
+
+    const createdViews = []
+    for (const viewName of viewNames) {
+      const view = await models.MediaView.create({
+        project_id: projectId,
+        name: viewName,
+        ...otherData,
+      })
+      createdViews.push(view)
+    }
+
+    return res.json({
+      status: 'ok',
+      message: `Successfully created ${createdViews.length} views`,
+      views: createdViews,
+    })
+  } catch (error) {
+    console.error('Error creating bulk media views:', error)
+    return res.status(500).json({
+      status: 'error',
+      message: 'Failed to create media views',
+    })
+  }
+}
