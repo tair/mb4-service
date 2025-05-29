@@ -1,8 +1,11 @@
 import express from 'express'
 import * as searchController from '../controllers/search-controller.js'
 import { authenticateToken } from './auth-interceptor.js'
+import { authorizeUser } from './user-interceptor.js'
 
-const searchRouter = express.Router()
+const searchRouter = express.Router({ mergeParams: true })
+searchRouter.use(authenticateToken)
+searchRouter.use(authorizeUser)
 
 searchRouter.get('/', searchController.searchInstitutions)
 searchRouter.get('/projects', searchController.searchProjects)

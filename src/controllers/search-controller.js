@@ -1,7 +1,7 @@
-import { validationResult } from 'express-validator'
 import { Sequelize } from 'sequelize'
 import { models } from '../models/init-models.js'
 import sequelizeConn from '../util/db.js'
+import { getRoles } from '../services/user-roles-service.js'
 
 function searchInstitutions(req, res) {
   const searchTerm = req.query.searchTerm
@@ -27,15 +27,30 @@ function searchInstitutions(req, res) {
     })
 }
 
-function searchProjects(req, res) {
+async function searchProjects(req, res) {
+  console.log('=== DEBUG INFO ===')
+  console.log('req.credential:', req.credential)
+  console.log('req.user:', req.user)
+  console.log('cookies:', req.cookies)
+  console.log('=================')
+  const userAccess = req.user?.user_id
+    ? (await getRoles(req.user.user_id)) || []
+    : []
+  console.log(userAccess)
   const searchTerm = req.query.searchTerm
-  const published = req.query.published == 'false' ? 0 : 1
+
+  // Determine search scope based on user roles
+  const canAccessUnpublished =
+    userAccess.includes('curator') || userAccess.includes('admin')
 
   let query =
     'SELECT project_id, name, article_authors, journal_year, article_title, journal_title, journal_volume article_pp, published FROM projects WHERE (name LIKE :searchTerm OR description LIKE :searchTerm OR journal_title LIKE :searchTerm OR article_title LIKE :searchTerm) AND deleted = 0'
-  if (published === 1) {
+
+  // If user doesn't have curator/admin role, only show published projects
+  if (!canAccessUnpublished) {
     query += ' AND published = 1'
   }
+
   query += ' ORDER BY published_on desc'
 
   sequelizeConn
