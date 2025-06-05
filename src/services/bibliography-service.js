@@ -45,6 +45,17 @@ export async function getBibliographiesByIds(referenceIds) {
   return rows
 }
 
+export async function getBibliography(projectId, referenceId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT *
+      FROM bibliographic_references
+      WHERE project_id = ? AND reference_id = ?`,
+    { replacements: [projectId, referenceId] }
+  )
+  return rows
+}
+
 export async function getMediaIds(referenceId, mediaIds) {
   const [rows] = await sequelizeConn.query(
     `
