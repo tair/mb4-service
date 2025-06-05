@@ -1,7 +1,7 @@
-import { validationResult } from 'express-validator'
 import { Sequelize } from 'sequelize'
 import { models } from '../models/init-models.js'
 import sequelizeConn from '../util/db.js'
+import { getUserAccessInfo } from '../util/user-access.js'
 
 function searchInstitutions(req, res) {
   const searchTerm = req.query.searchTerm
@@ -27,15 +27,17 @@ function searchInstitutions(req, res) {
     })
 }
 
-function searchProjects(req, res) {
+async function searchProjects(req, res) {
+  const { canAccessUnpublished } = await getUserAccessInfo(req.user)
   const searchTerm = req.query.searchTerm
-  const published = req.query.published == 'false' ? 0 : 1
 
   let query =
     'SELECT project_id, name, article_authors, journal_year, article_title, journal_title, journal_volume article_pp, published FROM projects WHERE (name LIKE :searchTerm OR description LIKE :searchTerm OR journal_title LIKE :searchTerm OR article_title LIKE :searchTerm) AND deleted = 0'
-  if (published === 1) {
+
+  if (!canAccessUnpublished) {
     query += ' AND published = 1'
   }
+
   query += ' ORDER BY published_on desc'
 
   sequelizeConn
@@ -56,9 +58,10 @@ function searchProjects(req, res) {
     })
 }
 
-function searchMedia(req, res) {
+async function searchMedia(req, res) {
+  const { canAccessUnpublished } = await getUserAccessInfo(req.user)
   const searchTerm = req.query.searchTerm
-  const published = req.query.published == 'false' ? 0 : 1
+
   let query = `SELECT m.media_id, m.media, m.notes, 
     p.name as project_name, p.project_id, p.published,
     s.specimen_id, s.description, s.reference_source, s.institution_code, s.collection_code, s.catalog_number,
@@ -69,13 +72,14 @@ function searchMedia(req, res) {
     INNER JOIN taxa AS t ON t.taxon_id = txs.taxon_id
     LEFT JOIN projects p ON m.project_id = p.project_id
     WHERE (m.notes LIKE :searchTerm OR s.description LIKE :searchTerm OR t.genus LIKE :searchTerm OR t.specific_epithet LIKE :searchTerm) AND p.deleted = 0`
-  if (published === 1) {
+
+  if (!canAccessUnpublished) {
     query += ' AND p.published = 1'
   }
 
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%`, published: published },
+      replacements: { searchTerm: `%${searchTerm}%` },
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((media) => {
@@ -91,9 +95,10 @@ function searchMedia(req, res) {
     })
 }
 
-function searchMediaViews(req, res) {
+async function searchMediaViews(req, res) {
+  const { canAccessUnpublished } = await getUserAccessInfo(req.user)
   const searchTerm = req.query.searchTerm
-  const published = req.query.published == 'false' ? 0 : 1
+
   let query = `SELECT
     mv.view_id,
     mv.name AS view_name,
@@ -105,14 +110,15 @@ function searchMediaViews(req, res) {
   INNER JOIN
     projects p ON mv.project_id = p.project_id
   WHERE
-    (mv.name LIKE :searchTerm OR p.name LIKE :searchTerm) AND p.deleted = 0`
-  if (published === 1) {
-    query += ' AND p.published = :published'
+    (mv.name LIKE :searchTerm ) AND p.deleted = 0`
+
+  if (!canAccessUnpublished) {
+    query += ' AND p.published = 1'
   }
 
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%`, published: published },
+      replacements: { searchTerm: `%${searchTerm}%` },
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((mediaViews) => {
@@ -128,9 +134,10 @@ function searchMediaViews(req, res) {
     })
 }
 
-function searchSpecimens(req, res) {
+async function searchSpecimens(req, res) {
+  const { canAccessUnpublished } = await getUserAccessInfo(req.user)
   const searchTerm = req.query.searchTerm
-  const published = req.query.published == 'false' ? 0 : 1
+
   let query = `SELECT 
     s.specimen_id, s.description, s.reference_source, s.institution_code, s.collection_code, s.catalog_number,
     p.name as project_name,
@@ -150,16 +157,16 @@ function searchSpecimens(req, res) {
      s.occurrence_id LIKE :searchTerm OR
      t.genus LIKE :searchTerm OR
      t.specific_epithet LIKE :searchTerm OR
-     t.notes LIKE :searchTerm OR
-     p.name LIKE :searchTerm)
+     t.notes LIKE :searchTerm)
     AND p.deleted = 0`
-  if (published === 1) {
-    query += ' AND p.published = :published'
+
+  if (!canAccessUnpublished) {
+    query += ' AND p.published = 1'
   }
 
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%`, published: published },
+      replacements: { searchTerm: `%${searchTerm}%` },
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((specimens) => {
@@ -175,23 +182,24 @@ function searchSpecimens(req, res) {
     })
 }
 
-function searchCharacters(req, res) {
+async function searchCharacters(req, res) {
+  const { canAccessUnpublished } = await getUserAccessInfo(req.user)
   const searchTerm = req.query.searchTerm
-  const published = req.query.published == 'false' ? 0 : 1
+
   let query = `SELECT c.character_id, c.name, c.description, p.name as project_name, p.project_id, p.published FROM characters c
     INNER JOIN projects p ON c.project_id = p.project_id
     WHERE
       (c.name LIKE :searchTerm OR
-      c.description LIKE :searchTerm OR
-      p.name LIKE :searchTerm) AND
+      c.description LIKE :searchTerm) AND
       p.deleted = 0`
-  if (published === 1) {
-    query += ' AND p.published = :published'
+
+  if (!canAccessUnpublished) {
+    query += ' AND p.published = 1'
   }
 
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%`, published: published },
+      replacements: { searchTerm: `%${searchTerm}%` },
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((characters) => {
@@ -207,25 +215,26 @@ function searchCharacters(req, res) {
     })
 }
 
-function searchTaxa(req, res) {
+async function searchTaxa(req, res) {
+  const { canAccessUnpublished } = await getUserAccessInfo(req.user)
   const searchTerm = req.query.searchTerm
-  const published = req.query.published == 'false' ? 0 : 1
+
   let query = `SELECT t.taxon_id, t.genus, t.specific_epithet, t.notes, p.name as project_name, p.project_id, p.published FROM taxa t
     INNER JOIN projects p ON t.project_id = p.project_id
     WHERE
       (t.genus LIKE :searchTerm OR
       t.notes LIKE :searchTerm OR
       t.specific_epithet LIKE :searchTerm OR
-      t.otu LIKE :searchTerm OR
-      p.name LIKE :searchTerm) AND
+      t.otu LIKE :searchTerm) AND
       p.deleted = 0`
-  if (published === 1) {
-    query += ' AND p.published = :published'
+
+  if (!canAccessUnpublished) {
+    query += ' AND p.published = 1'
   }
 
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%`, published: published },
+      replacements: { searchTerm: `%${searchTerm}%` },
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((taxa) => {
@@ -241,9 +250,10 @@ function searchTaxa(req, res) {
     })
 }
 
-function searchMatrices(req, res) {
+async function searchMatrices(req, res) {
+  const { canAccessUnpublished } = await getUserAccessInfo(req.user)
   const searchTerm = req.query.searchTerm
-  const published = req.query.published == 'false' ? 0 : 1
+
   let query = `SELECT m.matrix_id, m.title, p.name as project_name, p.project_id, p.published FROM matrices m
     INNER JOIN projects p ON m.project_id = p.project_id
     WHERE
@@ -252,13 +262,14 @@ function searchMatrices(req, res) {
       m.notes LIKE :searchTerm OR
       m.otu LIKE :searchTerm) AND
       p.deleted = 0`
-  if (published === 1) {
-    query += ' AND p.published = :published'
+
+  if (!canAccessUnpublished) {
+    query += ' AND p.published = 1'
   }
 
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%`, published: published },
+      replacements: { searchTerm: `%${searchTerm}%` },
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((matrices) => {
@@ -274,9 +285,10 @@ function searchMatrices(req, res) {
     })
 }
 
-function searchReferences(req, res) {
+async function searchReferences(req, res) {
+  const { canAccessUnpublished } = await getUserAccessInfo(req.user)
   const searchTerm = req.query.searchTerm
-  const published = req.query.published == 'false' ? 0 : 1
+
   let query = `SELECT b.*, p.name as project_name, p.published FROM bibliographic_references b
     INNER JOIN projects p ON b.project_id = p.project_id
     WHERE
@@ -286,16 +298,16 @@ function searchReferences(req, res) {
       b.publisher LIKE :searchTerm OR
       b.abstract LIKE :searchTerm OR
       b.description LIKE :searchTerm OR
-      b.keywords LIKE :searchTerm OR
-      p.name LIKE :searchTerm) AND
+      b.keywords LIKE :searchTerm) AND
       p.deleted = 0`
-  if (published === 1) {
-    query += ' AND p.published = :published'
+
+  if (!canAccessUnpublished) {
+    query += ' AND p.published = 1'
   }
 
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%`, published: published },
+      replacements: { searchTerm: `%${searchTerm}%` },
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((references) => {
