@@ -48,6 +48,8 @@ projectsRouter.get('/journal-cover', controller.getJournalCover)
 projectsRouter.post('/create', upload.single('file'), controller.createProject)
 projectsRouter.post('/doi', controller.retrieveDOI)
 
+projectsRouter.post('/update-cipres-jobs', controller.syncCipresJobs)
+
 // This is a sub-route focused on /projects/<ID>
 const projectRouter = express.Router({ mergeParams: true })
 projectsRouter.use('/:projectId/', projectRouter)

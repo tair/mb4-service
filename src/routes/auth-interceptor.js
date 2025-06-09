@@ -4,6 +4,12 @@ import config from '../config.js'
 
 export function authenticateToken(req, res, next) {
   // Return 401 when token is not present or in a invalid format in the header.
+  if (config.auth.applyFakeCredential != null && config.auth.applyFakeCredential == 'true') {
+    req.credential = config.auth.fakeCredential
+    next()
+    return
+  }
+
   if (!req.cookies['authorization']) {
     return res.status(401).json({ message: 'Auth token not found.' })
   }

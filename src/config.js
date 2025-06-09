@@ -42,11 +42,18 @@ const config = {
     accessTokenSecret: process.env.ACCESS_TOKEN_SECRET,
     refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET,
     jwtTokenExpiresIn: process.env.JWT_TOKEN_EXPIRES_IN,
+    applyFakeCredential: process.env.APPLY_FAKE_CREDENTIAL,
+    fakeCredential: {name: 'placeholder', email: 'placeholder@abcefg.edu', user_id: 888, access: [], iat: 1749419431, exp: 1749421231}
   },
   email: {
     region: process.env.AWS_REGION,
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+  cipres: {
+    key: process.env.CIPRES_KEY,
+    username: process.env.CIPRES_USERNAME,
+    password: process.env.CIPRES_PASSWORD,
   },
 }
 

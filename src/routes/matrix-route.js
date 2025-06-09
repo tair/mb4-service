@@ -20,5 +20,6 @@ matrixRouter.get(
 
 matrixRouter.post('/upload', upload.single('file'), controller.uploadMatrix)
 matrixRouter.post('/:matrixId/setPreference', controller.setPreference)
+matrixRouter.post('/:matrixId/run', controller.run)
 
 export default matrixRouter
