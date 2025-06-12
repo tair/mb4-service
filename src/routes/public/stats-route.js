@@ -5,6 +5,7 @@ import * as dataDumpController from '../../controllers/datadump-controller.js'
 const statsRouter = express.Router()
 
 statsRouter.get('/stats_dump', dataDumpController.statsDump)
+statsRouter.get('/project_stats_dump', dataDumpController.projectStatsDump)
 
 statsRouter.get(
   '/project_views_last_30d',

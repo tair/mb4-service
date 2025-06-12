@@ -8,6 +8,7 @@ const dir = 'data'
 const mediaDir = 'media_files'
 const detailDir = 'prj_details'
 const statsDir = 'stats'
+const projectStatsDir = 'project_stats'
 
 async function statsDump(req, res) {
   try {
@@ -103,4 +104,52 @@ async function dataDump(req, res) {
   }
 }
 
-export { dataDump, statsDump }
+async function projectStatsDump(req, res) {
+  try {
+    console.log('Start dumping project stats data...')
+
+    const projects = await projectsService.getProjects()
+    utilService.createDir(`${dir}/${projectStatsDir}`)
+
+    const matrixMap = await projectDetailService.getMatrixMap()
+    const folioMap = await projectDetailService.getFolioMap()
+    const documentMap = await projectDetailService.getDocumentMap()
+
+    for (let i = 0; i < projects.length; i++) {
+      const project = projects[i]
+      const projectId = project.project_id
+      
+      const project_views = await projectDetailService.getProjectViews(
+        projectId,
+        matrixMap,
+        folioMap
+      )
+      const project_downloads = await projectDetailService.getProjectDownloads(
+        projectId,
+        matrixMap,
+        documentMap
+      )
+
+      const projectStats = {
+        project_id: projectId,
+        project_views: project_views,
+        project_downloads: project_downloads,
+        generated_at: new Date().toISOString()
+      }
+
+      await utilService.writeToFile(
+        `../${dir}/${projectStatsDir}/prj_${projectId}.json`,
+        JSON.stringify(projectStats, null, 2)
+      )
+    }
+
+    console.log('Dumped project stats data - DONE!')
+    res.status(200).json('done!')
+    return
+  } catch (err) {
+    console.error(`Error while dumping project stats data. `, err.message)
+    res.status(500).json({ message: 'Error while running project stats dump process.' })
+  }
+}
+
+export { dataDump, statsDump, projectStatsDump }

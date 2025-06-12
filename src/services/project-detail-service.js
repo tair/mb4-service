@@ -129,7 +129,7 @@ async function getProjectOverview(projectId, matrixMap, folioMap, documentMap) {
   return result
 }
 
-async function getProjectViews(projectId, matrixMap, folioMap) {
+export async function getProjectViews(projectId, matrixMap, folioMap) {
   const rows = await statsService.getProjectViews(projectId)
   let total = 0
   let views = {}
