@@ -65,13 +65,6 @@ async function login(req, res, next) {
           accessTokenExpiry: expiry,
           user: userResponse,
         })
-        if (config.auth.applyFakeCredential != null && config.auth.applyFakeCredential == 'true') {
-          config.auth.fakeCredential.name = userResponse.name
-          config.auth.fakeCredential.email = userResponse.email
-          config.auth.fakeCredential.user_id = userResponse.user_id
-          config.auth.fakeCredential.iat = expiry
-          config.auth.fakeCredential.exp = expiry
-        }
         return
       }
     }
