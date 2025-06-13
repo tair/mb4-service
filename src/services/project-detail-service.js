@@ -98,7 +98,7 @@ export async function getProjectDetails(
 async function getProjectOverview(projectId, matrixMap, folioMap, documentMap) {
   const summary = await projectService.getProject(projectId)
   const matrices = await matrixService.getMatricesDetails(projectId)
-  // const projectStats = await projectStatsService.getProjectStats(projectId)
+  const projectStats = await projectStatsService.getProjectStats(projectId)
   const taxas = await projectStatsService.getTaxaStats(projectId)
   const members = await projectStatsService.getMembersStats(projectId)
   const image_props = await mediaService.getImageProps(
