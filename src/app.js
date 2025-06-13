@@ -15,6 +15,7 @@ import homePageRouter from './routes/home-page-routes.js'
 import { initializeCache } from './util/stats-cache.js'
 import searchRouter from './routes/search-route.js'
 import analyticsRouter from './routes/analytics-route.js'
+import s3Router from './routes/s3-route.js'
 
 const app = express()
 
@@ -57,6 +58,7 @@ app.use('/tilepic', tilepicRouter)
 app.use('/home-page', homePageRouter)
 app.use('/search', searchRouter)
 app.use('/analytics', analyticsRouter)
+app.use('/s3', s3Router)
 
 // Initialize stats cache
 initializeCache().catch((error) => {
