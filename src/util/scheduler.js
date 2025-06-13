@@ -75,11 +75,11 @@ async function runProjectStatsDump() {
 }
 
 export function startScheduler() {
-  // Run every day at 10:39 AM
-  // cron.schedule('1 22 * * *', runProjectStatsDump, {
-  //   scheduled: true,
-  //   timezone: "America/Chicago"
-  // })
+  // Run every day at 10:01 PM
+  cron.schedule('1 22 * * *', runProjectStatsDump, {
+    scheduled: true,
+    timezone: "America/Chicago"
+  })
   
   console.log('Project stats dump scheduler is currently disabled')
 }

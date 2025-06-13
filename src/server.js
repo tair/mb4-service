@@ -59,7 +59,7 @@ sequelizeConn
   .then(() => {
     server.listen(port)
     // Start the project stats dump scheduler
-    startScheduler()
+    // startScheduler()
   })
   .catch((err) => {
     console.log(err)
