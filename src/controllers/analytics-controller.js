@@ -8,6 +8,11 @@ export async function logProjectView(req, res) {
     // For testing so no auth is required
     // const session_key = req.headers['x-session-key'] || 'testsession1234567890'
     const session_key = req.headers['x-session-key']
+    
+    if (!session_key || session_key.trim() === '') {
+      return res.status(200).json({ message: 'Project view ignored (no session)' })
+    }
+    
     if (!project_id) {
       return res.status(400).json({ message: 'project_id is required' })
     }
@@ -31,6 +36,11 @@ export async function logDownload(req, res) {
     // For testing so no auth is required
     // const session_key = req.headers['x-session-key'] || 'testsession1234567890'
     const session_key = req.headers['x-session-key']
+    
+    if (!session_key || session_key.trim() === '') {
+      return res.status(200).json({ message: 'Download ignored (no session)' })
+    }
+    
     if (!project_id || !download_type) {
       return res.status(400).json({ message: 'project_id and download_type are required' })
     }
