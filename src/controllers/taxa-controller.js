@@ -361,6 +361,19 @@ export async function createCitation(req, res) {
     return
   }
 
+  // Check for duplicate citation
+  const existingCitation = await models.TaxaXBibliographicReference.findOne({
+    where: {
+      taxon_id: taxon.taxon_id,
+      reference_id: bibliography.reference_id,
+    },
+  })
+
+  if (existingCitation) {
+    res.status(400).json({ message: 'This citation already exists' })
+    return
+  }
+
   const citation = models.TaxaXBibliographicReference.build(values)
   citation.set({
     taxon_id: taxon.taxon_id,

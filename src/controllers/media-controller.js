@@ -468,6 +468,20 @@ export async function createCitation(req, res) {
       return
     }
 
+    // Check for duplicate citation
+    const existingCitation =
+      await models.MediaFilesXBibliographicReference.findOne({
+        where: {
+          media_id: media.media_id,
+          reference_id: bibliography.reference_id,
+        },
+      })
+
+    if (existingCitation) {
+      res.status(400).json({ message: 'This citation already exists' })
+      return
+    }
+
     const citation = models.MediaFilesXBibliographicReference.build(values)
     citation.set({
       media_id: media.media_id,

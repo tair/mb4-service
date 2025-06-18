@@ -107,17 +107,17 @@ async function getProjectOverview(projectId, matrixMap, folioMap, documentMap) {
     summary.exemplar_media_id
   )
   const insts = await institutionService.fetchInstitutions(projectId)
-  const project_views = await getProjectViews(projectId, matrixMap, folioMap)
-  const project_downloads = await getProjectDownloads(
-    projectId,
-    matrixMap,
-    documentMap
-  )
+  // const project_views = await getProjectViews(projectId, matrixMap, folioMap)
+  // const project_downloads = await getProjectDownloads(
+  //   projectId,
+  //   matrixMap,
+  //   documentMap
+  // )
 
   const result = {
     members: members,
-    project_downloads: project_downloads,
-    project_views: project_views,
+    // project_downloads: project_downloads,
+    // project_views: project_views,
     matrices: matrices,
     institutions: insts,
     image_props: image_props,
@@ -129,7 +129,7 @@ async function getProjectOverview(projectId, matrixMap, folioMap, documentMap) {
   return result
 }
 
-async function getProjectViews(projectId, matrixMap, folioMap) {
+export async function getProjectViews(projectId, matrixMap, folioMap) {
   const rows = await statsService.getProjectViews(projectId)
   let total = 0
   let views = {}
