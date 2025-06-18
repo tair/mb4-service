@@ -28,9 +28,9 @@ export default class CipresRequestService {
         cipres_settings: cipresSettings,
       }
       try {
-        this.request = await models.CipresRequest.build(formDataForSubmission)
+        const request = await models.CipresRequest.build(formDataForSubmission)
         const transaction = await sequelizeConn.transaction()
-        await this.request.save({ user: userIn, transaction: transaction })
+        await request.save({ user: userIn, transaction: transaction })
         await transaction.commit()
         return {message: `Your job ${jobnameIn} has been submitted to CIPRES`}
       }
@@ -41,10 +41,36 @@ export default class CipresRequestService {
     return {message: `Failed to submit your job ${jobnameIn} to CIPRES`}
   }
 
+  static async deleteCipresRequest( matrixId, userIn, jobNameIn, cipresJobId) {
+    const response = await CipresRequestService.deleteCipresJob(cipresJobId)
+    if (response != null && !(response.includes("Fail") || response.includes("fail"))) {
+      try {
+        const transaction = await sequelizeConn.transaction()
+        await models.CipresRequest.destroy({
+          where: {
+            matrix_id: matrixId,
+            user_id: userIn?.user_id,
+            cipres_job_id: cipresJobId,
+            jobname: jobNameIn,
+          },
+          transaction: transaction,
+          user: userIn,
+        })
+
+        await transaction.commit()
+        return {message: `Your job ${jobNameIn} has been deleted`}
+      }
+      catch (error) {
+        console.error(error)
+      }
+    }
+    return {message: `Failed to delete your job ${jobNameIn}`}
+  }
+
   static async getCipresJobs(matrixIds, userId) {
     const [rows] = await sequelizeConn.query(
     `   
-        SELECT matrix_id, user_id, jobname, FROM_UNIXTIME(created_on, '%Y-%m-%d %h:%i:%s') created_on,  cipres_tool, cipres_last_status, cipres_settings, notes 
+        SELECT matrix_id, user_id, jobname, FROM_UNIXTIME(created_on, '%Y-%m-%d %h:%i:%s') created_on,  cipres_job_id, cipres_tool, cipres_last_status, cipres_settings, notes
         FROM cipres_requests
         WHERE matrix_id IN (?) and user_id = ? order by created_on desc`,
        { replacements: [matrixIds, userId] }
@@ -117,28 +143,6 @@ export default class CipresRequestService {
     return jobStage
   }
 
-  static async deleteCipresJob(jobHandle) {
-    let jobStage = ''
-    try {
-      await axios.delete(
-        `${URL}/job/${CRA_USER}/${jobHandle}`,
-        {
-            headers: {
-              'cipres-appkey':`${KEY}`,
-            },
-            auth: {
-              username: `${CRA_USER}`,
-              password: `${PASSWORD}`
-            },
-          }
-        )
-    } catch (error) {
-      // console.error(error)
-      return false
-    }
-    return true 
-  }
-
   static async submitCipresJob(formDataForSubmission) {
     try {
       const response = await axios.post(
@@ -165,5 +169,52 @@ export default class CipresRequestService {
       console.error(error)
     }
     return null
+  }
+
+  static async deleteCipresJob(cipresJobId) {
+    try {
+      await axios.delete(
+        `${URL}/job/${CRA_USER}/${cipresJobId}`,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'cipres-appkey':`${KEY}`,
+          },
+          auth: {
+            username: `${CRA_USER}`,
+            password: `${PASSWORD}`
+          },
+        }
+      )
+      try {
+        const response = await axios.get(
+          `${URL}/job/${CRA_USER}/${cipresJobId}`,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              'cipres-appkey':`${KEY}`,
+            },
+            auth: {
+              username: `${CRA_USER}`,
+              password: `${PASSWORD}`
+            },
+          }
+        )
+        return "Failed to delete job " + cipresJobId
+      } catch (error) {
+        if (error.response?.data?.indexOf("Job Not Found") < 0)
+          return "Failed to delete job " + cipresJobId
+      }
+    } catch (error) {
+      //if (error.response?.data != null)
+      //  console.error(error.response.data)
+      //else
+      //  console.error(error)
+      if (error.response?.data?.indexOf("Job Not Found") < 0)
+      {
+        return "Failed to delete job " + cipresJobId
+      }
+    }
+    return "Successfully deleted job " + cipresJobId
   }
 }

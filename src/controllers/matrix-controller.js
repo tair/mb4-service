@@ -267,6 +267,26 @@ export async function run(req, res) {
   res.status(200).json({ message: msg.message })
 }
 
+export async function deleteJob(req, res) {
+  const matrixId = parseInt(req.params.matrixId)
+  if (!matrixId) {
+    res
+      .status(400)
+      .json({ message: 'The request must contain a matrix ID.' })
+    return
+  }
+  const jobCID = req.query.cipresJobId
+  if (!jobCID) {
+    res
+      .status(400)
+      .json({ message: 'The request must contain a Cipres Job ID.' })
+    return
+  }
+  const msg = await CipresRequestService.deleteCipresRequest( matrixId, req.user, req.query.jobName, jobCID)
+
+  res.status(200).json({ message: msg.message })
+}
+
 export async function download(req, res) {
   const matrixId = parseInt(req.params.matrixId)
   if (!matrixId) {

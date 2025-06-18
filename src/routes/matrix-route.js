@@ -21,5 +21,6 @@ matrixRouter.get(
 matrixRouter.post('/upload', upload.single('file'), controller.uploadMatrix)
 matrixRouter.post('/:matrixId/setPreference', controller.setPreference)
 matrixRouter.post('/:matrixId/run', controller.run)
+matrixRouter.post('/:matrixId/deleteJob', controller.deleteJob)
 
 export default matrixRouter
