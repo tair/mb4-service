@@ -117,6 +117,11 @@ export default class CellNote extends Model {
             fields: [{ name: 'character_id' }],
           },
         ],
+        hooks: {
+          beforeUpdate: (cellNote) => {
+            cellNote.last_modified_on = time()
+          },
+        },
       }
     )
   }

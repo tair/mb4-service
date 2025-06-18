@@ -12,9 +12,11 @@ import { models } from '../models/init-models.js'
 import sequelizeConn from '../util/db.js'
 import * as matrixService from '../services/matrix-service.js'
 import * as partitionService from '../services/partition-service.js'
+import { getRoles } from '../services/user-roles-service.js'
 
 export async function getMatrices(req, res) {
-  const projectId = req.params.projectId
+  const projectId = parseInt(req.params.projectId)
+
   try {
     const [matrices, partitions] = await Promise.all([
       matrixService.getMatrices(projectId),
@@ -63,6 +65,186 @@ export async function getMatrices(req, res) {
   } catch (e) {
     console.error('Error while getting matrix list.', e)
     res.status(500).json({ message: 'Error while fetching matrix list.' })
+  }
+}
+
+export async function getMatrix(req, res) {
+  const projectId = parseInt(req.params.projectId)
+  const matrixId = parseInt(req.params.matrixId)
+
+  if (!matrixId) {
+    res.status(400).json({ message: 'Matrix ID is required' })
+    return
+  }
+
+  try {
+    const matrix = await matrixService.getMatrix(matrixId)
+
+    if (!matrix) {
+      res.status(404).json({ message: 'Matrix not found' })
+      return
+    }
+
+    // Verify the matrix belongs to the project
+    if (matrix.project_id !== projectId) {
+      res.status(404).json({ message: 'Matrix not found in this project' })
+      return
+    }
+
+    res.status(200).json(matrix)
+  } catch (e) {
+    console.error('Error while getting matrix.', e)
+    res.status(500).json({ message: 'Error while fetching matrix.' })
+  }
+}
+
+export async function updateMatrix(req, res) {
+  const projectId = parseInt(req.params.projectId)
+  const matrixId = parseInt(req.params.matrixId)
+
+  if (!matrixId) {
+    res.status(400).json({ message: 'Matrix ID is required' })
+    return
+  }
+
+  try {
+    // First verify the matrix exists and belongs to the project
+    const existingMatrix = await matrixService.getMatrix(matrixId)
+
+    if (!existingMatrix) {
+      res.status(404).json({ message: 'Matrix not found' })
+      return
+    }
+
+    if (existingMatrix.project_id !== projectId) {
+      res.status(404).json({ message: 'Matrix not found in this project' })
+      return
+    }
+
+    // Prepare updates object
+    const updates = {}
+    if (req.body.title !== undefined) {
+      updates.title = req.body.title
+    }
+    if (req.body.notes !== undefined) {
+      updates.notes = req.body.notes
+    }
+    if (req.body.published !== undefined) {
+      updates.published = req.body.published
+    }
+    if (req.body.otu !== undefined) {
+      updates.otu = req.body.otu
+    }
+    if (req.body.other_options !== undefined) {
+      updates.other_options = req.body.other_options
+    }
+
+    // Update the matrix
+    const updatedMatrix = await matrixService.updateMatrix(
+      matrixId,
+      updates,
+      req.user
+    )
+
+    res.status(200).json({
+      status: true,
+      matrix: updatedMatrix,
+    })
+  } catch (e) {
+    console.error('Error while updating matrix.', e)
+    res.status(500).json({ message: 'Error while updating matrix.' })
+  }
+}
+
+async function checkMatrixDeletePermission(req, matrix) {
+  // Check if user is logged in
+  if (!req.user) {
+    return {
+      canDelete: false,
+      error: {
+        status: 401,
+        message: 'You must be logged in to delete a matrix',
+      },
+    }
+  }
+
+  // Get user roles
+  const userRoles = await getRoles(req.user.user_id)
+  const isAdmin = userRoles.includes('admin')
+  const isCurator = userRoles.includes('curator')
+  const isProjectOwner = req.project.user_id === req.user.user_id
+  const isMatrixOwner = matrix.user_id === req.user.user_id
+
+  // Check if user has permission to delete
+  const canDelete = isProjectOwner || isMatrixOwner || isCurator || isAdmin
+
+  if (!canDelete) {
+    return {
+      canDelete: false,
+      error: {
+        status: 403,
+        message: 'You do not have access to delete the matrix!',
+      },
+    }
+  }
+
+  return { canDelete: true }
+}
+
+export async function deleteMatrix(req, res) {
+  const projectId = parseInt(req.params.projectId)
+  const matrixId = parseInt(req.params.matrixId)
+
+  if (!matrixId) {
+    res.status(400).json({ message: 'Matrix ID is required' })
+    return
+  }
+
+  try {
+    // First verify the matrix exists and belongs to the project
+    const existingMatrix = await matrixService.getMatrix(matrixId)
+
+    if (!existingMatrix) {
+      res.status(404).json({ message: 'Matrix not found' })
+      return
+    }
+
+    if (existingMatrix.project_id !== projectId) {
+      res.status(404).json({ message: 'Matrix not found in this project' })
+      return
+    }
+
+    // Check delete permission
+    const { canDelete, error } = await checkMatrixDeletePermission(
+      req,
+      existingMatrix
+    )
+    if (!canDelete) {
+      res.status(error.status).json({ message: error.message })
+      return
+    }
+
+    // Check if cleanup_matrix parameter is provided (equivalent to cleanup_matrix in PHP)
+    const cleanupMatrix = req.query.deleteTaxaAndCharacters === 'true'
+
+    // Delete the matrix with or without cleanup
+    if (cleanupMatrix) {
+      // Delete matrix and clean up affiliated characters/taxa
+      await matrixService.deleteMatrixWithCleanup(matrixId, req.user)
+    } else {
+      // Just delete the matrix
+      await matrixService.deleteMatrix(matrixId, req.user)
+    }
+
+    res.status(200).json({
+      status: true,
+      message: 'Deleted matrix',
+    })
+  } catch (e) {
+    console.error('Error while deleting matrix.', e)
+    res.status(500).json({
+      message: e.message || 'Error while deleting matrix.',
+    })
   }
 }
 
@@ -136,6 +318,42 @@ export async function uploadMatrix(req, res) {
   } catch (e) {
     console.log('Matrix not imported correctly', e)
     res.status(400).json({ message: 'Matrix not imported correctly' })
+  }
+}
+
+export async function mergeMatrixFile(req, res) {
+  const matrixId = parseInt(req.params.matrixId)
+  if (!matrixId) {
+    res.status(400).json({ message: 'Matrix ID was not defined' })
+    return
+  }
+
+  const file = req.file
+  if (!file) {
+    res.status(400).json({ message: 'File must be included' })
+    return
+  }
+
+  const serializedMatrix = req.body.matrix
+  if (!serializedMatrix) {
+    res.status(400).json({ message: 'File was not properly parsed' })
+    return
+  }
+
+  try {
+    const matrix = JSON.parse(serializedMatrix)
+    const results = await mergeMatrix(
+      matrixId,
+      req.body.notes || '',
+      req.body.itemNotes || '',
+      req.user,
+      matrix,
+      file
+    )
+    res.status(200).json({ status: true, results })
+  } catch (e) {
+    console.log('Matrix not merged correctly', e)
+    res.status(400).json({ message: 'Matrix not merged correctly' })
   }
 }
 
@@ -322,4 +540,38 @@ function getFilenameDate() {
   const hours = ('0' + date.getUTCHours()).slice(-2)
   const minutes = ('0' + date.getUTCMinutes()).slice(-2)
   return `${year}-${month}-${day}-${hours}${minutes}`
+}
+
+export async function checkDeletePermission(req, res) {
+  const projectId = parseInt(req.params.projectId)
+  const matrixId = parseInt(req.params.matrixId)
+
+  if (!matrixId) {
+    res.status(400).json({ message: 'Matrix ID is required' })
+    return
+  }
+
+  try {
+    // First verify the matrix exists and belongs to the project
+    const existingMatrix = await matrixService.getMatrix(matrixId)
+
+    if (!existingMatrix) {
+      res.status(404).json({ message: 'Matrix not found' })
+      return
+    }
+
+    if (existingMatrix.project_id !== projectId) {
+      res.status(404).json({ message: 'Matrix not found in this project' })
+      return
+    }
+
+    // Check delete permission
+    const { canDelete } = await checkMatrixDeletePermission(req, existingMatrix)
+    res.status(200).json({ canDelete })
+  } catch (e) {
+    console.error('Error while checking delete permission.', e)
+    res.status(500).json({
+      message: e.message || 'Error while checking delete permission.',
+    })
+  }
 }

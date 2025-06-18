@@ -262,6 +262,11 @@ export default class MediaFile extends Model {
             fields: [{ name: 'project_id' }],
           },
         ],
+        hooks: {
+          beforeUpdate: (mediaFile) => {
+            mediaFile.last_modified_on = time()
+          },
+        },
       }
     )
   }

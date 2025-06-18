@@ -159,6 +159,11 @@ export default class Matrix extends Model {
             fields: [{ name: 'project_id' }],
           },
         ],
+        hooks: {
+          beforeUpdate: (matrix) => {
+            matrix.last_modified_on = time()
+          },
+        },
       }
     )
   }

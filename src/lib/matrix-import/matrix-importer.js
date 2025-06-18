@@ -1,5 +1,6 @@
 import { FileUploader } from '../file-uploader.js'
 import { TAXA_FIELD_NAMES } from '../../util/taxa.js'
+import { getTaxonHash } from '../../models/taxon.js'
 import { Table } from '../table.js'
 import { models } from '../../models/init-models.js'
 import { getCells, getCellNotes } from '../../services/matrix-service.js'
@@ -142,6 +143,12 @@ async function importIntoMatrix(
   const projectTaxaMap = await getProjectTaxaMap(projectId)
   const matrixTaxaMap = await getMatrixTaxaMap(matrixId)
   let matrixTaxaPosition = await getMaxTaxonPositionForMatrix(matrixId)
+
+  // Process all taxa at once
+  const taxonHashes = []
+  const taxonObjects = new Map()
+
+  // First pass: prepare all taxon objects and hashes
   for (const taxaObj of matrixObj.taxa) {
     let taxonId = parseInt(taxaObj.taxonId)
     if (taxonId && projectTaxaMap.has(taxonId)) {
@@ -154,59 +161,109 @@ async function importIntoMatrix(
         transaction: transaction,
       })
     } else {
-      const taxon = await models.Taxon.build({
-        user_id: user.user_id,
-        project_id: projectId,
-        is_extinct: taxaObj.is_extinct,
-        notes: taxaObj.note,
-      })
-
       const taxonNameParts = taxaObj.name.split(' ')
-      switch (taxonNameParts.length) {
-        case 0:
-          throw 'Unable to parse taxon name'
-        case 1:
-          taxon.set(matrix.otu, taxonNameParts[0])
-          break
-        case 2:
-          taxon.set('genus', taxonNameParts[0])
-          taxon.set('specific_epithet', taxonNameParts[1])
-          break
-        default:
-          taxon.set('genus', taxonNameParts.shift())
-          taxon.set('specific_epithet', taxonNameParts.shift())
-          taxon.set('subspecific_epithet', taxonNameParts.join(' '))
-          break
+      if (taxonNameParts.length > 0) {
+        const taxonObj = parseTaxonName(taxonNameParts, matrix.otu)
+        const taxonHash = getTaxonHash(taxonObj)
+        taxonHashes.push(taxonHash)
+        taxonObjects.set(taxonHash, {
+          taxonObj,
+          taxaObj,
+          taxonNameParts,
+        })
       }
+    }
+  }
 
-      for (const fieldName of TAXA_FIELD_NAMES) {
-        if (taxaObj[fieldName]) {
-          taxon.set(fieldName, taxaObj[fieldName])
+  // Bulk search for existing taxa
+  if (taxonHashes.length > 0) {
+    // Create placeholders for the IN clause
+    const placeholders = taxonHashes.map(() => '?').join(',')
+    const query = `
+    SELECT t.*
+    FROM taxa t
+    WHERE t.project_id = ?
+    AND t.taxon_hash IN (${placeholders})
+    `
+    const replacements = [projectId, ...taxonHashes]
+
+    // Log the actual SQL that will be executed
+    // const finalQuery = query.replace(/\?/g, (match, offset) => {
+    //   const index = query.substring(0, offset).match(/\?/g)?.length || 0
+    //   return typeof replacements[index] === 'string' ? `'${replacements[index]}'` : replacements[index]
+    // })
+    // console.log('Final SQL query:', finalQuery)
+
+    const foundTaxa = await sequelizeConn.query(query, {
+      replacements,
+      transaction: transaction,
+      type: sequelizeConn.QueryTypes.SELECT,
+    })
+
+    // Create a map of existing taxa by their hash
+    const existingTaxaMap = new Map()
+    if (Array.isArray(foundTaxa)) {
+      for (const taxon of foundTaxa) {
+        if (taxon && taxon.taxon_hash) {
+          existingTaxaMap.set(taxon.taxon_hash, taxon)
         }
       }
-
-      await taxon.save({
-        user: user,
-        transaction: transaction,
-      })
-      taxonId = parseInt(taxon.taxon_id)
-      projectTaxaMap.set(taxonId, taxon)
     }
-    taxaObj.taxonId = taxonId
-    if (!matrixTaxaMap.has(taxonId)) {
-      const taxaOrder = await models.MatrixTaxaOrder.create(
-        {
-          matrix_id: matrixId,
-          taxon_id: taxonId,
+
+    // Second pass: create or use existing taxa
+    for (const [taxonHash, { taxonObj, taxaObj }] of taxonObjects) {
+      const existingTaxon = existingTaxaMap.get(taxonHash)
+      let taxonId
+
+      if (existingTaxon) {
+        // Use existing taxon
+        taxonId = parseInt(existingTaxon.taxon_id)
+        projectTaxaMap.set(taxonId, existingTaxon)
+      } else {
+        // Create new taxon
+        const taxon = await models.Taxon.build({
           user_id: user.user_id,
-          position: ++matrixTaxaPosition,
-        },
-        {
+          project_id: projectId,
+          is_extinct: taxaObj.is_extinct,
+          notes: taxaObj.note,
+        })
+
+        // Set taxon name fields using the already parsed object
+        for (const [key, value] of Object.entries(taxonObj)) {
+          taxon.set(key, value)
+        }
+
+        // Set additional fields if present
+        for (const fieldName of TAXA_FIELD_NAMES) {
+          if (taxaObj[fieldName]) {
+            taxon.set(fieldName, taxaObj[fieldName])
+          }
+        }
+
+        await taxon.save({
           user: user,
           transaction: transaction,
-        }
-      )
-      matrixTaxaMap.set(taxonId, taxaOrder)
+        })
+        taxonId = parseInt(taxon.taxon_id)
+        projectTaxaMap.set(taxonId, taxon)
+      }
+
+      taxaObj.taxonId = taxonId
+      if (!matrixTaxaMap.has(taxonId)) {
+        const taxaOrder = await models.MatrixTaxaOrder.create(
+          {
+            matrix_id: matrixId,
+            taxon_id: taxonId,
+            user_id: user.user_id,
+            position: ++matrixTaxaPosition,
+          },
+          {
+            user: user,
+            transaction: transaction,
+          }
+        )
+        matrixTaxaMap.set(taxonId, taxaOrder)
+      }
     }
   }
 
@@ -591,4 +648,31 @@ function parseSymbols(symbols) {
     }
   }
   return map
+}
+
+/**
+ * Parse taxon name parts into a taxon object
+ * @param {string[]} taxonNameParts Array of taxon name parts
+ * @param {string} otuField The OTU field name for single-name taxa
+ * @returns {Object} Taxon object with appropriate fields set
+ */
+function parseTaxonName(taxonNameParts, otuField) {
+  if (!taxonNameParts.length) {
+    throw 'Unable to parse taxon name'
+  }
+
+  const taxonObj = {
+    [otuField]: taxonNameParts[0],
+  }
+
+  if (taxonNameParts.length >= 2) {
+    taxonObj.genus = taxonNameParts[0]
+    taxonObj.specific_epithet = taxonNameParts[1]
+  }
+
+  if (taxonNameParts.length > 2) {
+    taxonObj.subspecific_epithet = taxonNameParts.slice(2).join(' ')
+  }
+
+  return taxonObj
 }
