@@ -211,7 +211,7 @@ export async function run(req, res) {
   }
   const userId = req.user?.user_id || 0
 
-  let fileExtension = 'nex'
+  const fileExtension = 'nex'
   const options = new ExportOptions()
   options.blocks = await matrixService.getMatrixBlocks(matrixId)
   options.matrix = await matrixService.getMatrix(matrixId)
@@ -221,7 +221,7 @@ export async function run(req, res) {
   options.cellsTable = await matrixService.getCells(matrixId)
   options.cellNotes = null
 
-  let filename = `mbank_X${matrixId}_${getFilenameDate()}_no_notes.${fileExtension}`
+  const filename = `mbank_X${matrixId}_${userId}_${req.query.jobName}.zip`
   let fileContent = ''
   let exporter = new NexusExporter((txt) => fileContent = fileContent + txt)
 
@@ -234,7 +234,7 @@ export async function run(req, res) {
     jobChar = 'vparam.specify_pct_'
   }
 
-  let formData1 = {
+  const formData1 = {
       tool: req.query.tool,
       'input.infile_': fileContent,
   }
@@ -259,8 +259,11 @@ export async function run(req, res) {
          'vparam.runtime_': 1,
       }
   }
+  const formData3 = {
+     'vparam.zipfilename_': filename,
+  }
 
-  let formDataForSubmission = {...formData1, ...formData2};
+  const formDataForSubmission = {...formData1, ...formData2, ...formData3};
   //const crs = await CipresRequestService.create(matrixId, req.user)
   const msg = await CipresRequestService.createCipresRequest( matrixId, req.user, req.query.jobNote? req.query.jobNote:' ', req.query.jobName, formData2, formDataForSubmission)
 
@@ -282,7 +285,7 @@ export async function deleteJob(req, res) {
       .json({ message: 'The request must contain a Cipres Job ID.' })
     return
   }
-  const msg = await CipresRequestService.deleteCipresRequest( matrixId, req.user, req.query.jobName, jobCID)
+  const msg = await CipresRequestService.deleteCipresRequest( matrixId, req.user, req.query.jobName, jobCID )
 
   res.status(200).json({ message: msg.message })
 }

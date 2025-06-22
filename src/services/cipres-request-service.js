@@ -5,14 +5,14 @@ import { models } from '../models/init-models.js'
 import { QueryTypes } from 'sequelize'
 import axios from 'axios'
 
-const URL = 'https://cipresrest.sdsc.edu/cipresrest/v1'
+const URL = config.cipres.url || 'https://cipresrest.sdsc.edu/cipresrest/v1'
 // const URL = 'https://bumper.sdsc.edu/cipresrest/v1'
 const CRA_USER = config.cipres.username 
 const PASSWORD = config.cipres.password 
 const KEY = config.cipres.key 
+const CRE = btoa(`${CRA_USER}:${PASSWORD}`)
 
 export default class CipresRequestService {
-
   static async createCipresRequest( matrixId, userIn, notesIn, jobnameIn, cipresSettings, paramsIn) {
     const response = await CipresRequestService.submitCipresJob(paramsIn)
     if (response != null) {
@@ -70,7 +70,7 @@ export default class CipresRequestService {
   static async getCipresJobs(matrixIds, userId) {
     const [rows] = await sequelizeConn.query(
     `   
-        SELECT matrix_id, user_id, jobname, FROM_UNIXTIME(created_on, '%Y-%m-%d %h:%i:%s') created_on,  cipres_job_id, cipres_tool, cipres_last_status, cipres_settings, notes
+        SELECT request_id, matrix_id, user_id, jobname, FROM_UNIXTIME(created_on, '%Y-%m-%d %h:%i:%s') created_on,  cipres_job_id, cipres_tool, cipres_last_status, cipres_settings, notes, '${URL}' as cu, '${KEY}' as ck, '${CRE}' as cr, '${CRA_USER}' as ca
         FROM cipres_requests
         WHERE matrix_id IN (?) and user_id = ? order by created_on desc`,
        { replacements: [matrixIds, userId] }
