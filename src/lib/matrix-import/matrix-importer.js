@@ -187,13 +187,6 @@ async function importIntoMatrix(
     `
     const replacements = [projectId, ...taxonHashes]
 
-    // Log the actual SQL that will be executed
-    // const finalQuery = query.replace(/\?/g, (match, offset) => {
-    //   const index = query.substring(0, offset).match(/\?/g)?.length || 0
-    //   return typeof replacements[index] === 'string' ? `'${replacements[index]}'` : replacements[index]
-    // })
-    // console.log('Final SQL query:', finalQuery)
-
     const foundTaxa = await sequelizeConn.query(query, {
       replacements,
       transaction: transaction,
@@ -270,14 +263,15 @@ async function importIntoMatrix(
   const projectCharactersMap = await getCharactersInProjectMap(projectId)
   const matrixCharactersMap = await getMatrixCharactersMap(matrixId)
   let maxCharacterPosition = await getMaxCharacterPositionForMatrix(matrixId)
+
   for (const characterObj of matrixObj.characters) {
-    let characterId = parseInt(characterObj.characterId)
+    let characterId = parseInt(characterObj.character_id)
 
     let projectCharacter
     if (characterId && projectCharactersMap.has(characterId)) {
       projectCharacter = projectCharactersMap.get(characterId)
       projectCharacter.name = characterObj.name
-      projectCharacter.description = characterObj.notes
+      projectCharacter.description = characterObj.note || ''
       if (projectCharacter.type != characterObj.type) {
         const newType = getCharacterType(characterObj.type)
         const previousType = getCharacterType(projectCharacter.type)
@@ -334,20 +328,47 @@ async function importIntoMatrix(
       projectCharacter = projectCharactersMap.get(characterId)
       for (const stateObj of characterObj.states) {
         if (stateNameMap.has(stateObj.name)) {
-          await models.CharacterState.update(
-            { description: stateObj.notes },
-            {
-              where: { state_id: stateObj.state_id },
-              transaction: transaction,
-              individualHooks: true,
-              user: user,
-            }
-          )
+          if (stateObj.notes) {
+            const existingState = stateNameMap.get(stateObj.name)
+
+            // TODO: Check with Tanya is it ever possible to have state descriptio
+            await models.CharacterState.update(
+              { description: stateObj.notes },
+              {
+                where: { state_id: existingState.state_id },
+                transaction: transaction,
+                individualHooks: true,
+                user: user,
+              }
+            )
+          }
         } else {
+          // For descending sort, assign num based on the desired index position
+          // New states should get num values that place them correctly when sorted in descending order
+          const desiredIndex = stateNameMap.size // This will be the index position after sorting
+          const existingNums = projectCharacter.states
+            .map((s) => s.num || 0)
+            .sort((a, b) => b - a)
+
+          let newNum
+          if (desiredIndex === 0) {
+            // First state gets highest num
+            newNum = existingNums.length > 0 ? existingNums[0] + 1 : 0
+          } else if (desiredIndex >= existingNums.length) {
+            // Last state gets lowest num
+            newNum =
+              existingNums.length > 0
+                ? Math.min(...existingNums) - 1
+                : desiredIndex
+          } else {
+            // Insert between existing nums
+            newNum = existingNums[desiredIndex - 1] - 1
+          }
+
           const state = await models.CharacterState.create(
             {
               name: stateObj.name,
-              num: stateNameMap.size,
+              num: newNum,
               character_id: characterId,
               user_id: user.user_id,
             },
@@ -364,11 +385,10 @@ async function importIntoMatrix(
   }
 
   const cellsTable = await getCells(matrixId)
-
   const cellNotes = await getCellNotes(matrixId)
   const cellNotesTable = new Table()
   for (const cellNote of cellNotes) {
-    const characterId = parseInt(cellNote.characterId)
+    const characterId = parseInt(cellNote.character_id)
     const taxonId = parseInt(cellNote.taxon_id)
     cellNotesTable.set(taxonId, characterId, cellNote)
   }
@@ -426,13 +446,30 @@ async function importIntoMatrix(
           continue
         }
 
+        // Check if continuous cell already exists with same values
+        const existingCell = cellsTable.get(taxonId, characterId)
+        const startValue = values[0]
+        const endValue = values[1]
+
+        if (
+          existingCell &&
+          existingCell.some(
+            (cell) =>
+              cell.start_value === startValue &&
+              (cell.end_value === endValue ||
+                (cell.end_value == null && endValue == null))
+          )
+        ) {
+          continue
+        }
+
         cellsInsertions.push({
           matrix_id: matrixId,
           taxon_id: taxonId,
           character_id: characterId,
           user_id: user.user_id,
-          start_value: values[0],
-          end_value: values[1],
+          start_value: startValue,
+          end_value: endValue,
         })
       } else {
         const existingCell = cellsTable.get(taxonId, characterId)
@@ -478,7 +515,9 @@ async function importIntoMatrix(
           const stateId = parseInt(state.state_id)
           if (
             existingCell &&
-            existingCell.some((score) => score.state_id == stateId)
+            existingCell.some(
+              (existingScore) => existingScore.state_id == stateId
+            )
           ) {
             continue
           }
@@ -500,6 +539,33 @@ async function importIntoMatrix(
       // operation is done as a single unit (e.g. upload) and therefore
       // this cannot be rolled back or have any importance to the user.
       await models.Cell.bulkCreate(cellsInsertions, { transaction })
+
+      // Update the cellsTable cache with newly inserted cells to prevent duplicates
+      // We need to format the objects to match the database structure for comparison
+      for (const cell of cellsInsertions) {
+        const taxonId = cell.taxon_id
+        const characterId = cell.character_id
+
+        let existingCells = cellsTable.get(taxonId, characterId)
+        if (!existingCells) {
+          existingCells = []
+          cellsTable.set(taxonId, characterId, existingCells)
+        }
+
+        // Format the cell to match database structure for proper comparison
+        const formattedCell = {
+          cell_id: null, // Will be assigned by database
+          taxon_id: cell.taxon_id,
+          character_id: cell.character_id,
+          state_id: cell.state_id || null,
+          is_npa: cell.is_npa || false,
+          is_uncertain: cell.is_uncertain || false,
+          start_value: cell.start_value || null,
+          end_value: cell.end_value || null,
+        }
+
+        existingCells.push(formattedCell)
+      }
     }
 
     if (notesInsertions.length) {
@@ -530,8 +596,7 @@ async function importIntoMatrix(
 
   const uploadId = parseInt(matrixUpload.upload_id)
 
-  const blocks = matrixObj.blocks
-  for (const block of blocks) {
+  for (const block of matrixObj.blocks) {
     await models.MatrixAdditionalBlock.create(
       {
         matrix_id: matrixId,

@@ -274,7 +274,8 @@ export async function createMatrix(req, res) {
 
 export async function uploadMatrix(req, res) {
   const title = req.body.title
-  if (!title) {
+  const matrixId = req.body.matrixId
+  if (!matrixId && !title) {
     res.status(400).json({ message: 'Title was not defined' })
     return
   }
@@ -290,23 +291,21 @@ export async function uploadMatrix(req, res) {
   }
 
   try {
-    const matrixId = req.body.matrixId
     const projectId = req.params.projectId
     const matrix = JSON.parse(serializedMatrix)
     const results = matrixId
       ? await mergeMatrix(
           matrixId,
-          req.body.notes,
-          req.body.itemNotes,
+          req.body.notes || '',
+          req.body.itemNotes || '',
           req.user,
-          projectId,
           matrix,
           file
         )
       : await importMatrix(
           title,
-          req.body.notes,
-          req.body.itemNotes,
+          req.body.notes || '',
+          req.body.itemNotes || '',
           req.body.otu,
           req.body.published,
           req.user,
@@ -322,7 +321,7 @@ export async function uploadMatrix(req, res) {
 }
 
 export async function mergeMatrixFile(req, res) {
-  const matrixId = parseInt(req.params.matrixId)
+  const matrixId = req.params.matrixId
   if (!matrixId) {
     res.status(400).json({ message: 'Matrix ID was not defined' })
     return
@@ -341,12 +340,14 @@ export async function mergeMatrixFile(req, res) {
   }
 
   try {
+    const projectId = req.params.projectId
     const matrix = JSON.parse(serializedMatrix)
     const results = await mergeMatrix(
       matrixId,
-      req.body.notes || '',
-      req.body.itemNotes || '',
+      req.body.notes,
+      req.body.itemNotes,
       req.user,
+      projectId,
       matrix,
       file
     )
