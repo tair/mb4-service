@@ -343,27 +343,10 @@ async function importIntoMatrix(
             )
           }
         } else {
-          // For descending sort, assign num based on the desired index position
-          // New states should get num values that place them correctly when sorted in descending order
-          const desiredIndex = stateNameMap.size // This will be the index position after sorting
-          const existingNums = projectCharacter.states
-            .map((s) => s.num || 0)
-            .sort((a, b) => b - a)
-
-          let newNum
-          if (desiredIndex === 0) {
-            // First state gets highest num
-            newNum = existingNums.length > 0 ? existingNums[0] + 1 : 0
-          } else if (desiredIndex >= existingNums.length) {
-            // Last state gets lowest num
-            newNum =
-              existingNums.length > 0
-                ? Math.min(...existingNums) - 1
-                : desiredIndex
-          } else {
-            // Insert between existing nums
-            newNum = existingNums[desiredIndex - 1] - 1
-          }
+          // Find the maximum existing num value to ensure new states get sequential numbers
+          const existingNums = projectCharacter.states.map((s) => s.num || 0)
+          const maxNum = existingNums.length > 0 ? Math.max(...existingNums) : -1
+          const newNum = maxNum + 1
 
           const state = await models.CharacterState.create(
             {
