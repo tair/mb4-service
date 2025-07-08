@@ -5,6 +5,7 @@ import config from './config.js'
 import projectsRouter from './routes/projects-route.js'
 import publicProjectsRouter from './routes/public/projects-route.js'
 import publicStatsRouter from './routes/public/stats-route.js'
+import publicMediaServeRouter from './routes/public/media-serve-route.js'
 import statsRouter from './routes/stats-route.js'
 import authRouter from './routes/auth-route.js'
 import taskRouter from './routes/tasks-route.js'
@@ -51,6 +52,7 @@ app.use('/auth', authRouter)
 app.use('/projects', projectsRouter)
 app.use('/public/projects', publicProjectsRouter)
 app.use('/public/stats', publicStatsRouter)
+app.use('/public/media', publicMediaServeRouter)
 app.use('/stats', statsRouter)
 app.use('/users', userRouter)
 app.use('/tasks', taskRouter)
