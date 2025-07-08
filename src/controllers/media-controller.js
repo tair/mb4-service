@@ -653,15 +653,9 @@ export async function serveMediaFile(req, res) {
   try {
     const { projectId, mediaId, fileSize = 'original' } = req.params
     
-    console.log('=== Media Serve Request ===')
-    console.log('Project ID:', projectId)
-    console.log('Media ID:', mediaId)
-    console.log('File Size:', fileSize)
-    
     // Validate file size
     const supportedFileSizes = ['original', 'large', 'medium', 'thumbnail']
     if (!supportedFileSizes.includes(fileSize)) {
-      console.log('Invalid file size requested:', fileSize)
       return res.status(400).json({
         error: 'Invalid file size',
         message: `File size '${fileSize}' is not supported. Supported sizes: ${supportedFileSizes.join(', ')}`,
@@ -669,16 +663,12 @@ export async function serveMediaFile(req, res) {
     }
 
     // Get media file info from database to determine file extension
-    console.log('Querying database for media...')
     const [mediaRows] = await sequelizeConn.query(
       `SELECT media FROM media_files WHERE project_id = ? AND media_id = ?`,
       { replacements: [projectId, mediaId] }
     )
 
-    console.log('Database query result:', mediaRows ? mediaRows.length : 'null')
-
     if (!mediaRows || mediaRows.length === 0) {
-      console.log('No media found in database')
       return res.status(404).json({
         error: 'Media not found',
         message: 'The requested media file does not exist',
@@ -686,11 +676,8 @@ export async function serveMediaFile(req, res) {
     }
 
     const mediaData = mediaRows[0].media
-    console.log('Media data keys:', Object.keys(mediaData || {}))
-    console.log('Requested file size available:', mediaData && mediaData[fileSize] ? 'YES' : 'NO')
     
     if (!mediaData || !mediaData[fileSize]) {
-      console.log('File size not available in media data')
       return res.status(404).json({
         error: 'File size not found',
         message: `The requested file size '${fileSize}' is not available for this media`,
@@ -699,14 +686,8 @@ export async function serveMediaFile(req, res) {
 
     // Extract file extension from the media data
     const mediaVersion = mediaData[fileSize]
-    console.log('Media version data:', {
-      FILENAME: mediaVersion.FILENAME,
-      EXTENSION: mediaVersion.EXTENSION,
-      MIMETYPE: mediaVersion.MIMETYPE
-    })
     
     if (!mediaVersion || !mediaVersion.FILENAME) {
-      console.log('Missing FILENAME in media version')
       return res.status(404).json({
         error: 'Invalid media data',
         message: 'Media data is missing filename information',
@@ -715,21 +696,15 @@ export async function serveMediaFile(req, res) {
 
     // Extract file extension from the FILENAME
     const fileExtension = mediaVersion.FILENAME.split('.').pop() || 'jpg'
-    console.log('Extracted file extension:', fileExtension)
     
     // Construct S3 key using project ID and media ID format
     const fileName = `${projectId}_${mediaId}_${fileSize}.${fileExtension}`
     const s3Key = `media_files/images/${projectId}/${mediaId}/${fileName}`
-    
-    console.log('Constructed S3 key:', s3Key)
-    console.log('Constructed filename:', fileName)
 
     // Use default bucket from config
     const bucket = config.aws.defaultBucket
-    console.log('S3 Bucket:', bucket)
 
     if (!bucket) {
-      console.log('No S3 bucket configured')
       return res.status(500).json({
         error: 'Configuration error',
         message: 'Default S3 bucket not configured',
@@ -737,11 +712,7 @@ export async function serveMediaFile(req, res) {
     }
 
     // Get object from S3
-    console.log('Attempting to get object from S3...')
     const result = await s3Service.getObject(bucket, s3Key)
-    console.log('S3 object retrieved successfully')
-    console.log('Content type:', result.contentType)
-    console.log('Content length:', result.contentLength)
 
     // Set appropriate headers
     res.set({
@@ -751,19 +722,13 @@ export async function serveMediaFile(req, res) {
       'Last-Modified': result.lastModified,
     })
 
-    console.log('Sending response...')
     // Send the data
     res.send(result.data)
-    console.log('Response sent successfully')
 
   } catch (error) {
-    console.error('=== Media Serve Error ===')
-    console.error('Error details:', error)
-    console.error('Error name:', error.name)
-    console.error('Error message:', error.message)
+    console.error('Media serve error:', error.message)
     
     if (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey')) {
-      console.log('S3 NoSuchKey error - file not found in S3')
       return res.status(404).json({
         error: 'File not found',
         message: 'The requested media file does not exist in S3',
@@ -771,7 +736,6 @@ export async function serveMediaFile(req, res) {
     }
 
     if (error.name === 'NoSuchBucket') {
-      console.log('S3 NoSuchBucket error')
       return res.status(404).json({
         error: 'Bucket not found',
         message: 'The specified bucket does not exist',
@@ -779,14 +743,12 @@ export async function serveMediaFile(req, res) {
     }
 
     if (error.name === 'AccessDenied') {
-      console.log('S3 AccessDenied error')
       return res.status(403).json({
         error: 'Access denied',
         message: 'Insufficient permissions to access the requested file',
       })
     }
 
-    console.log('Generic error - returning 500')
     res.status(500).json({
       error: 'Internal server error',
       message: 'Failed to serve media file',
