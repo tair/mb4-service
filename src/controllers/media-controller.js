@@ -10,6 +10,8 @@ import {
   ModelRefencialMapper,
   ModelReferencialConfig,
 } from '../lib/datamodel/model-referencial-mapper.js'
+import s3Service from '../services/s3-service.js'
+import config from '../config.js'
 
 export async function getMediaFiles(req, res) {
   const projectId = req.params.projectId
@@ -640,5 +642,289 @@ function convertMediaResponse(row) {
     created_on: row.created_on,
     url: row.url,
     url_description: row.url_description,
+  }
+}
+
+/**
+ * Serve media file from S3
+ * GET /projects/:projectId/media/serve/:mediaId/:fileSize
+ */
+export async function serveMediaFile(req, res) {
+  try {
+    const { projectId, mediaId, fileSize = 'original' } = req.params
+    
+    console.log('=== Media Serve Request ===')
+    console.log('Project ID:', projectId)
+    console.log('Media ID:', mediaId)
+    console.log('File Size:', fileSize)
+    
+    // Validate file size
+    const supportedFileSizes = ['original', 'large', 'medium', 'thumbnail']
+    if (!supportedFileSizes.includes(fileSize)) {
+      console.log('Invalid file size requested:', fileSize)
+      return res.status(400).json({
+        error: 'Invalid file size',
+        message: `File size '${fileSize}' is not supported. Supported sizes: ${supportedFileSizes.join(', ')}`,
+      })
+    }
+
+    // Get media file info from database to determine file extension
+    console.log('Querying database for media...')
+    const [mediaRows] = await sequelizeConn.query(
+      `SELECT media FROM media_files WHERE project_id = ? AND media_id = ?`,
+      { replacements: [projectId, mediaId] }
+    )
+
+    console.log('Database query result:', mediaRows ? mediaRows.length : 'null')
+
+    if (!mediaRows || mediaRows.length === 0) {
+      console.log('No media found in database')
+      return res.status(404).json({
+        error: 'Media not found',
+        message: 'The requested media file does not exist',
+      })
+    }
+
+    const mediaData = mediaRows[0].media
+    console.log('Media data keys:', Object.keys(mediaData || {}))
+    console.log('Requested file size available:', mediaData && mediaData[fileSize] ? 'YES' : 'NO')
+    
+    if (!mediaData || !mediaData[fileSize]) {
+      console.log('File size not available in media data')
+      return res.status(404).json({
+        error: 'File size not found',
+        message: `The requested file size '${fileSize}' is not available for this media`,
+      })
+    }
+
+    // Extract file extension from the media data
+    const mediaVersion = mediaData[fileSize]
+    console.log('Media version data:', {
+      FILENAME: mediaVersion.FILENAME,
+      EXTENSION: mediaVersion.EXTENSION,
+      MIMETYPE: mediaVersion.MIMETYPE
+    })
+    
+    if (!mediaVersion || !mediaVersion.FILENAME) {
+      console.log('Missing FILENAME in media version')
+      return res.status(404).json({
+        error: 'Invalid media data',
+        message: 'Media data is missing filename information',
+      })
+    }
+
+    // Extract file extension from the FILENAME
+    const fileExtension = mediaVersion.FILENAME.split('.').pop() || 'jpg'
+    console.log('Extracted file extension:', fileExtension)
+    
+    // Construct S3 key using project ID and media ID format
+    const fileName = `${projectId}_${mediaId}_${fileSize}.${fileExtension}`
+    const s3Key = `media_files/images/${projectId}/${mediaId}/${fileName}`
+    
+    console.log('Constructed S3 key:', s3Key)
+    console.log('Constructed filename:', fileName)
+
+    // Use default bucket from config
+    const bucket = config.aws.defaultBucket
+    console.log('S3 Bucket:', bucket)
+
+    if (!bucket) {
+      console.log('No S3 bucket configured')
+      return res.status(500).json({
+        error: 'Configuration error',
+        message: 'Default S3 bucket not configured',
+      })
+    }
+
+    // Get object from S3
+    console.log('Attempting to get object from S3...')
+    const result = await s3Service.getObject(bucket, s3Key)
+    console.log('S3 object retrieved successfully')
+    console.log('Content type:', result.contentType)
+    console.log('Content length:', result.contentLength)
+
+    // Set appropriate headers
+    res.set({
+      'Content-Type': result.contentType || 'application/octet-stream',
+      'Content-Length': result.contentLength,
+      'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+      'Last-Modified': result.lastModified,
+    })
+
+    console.log('Sending response...')
+    // Send the data
+    res.send(result.data)
+    console.log('Response sent successfully')
+
+  } catch (error) {
+    console.error('=== Media Serve Error ===')
+    console.error('Error details:', error)
+    console.error('Error name:', error.name)
+    console.error('Error message:', error.message)
+    
+    if (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey')) {
+      console.log('S3 NoSuchKey error - file not found in S3')
+      return res.status(404).json({
+        error: 'File not found',
+        message: 'The requested media file does not exist in S3',
+      })
+    }
+
+    if (error.name === 'NoSuchBucket') {
+      console.log('S3 NoSuchBucket error')
+      return res.status(404).json({
+        error: 'Bucket not found',
+        message: 'The specified bucket does not exist',
+      })
+    }
+
+    if (error.name === 'AccessDenied') {
+      console.log('S3 AccessDenied error')
+      return res.status(403).json({
+        error: 'Access denied',
+        message: 'Insufficient permissions to access the requested file',
+      })
+    }
+
+    console.log('Generic error - returning 500')
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to serve media file',
+    })
+  }
+}
+
+/**
+ * Serve multiple media files from S3
+ * GET /projects/:projectId/media/serve/batch?mediaIds=123,456&fileSize=original
+ */
+export async function serveBatchMediaFiles(req, res) {
+  try {
+    const { projectId } = req.params
+    const { mediaIds, fileSize = 'original' } = req.query
+    
+    if (!mediaIds) {
+      return res.status(400).json({
+        error: 'Missing parameters',
+        message: 'mediaIds parameter is required',
+      })
+    }
+
+    // Validate file size
+    const supportedFileSizes = ['original', 'large', 'medium', 'thumbnail']
+    if (!supportedFileSizes.includes(fileSize)) {
+      return res.status(400).json({
+        error: 'Invalid file size',
+        message: `File size '${fileSize}' is not supported. Supported sizes: ${supportedFileSizes.join(', ')}`,
+      })
+    }
+
+    const mediaIdArray = mediaIds.split(',').map(id => parseInt(id.trim()))
+    
+    // Get media files info from database
+    const [mediaRows] = await sequelizeConn.query(
+      `SELECT media_id, media FROM media_files WHERE project_id = ? AND media_id IN (?)`,
+      { replacements: [projectId, mediaIdArray] }
+    )
+
+    if (!mediaRows || mediaRows.length === 0) {
+      return res.status(404).json({
+        error: 'Media not found',
+        message: 'None of the requested media files exist',
+      })
+    }
+
+    // Use default bucket from config
+    const bucket = config.aws.defaultBucket
+
+    if (!bucket) {
+      return res.status(500).json({
+        error: 'Configuration error',
+        message: 'Default S3 bucket not configured',
+      })
+    }
+
+    const results = []
+    const errors = []
+
+    // Process each media file
+    for (const mediaRow of mediaRows) {
+      try {
+        const mediaData = mediaRow.media
+        if (!mediaData || !mediaData[fileSize]) {
+          errors.push({
+            mediaId: mediaRow.media_id,
+            error: `File size '${fileSize}' not available`
+          })
+          continue
+        }
+
+        // Extract file extension from the media data
+        const mediaVersion = mediaData[fileSize]
+        if (!mediaVersion || !mediaVersion.FILENAME) {
+          errors.push({
+            mediaId: mediaRow.media_id,
+            error: 'Media data is missing filename information'
+          })
+          continue
+        }
+
+        // Extract file extension from the FILENAME
+        const fileExtension = mediaVersion.FILENAME.split('.').pop() || 'jpg'
+        
+        // Construct S3 key using project ID and media ID format
+        const fileName = `${projectId}_${mediaRow.media_id}_${fileSize}.${fileExtension}`
+        const s3Key = `media_files/images/${projectId}/${mediaRow.media_id}/${fileName}`
+
+        // Get object from S3
+        const result = await s3Service.getObject(bucket, s3Key)
+
+        results.push({
+          mediaId: mediaRow.media_id,
+          data: result.data,
+          contentType: result.contentType,
+          contentLength: result.contentLength,
+          lastModified: result.lastModified,
+          fileName
+        })
+
+      } catch (error) {
+        console.error(`Error serving media ${mediaRow.media_id}:`, error)
+        errors.push({
+          mediaId: mediaRow.media_id,
+          error: error.message
+        })
+      }
+    }
+
+    // Return response
+    const response = {
+      success: results.length > 0,
+      message: errors.length > 0 
+        ? `Served ${results.length} files with ${errors.length} errors`
+        : `Successfully served ${results.length} files`,
+      data: {
+        projectId,
+        fileSize,
+        files: results,
+        totalServed: results.length,
+        totalErrors: errors.length
+      }
+    }
+
+    if (errors.length > 0) {
+      response.data.errors = errors
+    }
+
+    // Return appropriate status code
+    const statusCode = results.length > 0 ? 200 : 400
+    res.status(statusCode).json(response)
+
+  } catch (error) {
+    console.error('Batch Media Serve Error:', error)
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to serve batch media files',
+    })
   }
 }
