@@ -345,7 +345,8 @@ async function importIntoMatrix(
         } else {
           // Find the maximum existing num value to ensure new states get sequential numbers
           const existingNums = projectCharacter.states.map((s) => s.num || 0)
-          const maxNum = existingNums.length > 0 ? Math.max(...existingNums) : -1
+          const maxNum =
+            existingNums.length > 0 ? Math.max(...existingNums) : -1
           const newNum = maxNum + 1
 
           const state = await models.CharacterState.create(
