@@ -26,6 +26,7 @@ matrixRouter.get(
 )
 
 matrixRouter.post('/upload', upload.single('file'), controller.uploadMatrix)
+matrixRouter.post('/create', controller.createMatrix)
 matrixRouter.post(
   '/:matrixId/upload',
   upload.single('matrix_file'),

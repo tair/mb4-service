@@ -255,20 +255,78 @@ export async function createMatrix(req, res) {
     return
   }
 
+  const projectId = req.params.projectId
+  let transaction
+
   try {
-    const projectId = req.params.projectId
-    await createMatrix(
-      title,
-      req.body.notes,
-      req.body.otu,
-      req.body.published,
-      req.user,
-      projectId
+    // Check if project has any taxa
+    const projectTaxa = await models.Taxon.findAll({
+      where: { project_id: projectId },
+      order: [
+        ['genus', 'ASC'],
+        ['specific_epithet', 'ASC'],
+      ],
+    })
+
+    if (projectTaxa.length === 0) {
+      res.status(400).json({
+        message:
+          'Cannot create matrix: Project has no taxa associated with it. Please add taxa to the project first.',
+      })
+      return
+    }
+
+    // Get the first taxon (alphabetically by genus, then specific epithet)
+    const firstTaxon = projectTaxa[0]
+
+    // Create the matrix manually without file upload
+    transaction = await sequelizeConn.transaction()
+
+    const matrix = models.Matrix.build({
+      title: title,
+      notes: req.body.notes || '',
+      otu: req.body.otu || 'genus',
+      published: req.body.published || 0,
+      user_id: req.user.user_id,
+      project_id: projectId,
+      type: 0, // Default to categorical
+    })
+
+    await matrix.save({
+      user: req.user,
+      transaction: transaction,
+    })
+
+    // Automatically link to the first taxon of the project
+    await models.MatrixTaxaOrder.create(
+      {
+        matrix_id: matrix.matrix_id,
+        taxon_id: firstTaxon.taxon_id,
+        user_id: req.user.user_id,
+        position: 1,
+      },
+      {
+        user: req.user,
+        transaction: transaction,
+      }
     )
-    res.status(200).json({ status: true })
+
+    await transaction.commit()
+
+    res.status(200).json({
+      status: true,
+      matrix_id: matrix.matrix_id,
+      message: `Matrix created successfully and linked to first taxon (alphabetically): ${
+        firstTaxon.genus || 'Unknown'
+      }`,
+    })
   } catch (e) {
-    console.log('Matrix not imported correctly', e)
-    res.status(400).json({ message: 'Matrix not imported correctly' })
+    // Rollback transaction if it exists
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.log('Matrix not created correctly', e)
+    res.status(400).json({ message: 'Matrix not created correctly' })
   }
 }
 
