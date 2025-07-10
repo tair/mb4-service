@@ -144,6 +144,11 @@ export default class Character extends Model {
             fields: [{ name: 'project_id' }],
           },
         ],
+        hooks: {
+          beforeUpdate: (character) => {
+            character.last_modified_on = time()
+          },
+        },
       }
     )
   }

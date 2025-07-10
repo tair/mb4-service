@@ -364,6 +364,10 @@ export async function getRuleViolations(req, res) {
 
 export async function getCharacterChanges(req, res) {
   const characterId = parseInt(req.body.character_id)
+  if (isNaN(characterId) || characterId <= 0) {
+    res.status(400).json({ ok: false, errors: ['Invalid character ID'] })
+    return
+  }
   await applyMatrix(req, res, (service) =>
     service.getCharacterChanges(characterId)
   )

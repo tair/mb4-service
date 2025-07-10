@@ -135,6 +135,11 @@ export default class Cell extends Model {
             fields: [{ name: 'matrix_id' }],
           },
         ],
+        hooks: {
+          beforeUpdate: (cell) => {
+            cell.last_modified_on = time()
+          },
+        },
       }
     )
   }

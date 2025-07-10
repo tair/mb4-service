@@ -6,6 +6,65 @@ export async function getMatrix(matrixId) {
   return models.Matrix.findByPk(matrixId)
 }
 
+export async function updateMatrix(matrixId, updates, user) {
+  const transaction = await sequelizeConn.transaction()
+
+  try {
+    const matrix = await models.Matrix.findByPk(matrixId, { transaction })
+
+    if (!matrix) {
+      throw new Error('Matrix not found')
+    }
+
+    // Update the matrix properties
+    if (updates.title !== undefined) {
+      matrix.title = updates.title
+    }
+    if (updates.notes !== undefined) {
+      matrix.notes = updates.notes
+    }
+    if (updates.published !== undefined) {
+      matrix.published = updates.published
+    }
+    if (updates.otu !== undefined) {
+      matrix.otu = updates.otu
+    }
+
+    // Update other_options if provided
+    if (updates.other_options !== undefined) {
+      matrix.other_options = updates.other_options
+    }
+
+    await matrix.save({ user: user, transaction: transaction })
+    await transaction.commit()
+
+    return matrix
+  } catch (error) {
+    await transaction.rollback()
+    throw error
+  }
+}
+
+export async function deleteMatrix(matrixId, user) {
+  const transaction = await sequelizeConn.transaction()
+
+  try {
+    const matrix = await models.Matrix.findByPk(matrixId, { transaction })
+
+    if (!matrix) {
+      throw new Error('Matrix not found')
+    }
+
+    await matrix.destroy({ user: user, transaction: transaction })
+    await transaction.commit()
+
+    return true
+  } catch (error) {
+    await transaction.rollback()
+    throw error
+  }
+}
+
 export async function getMatrices(projectId) {
   const [rows] = await sequelizeConn.query(
     `
@@ -466,4 +525,93 @@ export async function getMatrixBlocks(matrixId) {
     { replacements: [matrixId] }
   )
   return rows
+}
+
+export async function deleteMatrixWithCleanup(matrixId, user) {
+  const transaction = await sequelizeConn.transaction()
+
+  try {
+    const matrix = await models.Matrix.findByPk(matrixId, { transaction })
+
+    if (!matrix) {
+      throw new Error('Matrix not found')
+    }
+
+    // Get characters and taxa that are only in this matrix
+    // Characters that are only in this matrix
+    const [charactersToDelete] = await sequelizeConn.query(
+      `
+      SELECT DISTINCT c.character_id
+      FROM characters c
+      INNER JOIN matrix_character_order mco ON c.character_id = mco.character_id
+      WHERE mco.matrix_id = ?
+      AND c.character_id NOT IN (
+        SELECT DISTINCT mco2.character_id
+        FROM matrix_character_order mco2
+        WHERE mco2.matrix_id != ?
+      )
+      `,
+      { replacements: [matrixId, matrixId], transaction }
+    )
+
+    // Taxa that are only in this matrix
+    const [taxaToDelete] = await sequelizeConn.query(
+      `
+      SELECT DISTINCT t.taxon_id
+      FROM taxa t
+      INNER JOIN matrix_taxa_order mto ON t.taxon_id = mto.taxon_id
+      WHERE mto.matrix_id = ?
+      AND t.taxon_id NOT IN (
+        SELECT DISTINCT mto2.taxon_id
+        FROM matrix_taxa_order mto2
+        WHERE mto2.matrix_id != ?
+      )
+      `,
+      { replacements: [matrixId, matrixId], transaction }
+    )
+
+    // Delete characters that are only in this matrix
+    if (charactersToDelete.length > 0) {
+      const characterIds = charactersToDelete.map((c) => c.character_id)
+
+      // Delete character states first (due to foreign key constraints)
+      await sequelizeConn.query(
+        `DELETE FROM character_states WHERE character_id IN (?)`,
+        { replacements: [characterIds], transaction }
+      )
+
+      // Delete character rules
+      await sequelizeConn.query(
+        `DELETE FROM character_rules WHERE character_id IN (?)`,
+        { replacements: [characterIds], transaction }
+      )
+
+      // Delete characters
+      await sequelizeConn.query(
+        `DELETE FROM characters WHERE character_id IN (?)`,
+        { replacements: [characterIds], transaction }
+      )
+    }
+
+    // Delete taxa that are only in this matrix
+    if (taxaToDelete.length > 0) {
+      const taxonIds = taxaToDelete.map((t) => t.taxon_id)
+
+      // Delete taxa
+      await sequelizeConn.query(`DELETE FROM taxa WHERE taxon_id IN (?)`, {
+        replacements: [taxonIds],
+        transaction,
+      })
+    }
+
+    // Delete the matrix itself (this will cascade delete related records like cells, matrix_character_order, matrix_taxa_order)
+    await matrix.destroy({ user: user, transaction: transaction })
+
+    await transaction.commit()
+
+    return true
+  } catch (error) {
+    await transaction.rollback()
+    throw error
+  }
 }
