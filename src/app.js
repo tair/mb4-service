@@ -5,6 +5,7 @@ import config from './config.js'
 import projectsRouter from './routes/projects-route.js'
 import publicProjectsRouter from './routes/public/projects-route.js'
 import publicStatsRouter from './routes/public/stats-route.js'
+import publicMediaServeRouter from './routes/public/media-serve-route.js'
 import statsRouter from './routes/stats-route.js'
 import authRouter from './routes/auth-route.js'
 import taskRouter from './routes/tasks-route.js'
@@ -15,6 +16,7 @@ import homePageRouter from './routes/home-page-routes.js'
 import { initializeCache } from './util/stats-cache.js'
 import searchRouter from './routes/search-route.js'
 import analyticsRouter from './routes/analytics-route.js'
+import s3Router from './routes/s3-route.js'
 
 const app = express()
 
@@ -50,6 +52,7 @@ app.use('/auth', authRouter)
 app.use('/projects', projectsRouter)
 app.use('/public/projects', publicProjectsRouter)
 app.use('/public/stats', publicStatsRouter)
+app.use('/public/media', publicMediaServeRouter)
 app.use('/stats', statsRouter)
 app.use('/users', userRouter)
 app.use('/tasks', taskRouter)
@@ -57,6 +60,7 @@ app.use('/tilepic', tilepicRouter)
 app.use('/home-page', homePageRouter)
 app.use('/search', searchRouter)
 app.use('/analytics', analyticsRouter)
+app.use('/s3', s3Router)
 
 // Initialize stats cache
 initializeCache().catch((error) => {

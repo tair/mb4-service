@@ -31,7 +31,6 @@ export async function getTaxaStats(projectId) {
     INNER JOIN matrix_taxa_order AS mto
       ON
         mto.group_id = pmxg.group_id OR 
-        mto.user_id IS NULL OR 
         mto.group_id IS NULL
     INNER JOIN stats_taxa_overview AS sto
       ON
