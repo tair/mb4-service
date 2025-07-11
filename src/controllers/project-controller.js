@@ -8,7 +8,6 @@ import * as projectService from '../services/projects-service.js'
 import * as projectStatsService from '../services/project-stats-service.js'
 import * as projectUserService from '../services/project-user-service.js'
 import * as mediaService from '../services/media-service.js'
-import CipresRequestService from '../services/cipres-request-service.js'
 import axios from 'axios'
 import { MembershipType } from '../models/projects-x-user.js'
 
@@ -494,11 +493,4 @@ export async function createBulkMediaViews(req, res) {
       message: 'Failed to create media views',
     })
   }
-}
-
-export async function syncCipresJobs(req, res) {
-  let ret = await CipresRequestService.syncCipresJobs()
-  res.json({
-      status: 'ok',
-  })
 }

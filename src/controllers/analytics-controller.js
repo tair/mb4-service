@@ -32,16 +32,20 @@ export async function logDownload(req, res) {
     // const session_key = req.headers['x-session-key'] || 'testsession1234567890'
     const session_key = req.headers['x-session-key']
     if (!project_id || !download_type) {
-      return res.status(400).json({ message: 'project_id and download_type are required' })
+      return res
+        .status(400)
+        .json({ message: 'project_id and download_type are required' })
     }
     await sequelizeConn.query(
       `INSERT INTO stats_pub_download_log (session_key, user_id, download_datetime, download_type, project_id, row_id)
        VALUES (?, ?, UNIX_TIMESTAMP(), ?, ?, ?)`,
-      { replacements: [session_key, user_id, download_type, project_id, row_id] }
+      {
+        replacements: [session_key, user_id, download_type, project_id, row_id],
+      }
     )
     res.status(200).json({ message: 'Download logged' })
   } catch (e) {
     console.error('Error logging download:', e)
     res.status(500).json({ message: 'Failed to log download' })
   }
-} 
+}

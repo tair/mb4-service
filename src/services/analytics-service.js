@@ -1,1 +1,1 @@
-// Placeholder for analytics service logic if needed in the future. 
+// Placeholder for analytics service logic if needed in the future.
