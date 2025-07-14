@@ -17,7 +17,7 @@ The MB4 Scheduler Service provides automated task scheduling for the MorphoBank 
 npm install node-cron
 ```
 
-2. The scheduler will start automatically when the application starts.
+2. The scheduler will start automatically when the application starts (unless disabled via environment variable).
 
 ## API Endpoints
 
@@ -60,6 +60,12 @@ Available job names:
 
 ## Configuration
 
+### Environment Variables
+
+- **SCHEDULER_ENABLED**: Set to `'false'` to disable the internal cron scheduler (default: `true`)
+
+### Scheduled Tasks
+
 The scheduler runs the following tasks:
 
 - **CIPRES Sync**: Every 5 minutes (`*/5 * * * *`)
@@ -87,6 +93,31 @@ vim sync_mb4_cipres_improved.sh
 
 # Run
 ./sync_mb4_cipres_improved.sh
+```
+
+## Enabling/Disabling the Scheduler
+
+### Via Environment Variable
+```bash
+# Disable the scheduler
+export SCHEDULER_ENABLED=false
+npm start
+
+# Enable the scheduler (default)
+export SCHEDULER_ENABLED=true
+npm start
+```
+
+### Via API (Runtime Control)
+```bash
+# Stop the scheduler
+curl -X POST http://localhost:81/services/scheduler/stop
+
+# Start the scheduler
+curl -X POST http://localhost:81/services/scheduler/start
+
+# Check status
+curl http://localhost:81/services/scheduler/status
 ```
 
 ## Systemd Integration (Optional)

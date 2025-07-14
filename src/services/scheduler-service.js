@@ -75,8 +75,10 @@ class SchedulerService {
    * Get the status of all scheduled jobs
    */
   getStatus() {
+    const schedulerEnabled = process.env.SCHEDULER_ENABLED !== 'false'
     const status = {
       isRunning: this.isRunning,
+      enabled: schedulerEnabled,
       jobs: [],
       totalJobs: this.jobs.size,
     }

@@ -48,6 +48,16 @@ export async function getSchedulerStatus(req, res) {
  */
 export async function startScheduler(req, res) {
   try {
+    // Default to true if undefined, only disable if explicitly set to 'false'
+    const schedulerEnabled = process.env.SCHEDULER_ENABLED !== 'false'
+    if (!schedulerEnabled) {
+      return res.status(400).json({
+        status: 'error',
+        message:
+          'Scheduler is disabled via SCHEDULER_ENABLED environment variable',
+      })
+    }
+
     schedulerService.start()
     res.json({
       status: 'ok',

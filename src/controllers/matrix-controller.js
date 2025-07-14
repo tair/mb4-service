@@ -229,7 +229,10 @@ export async function run(req, res) {
   exporter.export(options)
   let jobCTP = req.query.jobCharsToPermute
   let jobChar = 'vparam.specify_mod_'
-  if (req.query.jobCharsToPermute.indexOf('%') != -1) {
+  if (
+    req.query.jobCharsToPermute &&
+    req.query.jobCharsToPermute.indexOf('%') != -1
+  ) {
     jobCTP = req.query.jobCharsToPermute.replace('%', '')
     jobChar = 'vparam.specify_pct_'
   }
@@ -239,7 +242,10 @@ export async function run(req, res) {
     'input.infile_': fileContent,
   }
   let formData2 = null
-  if (req.query.jobCharsToPermute.indexOf('%') != -1) {
+  if (
+    req.query.jobCharsToPermute &&
+    req.query.jobCharsToPermute.indexOf('%') != -1
+  ) {
     formData2 = {
       'vparam.specify_nchar_': options.characters.length,
       'vparam.specify_nreps_': req.query.jobNumIterations,

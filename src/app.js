@@ -66,8 +66,21 @@ initializeCache().catch((error) => {
   console.error('Failed to initialize stats cache:', error)
 })
 
-// Start scheduler service
-schedulerService.start()
+// Start scheduler service if enabled
+// Default to true if undefined, only disable if explicitly set to 'false'
+const schedulerEnabled = process.env.SCHEDULER_ENABLED !== 'false'
+if (schedulerEnabled) {
+  schedulerService.start()
+  console.log(
+    `Scheduler service is enabled and started (SCHEDULER_ENABLED=${
+      process.env.SCHEDULER_ENABLED || 'undefined, defaulting to true'
+    })`
+  )
+} else {
+  console.log(
+    'Scheduler service is disabled via SCHEDULER_ENABLED environment variable'
+  )
+}
 
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500
