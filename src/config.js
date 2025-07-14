@@ -43,6 +43,12 @@ const config = {
     refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET,
     jwtTokenExpiresIn: process.env.JWT_TOKEN_EXPIRES_IN,
   },
+  aws: {
+    region: process.env.AWS_REGION,
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    defaultBucket: process.env.AWS_S3_DEFAULT_BUCKET,
+  },
   email: {
     region: process.env.AWS_REGION,
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,

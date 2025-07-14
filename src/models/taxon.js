@@ -352,6 +352,7 @@ export default class Taxon extends Model {
           },
           beforeUpdate: (record) => {
             record.dataValues.taxon_hash = getTaxonHash(record)
+            record.last_modified_on = time()
           },
         },
       }

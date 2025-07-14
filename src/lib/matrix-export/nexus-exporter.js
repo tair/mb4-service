@@ -45,7 +45,7 @@ export class NexusExporter extends Exporter {
     const isMeristic = matrix.type == 1
     const maxStateLength = characters
       .map((c) => c.states?.length || 0)
-      .reduce((a, b) => Math.max(a, b))
+      .reduce((a, b) => Math.max(a, b), 0)
     const symbols = SYMBOLS.slice(0, maxStateLength)
     const useCharacterStateLabels = isMeristic
     const dataType = isMeristic ? 'MERISTIC' : 'STANDARD'
