@@ -189,6 +189,91 @@ export async function search(req, res) {
   })
 }
 
+export async function checkCitations(req, res) {
+  const projectId = req.project.project_id
+  const referenceIds = req.body.reference_ids
+
+  if (!referenceIds || !Array.isArray(referenceIds)) {
+    return res.status(400).json({ message: 'Invalid reference_ids' })
+  }
+
+  try {
+    // Count citations for each bibliography across all citation types
+    const [specimenCitations] = await sequelizeConn.query(
+      `
+      SELECT 
+        sxbr.reference_id,
+        COUNT(*) as specimen_count
+      FROM specimens_x_bibliographic_references sxbr
+      INNER JOIN specimens s ON s.specimen_id = sxbr.specimen_id
+      WHERE s.project_id = ? AND sxbr.reference_id IN (?)
+      GROUP BY sxbr.reference_id
+      `,
+      { replacements: [projectId, referenceIds] }
+    )
+
+    const [mediaCitations] = await sequelizeConn.query(
+      `
+      SELECT 
+        mxbr.reference_id,
+        COUNT(*) as media_count
+      FROM media_files_x_bibliographic_references mxbr
+      INNER JOIN media_files m ON m.media_id = mxbr.media_id
+      WHERE m.project_id = ? AND mxbr.reference_id IN (?)
+      GROUP BY mxbr.reference_id
+      `,
+      { replacements: [projectId, referenceIds] }
+    )
+
+    const [taxaCitations] = await sequelizeConn.query(
+      `
+      SELECT 
+        txbr.reference_id,
+        COUNT(*) as taxa_count
+      FROM taxa_x_bibliographic_references txbr
+      INNER JOIN taxa t ON t.taxon_id = txbr.taxon_id
+      WHERE t.project_id = ? AND txbr.reference_id IN (?)
+      GROUP BY txbr.reference_id
+      `,
+      { replacements: [projectId, referenceIds] }
+    )
+
+    // Combine results
+    const citationCounts = {}
+    referenceIds.forEach(id => {
+      citationCounts[id] = {
+        reference_id: id,
+        specimen_count: 0,
+        media_count: 0,
+        taxa_count: 0,
+        total_count: 0
+      }
+    })
+
+    specimenCitations.forEach(row => {
+      citationCounts[row.reference_id].specimen_count = row.specimen_count
+    })
+
+    mediaCitations.forEach(row => {
+      citationCounts[row.reference_id].media_count = row.media_count
+    })
+
+    taxaCitations.forEach(row => {
+      citationCounts[row.reference_id].taxa_count = row.taxa_count
+    })
+
+    // Calculate totals
+    Object.values(citationCounts).forEach(counts => {
+      counts.total_count = counts.specimen_count + counts.media_count + counts.taxa_count
+    })
+
+    res.status(200).json({ citations: Object.values(citationCounts) })
+  } catch (error) {
+    console.error('Error checking citations:', error)
+    res.status(500).json({ message: 'Failed to check citations' })
+  }
+}
+
 export async function uploadEndNoteXML(req, res) {
   if (!req.files || !req.files.file) {
     return res.status(400).json({ message: 'No file uploaded' })
