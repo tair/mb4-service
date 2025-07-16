@@ -7,7 +7,7 @@ export async function getProjectsForUser(userId) {
       p.project_id, p.name, p.created_on, p.published, p.exemplar_media_id,
       p.article_authors, p.journal_year, p.article_title, p.journal_title,
       p.journal_volume, p.journal_number, p.article_pp,  p.journal_cover,
-      p.journal_in_press, p.last_accessed_on,
+      p.journal_in_press, p.last_accessed_on, p.user_id AS admin_user_id,
       pu.last_accessed_on AS user_last_accessed_on
     FROM projects AS p
     INNER JOIN projects_x_users AS pu ON pu.project_id = p.project_id
