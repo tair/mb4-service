@@ -8,7 +8,6 @@ import mime from 'mime'
 const tempDirectories = new Set()
 
 export async function unzip(filePath) {
-  console.log('Starting ZIP extraction from:', filePath)
   
   let directory = null
   
@@ -21,10 +20,8 @@ export async function unzip(filePath) {
 
     directory = await fs.mkdtemp(path.join(tempPath, 'upload-'))
     tempDirectories.add(directory)
-    console.log('Created temporary directory:', directory)
 
     const files = await decompress(filePath, directory)
-    console.log(`Extracted ${files.length} files from ZIP`)
     
     if (files.length === 0) {
       throw new Error('ZIP file is empty or contains no files')
@@ -33,9 +30,7 @@ export async function unzip(filePath) {
     const processedFiles = files.map((file) => {
       const filePath = path.join(directory, file.path)
       const mimetype = mime.getType(filePath) || 'application/octet-stream'
-      
-      console.log(`Processing extracted file: ${file.path} (${mimetype})`)
-      
+            
       return {
         originalname: file.path,
         path: filePath,
@@ -44,7 +39,6 @@ export async function unzip(filePath) {
       }
     })
 
-    console.log(`Successfully processed ${processedFiles.length} files from ZIP`)
     return processedFiles
     
   } catch (error) {
@@ -72,7 +66,6 @@ export async function cleanupTempDirectory(directory) {
     if (tempDirectories.has(directory)) {
       await fs.rm(directory, { recursive: true, force: true })
       tempDirectories.delete(directory)
-      console.log('Cleaned up temporary directory:', directory)
     }
   } catch (error) {
     console.error('Error cleaning up temporary directory:', error)

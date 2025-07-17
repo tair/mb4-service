@@ -30,9 +30,6 @@ export async function getMediaFiles(req, res) {
 
 export async function createMediaFile(req, res) {
   const projectId = req.params.projectId
-  console.log('createMediaFile called with projectId:', projectId)
-  console.log('req.body:', req.body)
-  console.log('req.file:', req.file)
   
   const media = models.MediaFile.build(req.body)
 
@@ -99,7 +96,6 @@ export async function createMediaFile(req, res) {
   } catch (e) {
     await transaction.rollback()
     await mediaUploader.rollback()
-    console.log(e)
     res
       .status(500)
       .json({ message: 'Failed to create media with server error' })
@@ -112,12 +108,6 @@ export async function createMediaFile(req, res) {
 export async function createMediaFiles(req, res) {
   const projectId = req.params.projectId
   const values = req.body
-  
-  console.log('createMediaFiles called with projectId:', projectId)
-  console.log('req.body:', req.body)
-  console.log('req.file:', req.file)
-  console.log('specimen_id value:', values.specimen_id, 'type:', typeof values.specimen_id)
-  console.log('view_id value:', values.view_id, 'type:', typeof values.view_id)
 
   // Don't create media if the zip file is missing.
   if (!req.file) {
@@ -183,9 +173,7 @@ export async function createMediaFiles(req, res) {
   let files = []
   
   try {
-    console.log('Extracting ZIP file from:', req.file.path)
     files = await unzip(req.file.path)
-    console.log(`Extracted ${files.length} files from ZIP`)
     
     if (files.length === 0) {
       res.status(400).json({ message: 'ZIP file is empty or contains no valid files' })
@@ -204,13 +192,11 @@ export async function createMediaFiles(req, res) {
           file.originalname.includes('/.DS_Store') ||
           file.originalname.startsWith('Thumbs.db') ||
           file.originalname.includes('/Thumbs.db')) {
-        console.log(`Skipping system file: ${file.originalname}`)
         return false
       }
       
       // Skip directories
       if (!file.originalname.includes('.')) {
-        console.log(`Skipping directory: ${file.originalname}`)
         return false
       }
       
@@ -233,11 +219,8 @@ export async function createMediaFiles(req, res) {
       return
     }
 
-    console.log(`Processing ${extractedFiles.length} media files`)
-
     for (let i = 0; i < extractedFiles.length; i++) {
       const file = extractedFiles[i]
-      console.log(`Processing file ${i + 1}/${extractedFiles.length}: ${file.originalname}`)
       
       try {
         // Determine media type from the individual file, not the ZIP
@@ -265,7 +248,6 @@ export async function createMediaFiles(req, res) {
         })
 
         mediaFiles.push(media)
-        console.log(`Successfully processed: ${file.originalname}`)
         
       } catch (fileError) {
         console.error(`Failed to process file ${file.originalname}:`, fileError)
@@ -289,11 +271,6 @@ export async function createMediaFiles(req, res) {
 
     await transaction.commit()
     mediaUploader.commit()
-    
-    console.log(`Batch upload completed: ${mediaFiles.length} files processed successfully`)
-    if (failedFiles.length > 0) {
-      console.log(`${failedFiles.length} files failed to process`)
-    }
 
     // Clean up temporary files
     try {
@@ -406,7 +383,6 @@ export async function deleteMediaFiles(req, res) {
   } catch (e) {
     await transaction.rollback()
     res.status(200).json({ message: 'Error deleting media' })
-    console.log('Error deleting media', e)
   }
 }
 
@@ -470,7 +446,6 @@ export async function editMediaFile(req, res) {
   } catch (e) {
     await transaction.rollback()
     await mediaUploader.rollback()
-    console.log(e)
     res
       .status(500)
       .json({ message: 'Failed to create media with server error' })
@@ -503,8 +478,6 @@ export async function editMediaFiles(req, res) {
   const projectId = req.project.project_id
   const mediaIds = req.body.media_ids
   const values = req.body.media
-
-  console.log('editMediaFiles called with:', { projectId, mediaIds, values })
   
   // Validate that we're not accidentally updating the media field
   if (values.media) {
@@ -565,20 +538,15 @@ export async function editMediaFiles(req, res) {
       )
     }
 
-    console.log('Updating media files with values:', values)
-    console.log('Media IDs to update:', mediaIds)
-    
     // Remove any media field from values to prevent corruption
     const cleanValues = { ...values }
     delete cleanValues.media
-    console.log('Clean values for update:', cleanValues)
     
     // Check current status before update
     const beforeUpdate = await models.MediaFile.findAll({
       where: { media_id: mediaIds },
       transaction: transaction,
     })
-    console.log('Before update - cataloguing_status:', beforeUpdate.map(m => ({ id: m.media_id, status: m.cataloguing_status })))
     
     const updateResult = await models.MediaFile.update(cleanValues, {
       where: { media_id: mediaIds },
@@ -586,8 +554,6 @@ export async function editMediaFiles(req, res) {
       individualHooks: true,
       user: req.user,
     })
-    console.log('Update result:', updateResult)
-    console.log('Rows affected:', updateResult[0])
     
     const results = await models.MediaFile.findAll({
       where: {
@@ -595,27 +561,22 @@ export async function editMediaFiles(req, res) {
       },
       transaction: transaction,
     })
-    console.log('After update - cataloguing_status:', results.map(m => ({ id: m.media_id, status: m.cataloguing_status })))
     
     await transaction.commit()
-    console.log('Transaction committed successfully')
     
     // Double-check the database after commit
     const [finalCheck] = await sequelizeConn.query(
       `SELECT media_id, cataloguing_status FROM media_files WHERE media_id IN (?)`,
       { replacements: [mediaIds] }
     )
-    console.log('Final database check after commit:', finalCheck)
     
     const responseData = results.map((media) => convertMediaResponse(media))
-    console.log('Response data:', responseData.map(m => ({ id: m.media_id, status: m.cataloguing_status })))
     
     res.status(200).json({
       media: responseData,
     })
   } catch (e) {
     await transaction.rollback()
-    console.log(e)
     res.status(500).json({ message: 'Failed to edit media with server error' })
   }
 }
@@ -714,7 +675,6 @@ export async function createCitation(req, res) {
     await transaction.commit()
     res.status(200).json({ citation })
   } catch (e) {
-    console.log(e)
     res
       .status(500)
       .json({ message: 'Failed to create citation with server error' })
@@ -773,7 +733,6 @@ export async function editCitation(req, res) {
     })
     await transaction.commit()
   } catch (e) {
-    console.log(e)
     res
       .status(500)
       .json({ message: 'Failed to create citation with server error' })
@@ -814,7 +773,6 @@ export async function deleteCitations(req, res) {
   } catch (e) {
     await transaction.rollback()
     res.status(200).json({ message: "Error deleting media's citations" })
-    console.log('Error deleting citations', e)
   }
 }
 
@@ -890,16 +848,6 @@ export async function serveMediaFile(req, res) {
     }
 
     const mediaData = mediaRows[0].media
-    console.log('Media ID:', mediaRows[0].media_id)
-    console.log('Media data for serving:', JSON.stringify(mediaData, null, 2))
-    console.log('Requested file size:', fileSize)
-    console.log('Available sizes:', mediaData ? Object.keys(mediaData) : 'No media data')
-    
-    // Debug the specific file size data
-    if (mediaData && mediaData[fileSize]) {
-      console.log(`File size ${fileSize} data:`, JSON.stringify(mediaData[fileSize], null, 2))
-      console.log(`S3_KEY for ${fileSize}:`, mediaData[fileSize].S3_KEY)
-    }
     
     if (!mediaData || !mediaData[fileSize]) {
       return res.status(404).json({
@@ -938,13 +886,7 @@ export async function serveMediaFile(req, res) {
     }
 
     // Get object from S3
-    console.log('Attempting to get S3 object:', { bucket, s3Key })
     const result = await s3Service.getObject(bucket, s3Key)
-    console.log('S3 result:', { 
-      contentType: result.contentType, 
-      contentLength: result.contentLength,
-      lastModified: result.lastModified 
-    })
 
     // Set appropriate headers
     res.set({

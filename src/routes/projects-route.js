@@ -54,7 +54,7 @@ projectsRouter.get('/journals', controller.getJournalList)
 projectsRouter.get('/journal-cover', controller.getJournalCover)
 
 // Project creation and DOI retrieval routes
-projectsRouter.post('/create', controller.createProject)
+projectsRouter.post('/create', upload.single('journal_cover'), controller.createProject)
 projectsRouter.post('/doi', controller.retrieveDOI)
 
 // This is a sub-route focused on /projects/<ID>
@@ -96,6 +96,5 @@ projectRouter.post(
   '/publish/partition/:partitionId',
   controller.publishPartition
 )
-projectRouter.post('/journal-cover', upload.single('journal_cover'), controller.uploadJournalCover)
 
 export default projectsRouter

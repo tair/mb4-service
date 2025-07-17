@@ -11,7 +11,6 @@ export class S3FileDeletionHandler extends Handler {
 
     for (const s3Key of parameters.s3_keys) {
       try {
-        console.log(`Deleting S3 file: ${bucket}/${s3Key}`)
         await s3Service.deleteObject(bucket, s3Key)
         deletedFiles.push(s3Key)
       } catch (error) {
