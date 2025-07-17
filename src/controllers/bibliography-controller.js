@@ -519,7 +519,7 @@ export async function exportEndNoteAsTabFile(req, res) {
       const row = []
 
       // Reference Type
-      row.push(ref.reference_type)
+      row.push(models.BibliographicReference.getReferenceTypeString(ref.reference_type))
 
       // Primary Authors
       const primaryAuthors =
