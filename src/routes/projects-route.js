@@ -81,6 +81,7 @@ projectRouter.get(
 )
 
 projectRouter.post('/copyright', controller.setCopyright)
+projectRouter.put('/update', controller.updateProject)
 projectRouter.post('/duplication/request', controller.createDuplicationRequest)
 projectRouter.post(
   '/publish/partition/:partitionId',
