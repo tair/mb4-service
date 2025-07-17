@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import config from '../config.js'
 
 class S3Service {
@@ -96,6 +96,26 @@ class S3Service {
     } catch (error) {
       console.error('S3 Service Error:', error)
       throw new Error(`Failed to upload object to S3: ${error.message}`)
+    }
+  }
+
+  /**
+   * Delete object from S3 bucket
+   * @param {string} bucketName - The S3 bucket name
+   * @param {string} key - The object key/path
+   * @returns {Promise<void>}
+   */
+  async deleteObject(bucketName, key) {
+    try {
+      const command = new DeleteObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+      })
+
+      await this.s3Client.send(command)
+    } catch (error) {
+      console.error('S3 Service Error:', error)
+      throw new Error(`Failed to delete object from S3: ${error.message}`)
     }
   }
 }
