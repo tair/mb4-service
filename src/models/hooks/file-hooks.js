@@ -72,6 +72,37 @@ async function unlink(tableName, rowId, json, transaction, user) {
     return
   }
 
+  // Handle S3-based media files
+  if (json.thumbnail && json.thumbnail.S3_KEY) {
+    // This is a new S3-based media file
+    const s3Keys = []
+    if (json.thumbnail.S3_KEY) s3Keys.push(json.thumbnail.S3_KEY)
+    if (json.large && json.large.S3_KEY) s3Keys.push(json.large.S3_KEY)
+    if (json.original && json.original.S3_KEY) s3Keys.push(json.original.S3_KEY)
+    
+    if (s3Keys.length > 0) {
+      const rowKey = `${tableName}/${rowId}/unlink-s3`
+      await models.TaskQueue.create(
+        {
+          user_id: user.user_id,
+          priority: 200,
+          entity_key: crypto.createHash('md5').update(rowKey).digest('hex'),
+          row_key: crypto.createHash('md5').update(rowKey).digest('hex'),
+          handler: 'S3FileDeletion',
+          parameters: {
+            s3_keys: s3Keys,
+          },
+        },
+        {
+          transaction: transaction,
+          user: user,
+        }
+      )
+    }
+    return
+  }
+
+  // Handle legacy local file system
   const { volume, hash, magic, filename } = json
   if (!volume || !hash || !magic || !filename) {
     console.error(`Failed to delete previous record: `, json)

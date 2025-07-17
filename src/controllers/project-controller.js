@@ -8,6 +8,8 @@ import * as projectService from '../services/projects-service.js'
 import * as projectStatsService from '../services/project-stats-service.js'
 import * as projectUserService from '../services/project-user-service.js'
 import * as mediaService from '../services/media-service.js'
+import { FileUploader } from '../lib/file-uploader.js'
+import { S3MediaUploader } from '../lib/s3-media-uploader.js'
 import axios from 'axios'
 import { MembershipType } from '../models/projects-x-user.js'
 
@@ -312,51 +314,62 @@ export async function createProject(req, res, next) {
     } = req.body
 
     // Validate required fields
-    if (!name || !nsf_funded) {
+    if (!name || nsf_funded === undefined || nsf_funded === null || nsf_funded === '') {
       return res.status(400).json({
         message: 'Project name and NSF funding status are required',
       })
     }
 
-    // Create project with user object for changelog hook
-    const project = await models.Project.create(
-      {
-        name,
-        nsf_funded,
-        exemplar_media_id,
-        allow_reviewer_login,
-        reviewer_login_password,
-        journal_title: journal_title_other || journal_title,
-        article_authors,
-        article_title,
-        article_doi,
-        journal_year,
-        journal_volume,
-        journal_url,
-        article_pp,
-        description,
-        user_id: req.user.id,
-        published: 0,
-      },
-      {
-        user: req.user, // Pass the user object for the changelog hook
-      }
-    )
+    const transaction = await sequelizeConn.transaction()
+    
+    try {
+      // Create project with user object for changelog hook
+      const project = await models.Project.create(
+        {
+          name,
+          nsf_funded,
+          exemplar_media_id,
+          allow_reviewer_login,
+          reviewer_login_password,
+          journal_title: journal_title_other || journal_title,
+          article_authors,
+          article_title,
+          article_doi,
+          journal_year,
+          journal_volume,
+          journal_url,
+          article_pp,
+          description,
+          user_id: req.user.id,
+          published: 0,
+        },
+        {
+          transaction,
+          user: req.user, // Pass the user object for the changelog hook
+        }
+      )
 
-    console.log('create project project done')
-    // Add user as project admin
-    await models.ProjectsXUser.create(
-      {
-        project_id: project.project_id,
-        user_id: req.user.user_id,
-        membership_type: MembershipType.ADMIN,
-      },
-      {
-        user: req.user, // Pass the user object for the changelog hook
-      }
-    )
+      console.log('create project project done')
+      
+      // Add user as project admin
+      await models.ProjectsXUser.create(
+        {
+          project_id: project.project_id,
+          user_id: req.user.user_id,
+          membership_type: MembershipType.ADMIN,
+        },
+        {
+          transaction,
+          user: req.user, // Pass the user object for the changelog hook
+        }
+      )
 
-    res.status(201).json(project)
+      await transaction.commit()
+      res.status(201).json(project)
+    } catch (error) {
+      await transaction.rollback()
+      throw error
+    }
   } catch (error) {
     console.error('create project error', error)
     next(error)
@@ -450,7 +463,7 @@ export async function createBulkMediaViews(req, res) {
     const projectUser = await models.ProjectsXUser.findOne({
       where: {
         project_id: projectId,
-        user_id: req.user.id,
+        user_id: req.user.user_id,
       },
     })
 
@@ -492,5 +505,89 @@ export async function createBulkMediaViews(req, res) {
       status: 'error',
       message: 'Failed to create media views',
     })
+  }
+}
+
+// Upload journal cover as a media file
+export async function uploadJournalCover(req, res, next) {
+  try {
+    const { projectId } = req.params
+    
+    // Validate project exists and user has access
+    const project = await models.Project.findByPk(projectId)
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' })
+    }
+
+    // Check if user has access to the project
+    const projectUser = await models.ProjectsXUser.findOne({
+      where: {
+        project_id: projectId,
+        user_id: req.user.user_id,
+      },
+    })
+
+    if (!projectUser) {
+      return res.status(403).json({ message: 'Access denied' })
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'No journal cover file provided' })
+    }
+
+    const transaction = await sequelizeConn.transaction()
+    const mediaUploader = new S3MediaUploader(transaction, req.user)
+    
+    try {
+      // Create a new media file record
+      const media = await models.MediaFile.create(
+        {
+          project_id: projectId,
+          user_id: req.user.user_id,
+          notes: 'Journal cover image',
+          published: 0,
+          access: 0,
+          cataloguing_status: 1,
+          media_type: 'image',
+        },
+        {
+          transaction,
+          user: req.user,
+        }
+      )
+
+      // Process and upload the image using S3MediaUploader
+      await mediaUploader.setMedia(media, 'media', req.file)
+      
+      await media.save({
+        transaction,
+        user: req.user,
+        shouldSkipLogChange: true,
+      })
+
+      // Update the project to link to this media file
+      project.exemplar_media_id = media.media_id
+      await project.save({
+        transaction,
+        user: req.user,
+        shouldSkipLogChange: true,
+      })
+
+      await transaction.commit()
+      mediaUploader.commit()
+      
+      res.status(200).json({ 
+        message: 'Journal cover uploaded successfully',
+        media_id: media.media_id,
+        project_id: projectId
+      })
+    } catch (error) {
+      await transaction.rollback()
+      await mediaUploader.rollback()
+      throw error
+    }
+  } catch (error) {
+    console.error('upload journal cover error', error)
+    next(error)
   }
 }

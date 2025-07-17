@@ -3,15 +3,17 @@ import * as service from '../services/media-service.js'
 import * as bibliographyService from '../services/bibliography-service.js'
 import * as folioService from '../services/folios-service.js'
 import { getMedia, convertMediaTypeFromMimeType } from '../util/media.js'
-import { unzip } from '../util/zip.js'
+import { unzip, cleanupTempDirectory } from '../util/zip.js'
 import { models } from '../models/init-models.js'
 import { MediaUploader } from '../lib/media-uploader.js'
+import { S3MediaUploader } from '../lib/s3-media-uploader.js'
 import {
   ModelRefencialMapper,
   ModelReferencialConfig,
 } from '../lib/datamodel/model-referencial-mapper.js'
 import s3Service from '../services/s3-service.js'
 import config from '../config.js'
+import path from 'path'
 
 export async function getMediaFiles(req, res) {
   const projectId = req.params.projectId
@@ -28,38 +30,54 @@ export async function getMediaFiles(req, res) {
 
 export async function createMediaFile(req, res) {
   const projectId = req.params.projectId
+  console.log('createMediaFile called with projectId:', projectId)
+  console.log('req.body:', req.body)
+  console.log('req.file:', req.file)
+  
   const media = models.MediaFile.build(req.body)
 
   // Ensure that the specimen_id is within the same project.
-  if (media.specimen_id) {
+  if (media.specimen_id && media.specimen_id !== '' && media.specimen_id !== 'null') {
     const specimen = await models.Specimen.findByPk(media.specimen_id)
     if (specimen == null || specimen.project_id != projectId) {
       res.status(404).json({ message: 'Specimen is not found' })
       return
     }
+  } else {
+    // Set specimen_id to null if it's empty or invalid
+    media.specimen_id = null
   }
 
   // Ensure that the media view is within the same project.
-  if (media.view_id) {
+  if (media.view_id && media.view_id !== '' && media.view_id !== 'null') {
     const view = await models.MediaView.findByPk(media.view_id)
     if (view == null || view.project_id != projectId) {
       res.status(404).json({ message: 'View is not found' })
       return
     }
+  } else {
+    // Set view_id to null if it's empty or invalid
+    media.view_id = null
   }
 
   if (media.is_copyrighted == 0) {
     media.copyright_permission = 0
   }
 
+  // Set media type based on uploaded file or default to image
+  let mediaType = 1 // Default to image
+  if (req.file && req.file.mimetype) {
+    mediaType = convertMediaTypeFromMimeType(req.file.mimetype)
+  }
+
   media.set({
     project_id: req.project.project_id,
     user_id: req.user.user_id,
-    media_type: convertMediaTypeFromMimeType(req.file.mimetype),
+    media_type: mediaType,
   })
 
   const transaction = await sequelizeConn.transaction()
-  const mediaUploader = new MediaUploader(transaction, req.user)
+  const mediaUploader = new S3MediaUploader(transaction, req.user)
   try {
     await media.save({
       transaction,
@@ -77,9 +95,10 @@ export async function createMediaFile(req, res) {
     })
 
     await transaction.commit()
+    mediaUploader.commit()
   } catch (e) {
     await transaction.rollback()
-    mediaUploader.rollback()
+    await mediaUploader.rollback()
     console.log(e)
     res
       .status(500)
@@ -93,6 +112,12 @@ export async function createMediaFile(req, res) {
 export async function createMediaFiles(req, res) {
   const projectId = req.params.projectId
   const values = req.body
+  
+  console.log('createMediaFiles called with projectId:', projectId)
+  console.log('req.body:', req.body)
+  console.log('req.file:', req.file)
+  console.log('specimen_id value:', values.specimen_id, 'type:', typeof values.specimen_id)
+  console.log('view_id value:', values.view_id, 'type:', typeof values.view_id)
 
   // Don't create media if the zip file is missing.
   if (!req.file) {
@@ -100,22 +125,51 @@ export async function createMediaFiles(req, res) {
     return
   }
 
+  // Validate that the uploaded file is actually a ZIP file
+  const allowedMimeTypes = [
+    'application/zip',
+    'application/x-zip-compressed',
+    'application/octet-stream' // Some systems send this for ZIP files
+  ]
+  
+  if (!allowedMimeTypes.includes(req.file.mimetype) && !req.file.originalname.toLowerCase().endsWith('.zip')) {
+    res.status(400).json({ 
+      message: 'Uploaded file must be a ZIP archive. Please ensure you are uploading a .zip file.' 
+    })
+    return
+  }
+
+  // Validate ZIP file size (max 100MB)
+  const maxZipSize = 100 * 1024 * 1024 // 100MB
+  if (req.file.size > maxZipSize) {
+    res.status(400).json({ 
+      message: 'ZIP file is too large. Maximum size is 100MB. Please split your files into smaller archives.' 
+    })
+    return
+  }
+
   // Ensure that the specimen is within the same project.
-  if (values.specimen_id) {
+  if (values.specimen_id && values.specimen_id !== '' && values.specimen_id !== 'null') {
     const specimen = await models.Specimen.findByPk(values.specimen_id)
     if (specimen == null || specimen.project_id != projectId) {
       res.status(404).json({ message: 'Specimen is not found' })
       return
     }
+  } else {
+    // Set specimen_id to null if it's empty or invalid
+    values.specimen_id = null
   }
 
   // Ensure that the view is within the same project.
-  if (values.view_id) {
+  if (values.view_id && values.view_id !== '' && values.view_id !== 'null') {
     const view = await models.MediaView.findByPk(values.view_id)
     if (view == null || view.project_id != projectId) {
       res.status(404).json({ message: 'View is not found' })
       return
     }
+  } else {
+    // Set view_id to null if it's empty or invalid
+    values.view_id = null
   }
 
   if (values.is_copyrighted == 0) {
@@ -123,47 +177,159 @@ export async function createMediaFiles(req, res) {
   }
 
   const mediaFiles = []
+  const failedFiles = []
   const transaction = await sequelizeConn.transaction()
-  const mediaUploader = new MediaUploader(transaction, req.user)
+  const mediaUploader = new S3MediaUploader(transaction, req.user)
+  let files = []
+  
   try {
-    const files = await unzip(req.file.path)
-    for (const file of files) {
-      const media = models.MediaFile.build(values)
-      media.set({
-        project_id: req.project.project_id,
-        user_id: req.user.user_id,
-        cataloguing_status: 1,
-        media_type: convertMediaTypeFromMimeType(req.file.mimetype),
-      })
-      await media.save({
-        transaction,
-        user: req.user,
-      })
+    console.log('Extracting ZIP file from:', req.file.path)
+    files = await unzip(req.file.path)
+    console.log(`Extracted ${files.length} files from ZIP`)
+    
+    if (files.length === 0) {
+      res.status(400).json({ message: 'ZIP file is empty or contains no valid files' })
+      return
+    }
 
-      await mediaUploader.setMedia(media, 'media', file)
+    // Filter out non-media files and validate file types
+    const extractedFiles = files.filter(file => {
+      const extension = file.originalname.split('.').pop().toLowerCase()
+      const supportedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'tif', 'webp']
+      
+      // Skip macOS metadata files and system files
+      if (file.originalname.startsWith('__MACOSX/') || 
+          file.originalname.startsWith('._') ||
+          file.originalname.startsWith('.DS_Store') ||
+          file.originalname.includes('/.DS_Store') ||
+          file.originalname.startsWith('Thumbs.db') ||
+          file.originalname.includes('/Thumbs.db')) {
+        console.log(`Skipping system file: ${file.originalname}`)
+        return false
+      }
+      
+      // Skip directories
+      if (!file.originalname.includes('.')) {
+        console.log(`Skipping directory: ${file.originalname}`)
+        return false
+      }
+      
+      return supportedExtensions.includes(extension)
+    })
 
-      await media.save({
-        transaction,
-        user: req.user,
-        shouldSkipLogChange: true,
+    if (extractedFiles.length === 0) {
+      res.status(400).json({ 
+        message: 'ZIP file contains no supported image files. Supported formats: JPG, PNG, GIF, BMP, TIFF, WebP' 
       })
+      return
+    }
 
-      mediaFiles.push(media)
+    // Limit the number of files that can be processed in a single batch
+    const maxFilesPerBatch = 50
+    if (extractedFiles.length > maxFilesPerBatch) {
+      res.status(400).json({ 
+        message: `ZIP file contains too many files (${extractedFiles.length}). Maximum allowed is ${maxFilesPerBatch} files per batch. Please split your files into smaller archives.` 
+      })
+      return
+    }
+
+    console.log(`Processing ${extractedFiles.length} media files`)
+
+    for (let i = 0; i < extractedFiles.length; i++) {
+      const file = extractedFiles[i]
+      console.log(`Processing file ${i + 1}/${extractedFiles.length}: ${file.originalname}`)
+      
+      try {
+        // Determine media type from the individual file, not the ZIP
+        const mediaType = convertMediaTypeFromMimeType(file.mimetype)
+        
+        const media = models.MediaFile.build(values)
+        media.set({
+          project_id: req.project.project_id,
+          user_id: req.user.user_id,
+          cataloguing_status: 1,
+          media_type: mediaType,
+        })
+        
+        await media.save({
+          transaction,
+          user: req.user,
+        })
+
+        await mediaUploader.setMedia(media, 'media', file)
+
+        await media.save({
+          transaction,
+          user: req.user,
+          shouldSkipLogChange: true,
+        })
+
+        mediaFiles.push(media)
+        console.log(`Successfully processed: ${file.originalname}`)
+        
+      } catch (fileError) {
+        console.error(`Failed to process file ${file.originalname}:`, fileError)
+        failedFiles.push({
+          filename: file.originalname,
+          error: fileError.message
+        })
+        // Continue processing other files instead of failing completely
+      }
+    }
+
+    if (mediaFiles.length === 0) {
+      await transaction.rollback()
+      await mediaUploader.rollback()
+      res.status(500).json({ 
+        message: 'Failed to process any files from the ZIP archive',
+        failedFiles: failedFiles
+      })
+      return
     }
 
     await transaction.commit()
+    mediaUploader.commit()
+    
+    console.log(`Batch upload completed: ${mediaFiles.length} files processed successfully`)
+    if (failedFiles.length > 0) {
+      console.log(`${failedFiles.length} files failed to process`)
+    }
+
+    // Clean up temporary files
+    try {
+      await cleanupTempDirectory(path.dirname(files[0]?.path || ''))
+    } catch (cleanupError) {
+      console.error('Error cleaning up temporary files:', cleanupError)
+    }
+
   } catch (e) {
     await transaction.rollback()
-    mediaUploader.rollback()
-    console.log(e)
-    res
-      .status(500)
-      .json({ message: 'Failed to create media with server error' })
+    await mediaUploader.rollback()
+    console.error('Batch upload error:', e)
+    
+    // Clean up temporary files on error
+    try {
+      if (files && files.length > 0) {
+        await cleanupTempDirectory(path.dirname(files[0].path))
+      }
+    } catch (cleanupError) {
+      console.error('Error cleaning up temporary files on error:', cleanupError)
+    }
+    
+    res.status(500).json({ 
+      message: 'Failed to create media with server error',
+      error: e.message,
+      failedFiles: failedFiles
+    })
     return
   }
 
   res.status(200).json({
     media: mediaFiles.map((media) => convertMediaResponse(media)),
+    summary: {
+      totalProcessed: mediaFiles.length,
+      failedFiles: failedFiles
+    }
   })
 }
 
@@ -258,21 +424,27 @@ export async function editMediaFile(req, res) {
   const values = req.body
 
   // Ensure that the specimen_id is within the same project.
-  if (values.specimen_id) {
+  if (values.specimen_id && values.specimen_id !== '' && values.specimen_id !== 'null') {
     const specimen = await models.Specimen.findByPk(values.specimen_id)
     if (specimen == null || specimen.project_id != projectId) {
       res.status(404).json({ message: 'Specimen is not found' })
       return
     }
+  } else {
+    // Set specimen_id to null if it's empty or invalid
+    values.specimen_id = null
   }
 
   // Ensure that the media view is within the same project.
-  if (values.view_id) {
+  if (values.view_id && values.view_id !== '' && values.view_id !== 'null') {
     const view = await models.MediaView.findByPk(values.view_id)
     if (view == null || view.project_id != projectId) {
       res.status(404).json({ message: 'View is not found' })
       return
     }
+  } else {
+    // Set view_id to null if it's empty or invalid
+    values.view_id = null
   }
 
   for (const column in values) {
@@ -280,7 +452,7 @@ export async function editMediaFile(req, res) {
   }
 
   const transaction = await sequelizeConn.transaction()
-  const mediaUploader = new MediaUploader(transaction, req.user)
+  const mediaUploader = new S3MediaUploader(transaction, req.user)
   try {
     if (req.file) {
       await mediaUploader.setMedia(media, 'media', req.file)
@@ -293,6 +465,7 @@ export async function editMediaFile(req, res) {
     })
 
     await transaction.commit()
+    mediaUploader.commit()
     res.status(200).json({ media: convertMediaResponse(media) })
   } catch (e) {
     await transaction.rollback()
@@ -330,6 +503,16 @@ export async function editMediaFiles(req, res) {
   const projectId = req.project.project_id
   const mediaIds = req.body.media_ids
   const values = req.body.media
+
+  console.log('editMediaFiles called with:', { projectId, mediaIds, values })
+  
+  // Validate that we're not accidentally updating the media field
+  if (values.media) {
+    console.error('ERROR: Attempting to update media field directly:', values.media)
+    return res.status(400).json({
+      message: 'Cannot update media field directly. Use cataloguing_status, specimen_id, view_id, etc.',
+    })
+  }
 
   const isInProject = await service.isMediaInProject(mediaIds, projectId)
   if (!isInProject) {
@@ -382,21 +565,53 @@ export async function editMediaFiles(req, res) {
       )
     }
 
-    await models.MediaFile.update(values, {
+    console.log('Updating media files with values:', values)
+    console.log('Media IDs to update:', mediaIds)
+    
+    // Remove any media field from values to prevent corruption
+    const cleanValues = { ...values }
+    delete cleanValues.media
+    console.log('Clean values for update:', cleanValues)
+    
+    // Check current status before update
+    const beforeUpdate = await models.MediaFile.findAll({
+      where: { media_id: mediaIds },
+      transaction: transaction,
+    })
+    console.log('Before update - cataloguing_status:', beforeUpdate.map(m => ({ id: m.media_id, status: m.cataloguing_status })))
+    
+    const updateResult = await models.MediaFile.update(cleanValues, {
       where: { media_id: mediaIds },
       transaction: transaction,
       individualHooks: true,
       user: req.user,
     })
+    console.log('Update result:', updateResult)
+    console.log('Rows affected:', updateResult[0])
+    
     const results = await models.MediaFile.findAll({
       where: {
         media_id: mediaIds,
       },
       transaction: transaction,
     })
+    console.log('After update - cataloguing_status:', results.map(m => ({ id: m.media_id, status: m.cataloguing_status })))
+    
     await transaction.commit()
+    console.log('Transaction committed successfully')
+    
+    // Double-check the database after commit
+    const [finalCheck] = await sequelizeConn.query(
+      `SELECT media_id, cataloguing_status FROM media_files WHERE media_id IN (?)`,
+      { replacements: [mediaIds] }
+    )
+    console.log('Final database check after commit:', finalCheck)
+    
+    const responseData = results.map((media) => convertMediaResponse(media))
+    console.log('Response data:', responseData.map(m => ({ id: m.media_id, status: m.cataloguing_status })))
+    
     res.status(200).json({
-      media: results.map((media) => convertMediaResponse(media)),
+      media: responseData,
     })
   } catch (e) {
     await transaction.rollback()
@@ -626,8 +841,7 @@ function convertMediaResponse(row) {
     user_id: parseInt(row.user_id),
     view_id: row.view_id ? parseInt(row.view_id) : undefined,
     specimen_id: row.specimen_id ? parseInt(row.specimen_id) : undefined,
-    thumbnail: row.media ? getMedia(row.media, 'thumbnail') : undefined,
-    icon: row.media ? getMedia(row.media, 'icon') : undefined,
+    // Don't set thumbnail/icon - let frontend construct URLs using buildMediaUrl
     notes: row.notes,
     published: row.published,
     cataloguing_status: row.cataloguing_status,
@@ -654,7 +868,7 @@ export async function serveMediaFile(req, res) {
     const { projectId, mediaId, fileSize = 'original' } = req.params
     
     // Validate file size
-    const supportedFileSizes = ['original', 'large', 'medium', 'thumbnail']
+    const supportedFileSizes = ['original', 'large', 'thumbnail']
     if (!supportedFileSizes.includes(fileSize)) {
       return res.status(400).json({
         error: 'Invalid file size',
@@ -662,9 +876,9 @@ export async function serveMediaFile(req, res) {
       })
     }
 
-    // Get media file info from database to determine file extension
+    // Get media file info from database
     const [mediaRows] = await sequelizeConn.query(
-      `SELECT media FROM media_files WHERE project_id = ? AND media_id = ?`,
+      `SELECT media_id, media FROM media_files WHERE project_id = ? AND media_id = ?`,
       { replacements: [projectId, mediaId] }
     )
 
@@ -676,30 +890,42 @@ export async function serveMediaFile(req, res) {
     }
 
     const mediaData = mediaRows[0].media
+    console.log('Media ID:', mediaRows[0].media_id)
+    console.log('Media data for serving:', JSON.stringify(mediaData, null, 2))
+    console.log('Requested file size:', fileSize)
+    console.log('Available sizes:', mediaData ? Object.keys(mediaData) : 'No media data')
+    
+    // Debug the specific file size data
+    if (mediaData && mediaData[fileSize]) {
+      console.log(`File size ${fileSize} data:`, JSON.stringify(mediaData[fileSize], null, 2))
+      console.log(`S3_KEY for ${fileSize}:`, mediaData[fileSize].S3_KEY)
+    }
     
     if (!mediaData || !mediaData[fileSize]) {
       return res.status(404).json({
         error: 'File size not found',
-        message: `The requested file size '${fileSize}' is not available for this media`,
+        message: `The requested file size '${fileSize}' is not available for this media. Available sizes: ${mediaData ? Object.keys(mediaData).join(', ') : 'none'}`,
       })
     }
 
-    // Extract file extension from the media data
+    // Extract S3 key from the media data (new system) or construct it (old system)
     const mediaVersion = mediaData[fileSize]
     
-    if (!mediaVersion || !mediaVersion.FILENAME) {
+    let s3Key
+    if (mediaVersion.S3_KEY) {
+      // New S3-based system
+      s3Key = mediaVersion.S3_KEY
+    } else if (mediaVersion.FILENAME) {
+      // Legacy local file system - construct S3 key
+      const fileExtension = mediaVersion.FILENAME.split('.').pop() || 'jpg'
+      const fileName = `${projectId}_${mediaId}_${fileSize}.${fileExtension}`
+      s3Key = `media_files/images/${projectId}/${mediaId}/${fileName}`
+    } else {
       return res.status(404).json({
         error: 'Invalid media data',
-        message: 'Media data is missing filename information',
+        message: 'Media data is missing file information',
       })
     }
-
-    // Extract file extension from the FILENAME
-    const fileExtension = mediaVersion.FILENAME.split('.').pop() || 'jpg'
-    
-    // Construct S3 key using project ID and media ID format
-    const fileName = `${projectId}_${mediaId}_${fileSize}.${fileExtension}`
-    const s3Key = `media_files/images/${projectId}/${mediaId}/${fileName}`
 
     // Use default bucket from config
     const bucket = config.aws.defaultBucket
@@ -712,7 +938,13 @@ export async function serveMediaFile(req, res) {
     }
 
     // Get object from S3
+    console.log('Attempting to get S3 object:', { bucket, s3Key })
     const result = await s3Service.getObject(bucket, s3Key)
+    console.log('S3 result:', { 
+      contentType: result.contentType, 
+      contentLength: result.contentLength,
+      lastModified: result.lastModified 
+    })
 
     // Set appropriate headers
     res.set({
@@ -773,7 +1005,7 @@ export async function serveBatchMediaFiles(req, res) {
     }
 
     // Validate file size
-    const supportedFileSizes = ['original', 'large', 'medium', 'thumbnail']
+    const supportedFileSizes = ['original', 'large', 'thumbnail']
     if (!supportedFileSizes.includes(fileSize)) {
       return res.status(400).json({
         error: 'Invalid file size',
@@ -821,22 +1053,24 @@ export async function serveBatchMediaFiles(req, res) {
           continue
         }
 
-        // Extract file extension from the media data
+        // Extract S3 key from the media data (new system) or construct it (old system)
         const mediaVersion = mediaData[fileSize]
-        if (!mediaVersion || !mediaVersion.FILENAME) {
+        let s3Key
+        if (mediaVersion.S3_KEY) {
+          // New S3-based system
+          s3Key = mediaVersion.S3_KEY
+        } else if (mediaVersion.FILENAME) {
+          // Legacy local file system - construct S3 key
+          const fileExtension = mediaVersion.FILENAME.split('.').pop() || 'jpg'
+          const fileName = `${projectId}_${mediaRow.media_id}_${fileSize}.${fileExtension}`
+          s3Key = `media_files/images/${projectId}/${mediaRow.media_id}/${fileName}`
+        } else {
           errors.push({
             mediaId: mediaRow.media_id,
-            error: 'Media data is missing filename information'
+            error: 'Media data is missing file information'
           })
           continue
         }
-
-        // Extract file extension from the FILENAME
-        const fileExtension = mediaVersion.FILENAME.split('.').pop() || 'jpg'
-        
-        // Construct S3 key using project ID and media ID format
-        const fileName = `${projectId}_${mediaRow.media_id}_${fileSize}.${fileExtension}`
-        const s3Key = `media_files/images/${projectId}/${mediaRow.media_id}/${fileName}`
 
         // Get object from S3
         const result = await s3Service.getObject(bucket, s3Key)
@@ -847,7 +1081,7 @@ export async function serveBatchMediaFiles(req, res) {
           contentType: result.contentType,
           contentLength: result.contentLength,
           lastModified: result.lastModified,
-          fileName
+          s3Key
         })
 
       } catch (error) {

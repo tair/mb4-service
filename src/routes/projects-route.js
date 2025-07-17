@@ -22,7 +22,16 @@ import { authorizeUser } from './user-interceptor.js'
 
 // Configure multer for handling form data
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, '/tmp/') // Use temp directory
+    },
+    filename: (req, file, cb) => {
+      // Generate unique filename
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+      cb(null, file.fieldname + '-' + uniqueSuffix + '-' + file.originalname)
+    }
+  }),
   limits: {
     fileSize: 9 * 1024 * 1024, // 9MB limit
   },
@@ -45,7 +54,7 @@ projectsRouter.get('/journals', controller.getJournalList)
 projectsRouter.get('/journal-cover', controller.getJournalCover)
 
 // Project creation and DOI retrieval routes
-projectsRouter.post('/create', upload.single('file'), controller.createProject)
+projectsRouter.post('/create', controller.createProject)
 projectsRouter.post('/doi', controller.retrieveDOI)
 
 // This is a sub-route focused on /projects/<ID>
@@ -86,5 +95,6 @@ projectRouter.post(
   '/publish/partition/:partitionId',
   controller.publishPartition
 )
+projectRouter.post('/journal-cover', upload.single('journal_cover'), controller.uploadJournalCover)
 
 export default projectsRouter
