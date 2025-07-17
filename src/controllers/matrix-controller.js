@@ -11,7 +11,12 @@ import {
 import { models } from '../models/init-models.js'
 import sequelizeConn from '../util/db.js'
 import * as matrixService from '../services/matrix-service.js'
+import CipresRequestService from '../services/cipres-request-service.js'
 import * as partitionService from '../services/partition-service.js'
+import * as utilService from '../util/util.js'
+import fs from 'fs'
+import axios from 'axios'
+import FormData from 'form-data'
 import { getRoles } from '../services/user-roles-service.js'
 
 export async function getMatrices(req, res) {
@@ -56,10 +61,15 @@ export async function getMatrices(req, res) {
       }
     }
 
+    let jobs =
+      userId > 0
+        ? await CipresRequestService.getCipresJobs(matrixIds, userId)
+        : null
     const data = {
       matrices,
       partitions,
       canEditMatrix: true,
+      jobs,
     }
     res.status(200).json(data)
   } catch (e) {
@@ -469,6 +479,105 @@ export async function setPreference(req, res) {
   await projectUser.save({ user: req.user, transaction: transaction })
   await transaction.commit()
   res.status(200).json({ status: true })
+}
+
+export async function run(req, res) {
+  const matrixId = parseInt(req.params.matrixId)
+  if (!matrixId) {
+    res.status(400).json({ message: 'The request must contain a matrix ID.' })
+    return
+  }
+  const userId = req.user?.user_id || 0
+
+  const fileExtension = 'nex'
+  const options = new ExportOptions()
+  options.blocks = await matrixService.getMatrixBlocks(matrixId)
+  options.matrix = await matrixService.getMatrix(matrixId)
+  options.includeNotes = false
+  options.taxa = await matrixService.getTaxaInMatrix(matrixId)
+  options.characters = await matrixService.getCharactersInMatrix(matrixId)
+  options.cellsTable = await matrixService.getCells(matrixId)
+  options.cellNotes = null
+
+  const filename = `mbank_X${matrixId}_${userId}_${req.query.jobName}.zip`
+  let fileContent = ''
+  let exporter = new NexusExporter((txt) => (fileContent = fileContent + txt))
+
+  exporter.export(options)
+  let jobCTP = req.query.jobCharsToPermute
+  let jobChar = 'vparam.specify_mod_'
+  if (
+    req.query.jobCharsToPermute &&
+    req.query.jobCharsToPermute.indexOf('%') != -1
+  ) {
+    jobCTP = req.query.jobCharsToPermute.replace('%', '')
+    jobChar = 'vparam.specify_pct_'
+  }
+
+  const formData1 = {
+    tool: req.query.tool,
+    'input.infile_': fileContent,
+  }
+  let formData2 = null
+  if (
+    req.query.jobCharsToPermute &&
+    req.query.jobCharsToPermute.indexOf('%') != -1
+  ) {
+    formData2 = {
+      'vparam.specify_nchar_': options.characters.length,
+      'vparam.specify_nreps_': req.query.jobNumIterations,
+      'vparam.specify_pct_': req.query.jobCharsToPermute.replace('%', ''),
+      'vparam.paup_branchalg_': req.query.jobBranchSwappingAlgorithm,
+      'vparam.runtime_': 1,
+    }
+  } else {
+    formData2 = {
+      'vparam.specify_nchar_': options.characters.length,
+      'vparam.specify_nreps_': req.query.jobNumIterations,
+      'vparam.specify_mod_': req.query.jobCharsToPermute,
+      'vparam.paup_branchalg_': req.query.jobBranchSwappingAlgorithm,
+      'vparam.runtime_': 1,
+    }
+  }
+  const formData3 = {
+    'vparam.zipfilename_': filename,
+  }
+
+  const formDataForSubmission = { ...formData1, ...formData2, ...formData3 }
+  //const crs = await CipresRequestService.create(matrixId, req.user)
+  const msg = await CipresRequestService.createCipresRequest(
+    matrixId,
+    req.user,
+    req.query.jobNote ? req.query.jobNote : ' ',
+    req.query.jobName,
+    formData2,
+    formDataForSubmission
+  )
+
+  res.status(200).json({ message: msg.message })
+}
+
+export async function deleteJob(req, res) {
+  const matrixId = parseInt(req.params.matrixId)
+  if (!matrixId) {
+    res.status(400).json({ message: 'The request must contain a matrix ID.' })
+    return
+  }
+  const jobCID = req.query.cipresJobId
+  if (!jobCID) {
+    res
+      .status(400)
+      .json({ message: 'The request must contain a Cipres Job ID.' })
+    return
+  }
+  const msg = await CipresRequestService.deleteCipresRequest(
+    matrixId,
+    req.user,
+    req.query.jobName,
+    jobCID
+  )
+
+  res.status(200).json({ message: msg.message })
 }
 
 export async function download(req, res) {

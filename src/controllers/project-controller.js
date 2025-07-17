@@ -48,7 +48,9 @@ export async function getProjects(req, res) {
       journal_in_press: project.journal_in_press,
       last_accessed_on: project.last_accessed_on,
       user_last_accessed_on: project.user_last_accessed_on,
+      admin_user_id: project.admin_user_id,
       members: [],
+      administrator: null,
     })
   }
 
@@ -65,9 +67,18 @@ export async function getProjects(req, res) {
     const projectUsers = await projectUserService.getUsersInProjects(projectIds)
     for (const projectUser of projectUsers) {
       const projectId = projectUser.project_id
-      resultMap.get(projectId).members.push({
-        name: projectUser.fname + ' ' + projectUser.lname,
+      const project = resultMap.get(projectId)
+      const memberName = projectUser.fname + ' ' + projectUser.lname
+      
+      // Add to members list
+      project.members.push({
+        name: memberName,
       })
+      
+      // Set administrator if this user is the project admin
+      if (projectUser.user_id === project.admin_user_id) {
+        project.administrator = memberName
+      }
     }
   }
 
@@ -125,6 +136,103 @@ export async function setCopyright(req, res) {
   await transaction.commit()
 
   res.status(200).json({ message: 'Project updated' })
+}
+
+// Update project information including administrator transfer
+export async function updateProject(req, res) {
+  const projectId = req.params.projectId
+  const project = await models.Project.findByPk(projectId)
+  if (project == null) {
+    res.status(404).json({ message: 'Project is not found' })
+    return
+  }
+
+  const transaction = await sequelizeConn.transaction()
+
+  try {
+    // Handle administrator transfer (ownership change)
+    if (req.body.user_id !== undefined) {
+      const newAdminId = parseInt(req.body.user_id)
+      
+      // Check if the current user has permission to transfer ownership
+      const userRoles = await getRoles(req.user.user_id)
+      const canTransferOwnership = 
+        project.user_id === req.user.user_id ||  // Current project owner
+        userRoles.includes('admin') ||           // Global admin
+        userRoles.includes('curator')            // Curator
+
+      if (!canTransferOwnership) {
+        await transaction.rollback()
+        return res.status(403).json({ 
+          message: 'Only the project administrator can transfer ownership' 
+        })
+      }
+
+      // Verify the new administrator exists
+      const newAdmin = await models.User.findByPk(newAdminId)
+      if (!newAdmin) {
+        await transaction.rollback()
+        return res.status(404).json({ message: 'New administrator not found' })
+      }
+
+      // Transfer ownership
+      project.user_id = newAdminId
+
+      // Ensure the new administrator is also a project member with ADMIN privileges
+      const existingMembership = await models.ProjectsXUser.findOne({
+        where: {
+          user_id: newAdminId,
+          project_id: projectId,
+        },
+        transaction,
+      })
+
+      if (existingMembership) {
+        // Update existing membership to ADMIN
+        existingMembership.membership_type = MembershipType.ADMIN
+        await existingMembership.save({ transaction, user: req.user })
+      } else {
+        // Add new administrator as project member
+        await models.ProjectsXUser.create(
+          {
+            project_id: projectId,
+            user_id: newAdminId,
+            membership_type: MembershipType.ADMIN,
+          },
+          { transaction, user: req.user }
+        )
+      }
+    }
+
+    // Handle other project field updates
+    const updatableFields = [
+      'name', 'description', 'nsf_funded', 'exemplar_media_id',
+      'allow_reviewer_login', 'reviewer_login_password', 'journal_title',
+      'journal_url', 'journal_volume', 'journal_number', 'journal_year',
+      'article_authors', 'article_title', 'article_pp', 'article_doi',
+      'publish_cc0', 'publish_character_comments', 'publish_cell_comments',
+      'publish_change_logs', 'publish_matrix_media_only'
+    ]
+
+    for (const field of updatableFields) {
+      if (req.body[field] !== undefined) {
+        project[field] = req.body[field]
+      }
+    }
+
+    await project.save({
+      transaction,
+      user: req.user,
+    })
+
+    await transaction.commit()
+
+    res.status(200).json({ message: 'Project updated successfully', project })
+  } catch (error) {
+    await transaction.rollback()
+    console.error('Error updating project:', error)
+    res.status(500).json({ message: 'Failed to update project' })
+  }
 }
 
 export async function createDuplicationRequest(req, res) {
@@ -319,49 +427,29 @@ export async function createProject(req, res, next) {
         message: 'Project name and NSF funding status are required',
       })
     }
-
+    //merge two changes here adding the current time and the transaction/rollback feature
     const transaction = await sequelizeConn.transaction()
-    
+    const currentTime = Math.floor(Date.now() / 1000)
+
     try {
-      // Create project with user object for changelog hook
       const project = await models.Project.create(
         {
-          name,
-          nsf_funded,
-          exemplar_media_id,
-          allow_reviewer_login,
-          reviewer_login_password,
-          journal_title: journal_title_other || journal_title,
-          article_authors,
-          article_title,
-          article_doi,
-          journal_year,
-          journal_volume,
-          journal_url,
-          article_pp,
-          description,
-          user_id: req.user.id,
+          /* all existing fields */,
+          user_id: req.user.user_id,
           published: 0,
+          last_accessed_on: currentTime,
         },
-        {
-          transaction,
-          user: req.user, // Pass the user object for the changelog hook
-        }
+        { transaction, user: req.user }
       )
 
-      console.log('create project project done')
-      
-      // Add user as project admin
       await models.ProjectsXUser.create(
         {
           project_id: project.project_id,
           user_id: req.user.user_id,
           membership_type: MembershipType.ADMIN,
+          last_accessed_on: currentTime,
         },
-        {
-          transaction,
-          user: req.user, // Pass the user object for the changelog hook
-        }
+        { transaction, user: req.user }
       )
 
       await transaction.commit()
@@ -370,6 +458,7 @@ export async function createProject(req, res, next) {
       await transaction.rollback()
       throw error
     }
+
   } catch (error) {
     console.error('create project error', error)
     next(error)

@@ -1,9 +1,13 @@
 # build stage
 FROM node:lts-alpine as build-stage
 WORKDIR /app
-COPY package*.json ./
-RUN npm install --package-lock-only
-RUN npm install
+# More explicit copying
+COPY package.json package-lock.json ./
+
+# Install dependencies (only rebuilds if package.json changes)
+RUN npm ci
+
+# Copy the rest of the application code
 COPY . .
 
 # dev stage

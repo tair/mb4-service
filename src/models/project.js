@@ -349,4 +349,58 @@ export default class Project extends Model {
       }
     )
   }
+
+  /**
+   * Update both project-level and user-level last_accessed_on timestamps
+   * Following the design specification from the original MorphoBank system
+   * @param {number} userId - The user ID accessing the project
+   * @param {boolean} isProjectOwner - Whether the user is the project owner
+   * @param {Object} user - The user object for changelog hooks
+   * @returns {Promise<boolean>} - Returns true on success, false on error
+   */
+  async setUserAccessTime(userId, isProjectOwner = false, user = null) {
+    if (!this.project_id) {
+      return false
+    }
+
+    const currentTime = Math.floor(Date.now() / 1000) // Unix timestamp in seconds
+    const { models } = await import('./init-models.js')
+
+    try {
+      // Always update project-level access time
+      this.last_accessed_on = currentTime
+      
+      // Save with user object for changelog hook, but disable logging for access time updates
+      await this.save({
+        user: user,
+        shouldSkipLogChange: true
+      })
+
+      // Find the project-user relationship
+      const projectUser = await models.ProjectsXUser.findOne({
+        where: {
+          user_id: userId,
+          project_id: this.project_id,
+        },
+      })
+
+      // Update user-specific access time if they are a project member
+      if (projectUser) {
+        projectUser.last_accessed_on = currentTime
+        await projectUser.save({
+          user: user,
+          shouldSkipLogChange: true
+        })
+      } else if (isProjectOwner) {
+        // If user is project owner but not in projects_x_users table, 
+        // this might be an inconsistency, but we still update project level
+        console.warn(`Project owner ${userId} not found in projects_x_users for project ${this.project_id}`)
+      }
+
+      return true
+    } catch (error) {
+      console.error('Error updating user access time:', error)
+      return false
+    }
+  }
 }

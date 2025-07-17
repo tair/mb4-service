@@ -33,5 +33,7 @@ matrixRouter.post(
   controller.mergeMatrixFile
 )
 matrixRouter.post('/:matrixId/setPreference', controller.setPreference)
+matrixRouter.post('/:matrixId/run', controller.run)
+matrixRouter.post('/:matrixId/deleteJob', controller.deleteJob)
 
 export default matrixRouter

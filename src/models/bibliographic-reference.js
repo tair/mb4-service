@@ -3,6 +3,31 @@ import { time } from '../util/util.js'
 const { Model } = _sequelize
 
 export default class BibliographicReference extends Model {
+  // Reference type mapping from numeric ID to string representation
+  static REFERENCE_TYPES = {
+    0: 'Generic',
+    1: 'Journal Article',
+    2: 'Book',
+    3: 'Book Section',
+    4: 'Manuscript',
+    5: 'Edited Book',
+    6: 'Magazine Article',
+    7: 'Newspaper Article',
+    8: 'Conference Proceedings',
+    9: 'Thesis',
+    10: 'Report',
+    11: 'Personal Communication',
+    13: 'Electronic Source',
+    14: 'Audiovisual Material',
+    16: 'Artwork',
+    17: 'Map',
+  }
+
+  // Method to convert reference type ID to string
+  static getReferenceTypeString(referenceTypeId) {
+    return this.REFERENCE_TYPES[referenceTypeId] || 'Generic'
+  }
+
   static init(sequelize, DataTypes) {
     return super.init(
       {

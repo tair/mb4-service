@@ -54,6 +54,12 @@ const config = {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
+  cipres: {
+    url: process.env.CIPRES_URL,
+    key: process.env.CIPRES_KEY,
+    username: process.env.CIPRES_USERNAME,
+    password: process.env.CIPRES_PASSWORD,
+  },
 }
 
 export default config

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run MB4 CIPRES Sync every 5 minutes
+Requires=mb4-cipres-sync.service
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Unit=mb4-cipres-sync.service
+
+[Install]
+WantedBy=timers.target 
