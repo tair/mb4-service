@@ -434,7 +434,20 @@ export async function createProject(req, res, next) {
     try {
       const project = await models.Project.create(
         {
-          /* all existing fields */,
+          name,
+          nsf_funded,
+          exemplar_media_id,
+          allow_reviewer_login,
+          reviewer_login_password,
+          journal_title: journal_title_other || journal_title,
+          article_authors,
+          article_title,
+          article_doi,
+          journal_year,
+          journal_volume,
+          journal_url,
+          article_pp,
+          description,
           user_id: req.user.user_id,
           published: 0,
           last_accessed_on: currentTime,
