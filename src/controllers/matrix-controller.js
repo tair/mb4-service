@@ -9,6 +9,7 @@ import {
   mergeMatrix,
 } from '../lib/matrix-import/matrix-importer.js'
 import { models } from '../models/init-models.js'
+import { getTaxonName } from '../util/taxa.js'
 import sequelizeConn from '../util/db.js'
 import * as matrixService from '../services/matrix-service.js'
 import CipresRequestService from '../services/cipres-request-service.js'
@@ -57,6 +58,13 @@ export async function getMatrices(req, res) {
           matrix.counts[key] = count[matrix.matrix_id]
         }
       }
+      const taxaByMatrix = await matrixService.getTaxaInMatrix(matrix.matrix_id)
+      const taxaNames = []
+      for (const taxon of taxaByMatrix) {
+        taxaNames.push(getTaxonName(taxon, null, false, false).replace(/<\/?[^>]+(>|$)/g, '').replace(/[']+/g, "''").replace(/[\r\n\t]+/g, ' ').trim()) 
+      }
+      console.info(taxaNames)
+      matrix.taxonNames = taxaNames
     }
 
     let jobs = userId > 0? (await CipresRequestService.getCipresJobs(matrixIds, userId)) : null
@@ -226,21 +234,24 @@ export async function run(req, res) {
   let exporter = new NexusExporter((txt) => fileContent = fileContent + txt)
 
   exporter.export(options)
+  /*
   let jobCTP = req.query.jobCharsToPermute
   let jobChar = 'vparam.specify_mod_'
   if (req.query.jobCharsToPermute.indexOf('%') != -1)
   {
     jobCTP = req.query.jobCharsToPermute.replace('%', '')
     jobChar = 'vparam.specify_pct_'
-  }
+  }*/
 
   const formData1 = {
       tool: req.query.tool,
       'input.infile_': fileContent,
   }
   let formData2 = null
-  if (req.query.jobCharsToPermute.indexOf('%') != -1)
+  if (req.query.tool == 'PAUPRAT')
   {
+    if (req.query.jobCharsToPermute.indexOf('%') != -1)
+    {
       formData2 = {
          'vparam.specify_nchar_': options.characters.length,
          'vparam.specify_nreps_': req.query.jobNumIterations,
@@ -248,9 +259,9 @@ export async function run(req, res) {
          'vparam.paup_branchalg_': req.query.jobBranchSwappingAlgorithm,
          'vparam.runtime_': 1,
       }
-  }
-  else
-  {
+    }
+    else
+    {
       formData2 = {
          'vparam.specify_nchar_': options.characters.length,
          'vparam.specify_nreps_': req.query.jobNumIterations,
@@ -258,13 +269,51 @@ export async function run(req, res) {
          'vparam.paup_branchalg_': req.query.jobBranchSwappingAlgorithm,
          'vparam.runtime_': 1,
       }
+    }
+  }
+  if (req.query.tool == 'MRBAYES_XSEDE')
+  {
+    if (req.query.mrbayesblockquery == '1')
+    {
+      formData2 = {
+         'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
+         'vparam.nruns_specified_': req.query.nruns_specified,
+         'vparam.nchains_specified_': req.query.nchains_specified,
+         'vparam.runtime_': req.query.runtime,
+      }
+    }
+    if (req.query.mrbayesblockquery == '0')
+    {
+      if (req.query.set_outgroup != null)
+        formData2 = {
+         'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
+         'vparam.set_outgroup_': req.query.set_outgroup,
+         'vparam.ngenval_': req.query.ngenval,
+         'vparam.nrunsval_': req.query.nrunsval,
+         'vparam.nchainsval_': req.query.nchainsval,
+         'vparam.samplefreqval_': req.query.samplefreqval,
+         'vparam.specify_diagnfreqval_': req.query.specify_diagnfreqval,
+         'vparam.burninfracval_': req.query.burninfracval,
+         'vparam.runtime_': 4,
+      }
+      else
+        formData2 = {
+         'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
+         'vparam.ngenval_': req.query.ngenval,
+         'vparam.nrunsval_': req.query.nrunsval,
+         'vparam.nchainsval_': req.query.nchainsval,
+         'vparam.samplefreqval_': req.query.samplefreqval,
+         'vparam.specify_diagnfreqval_': req.query.specify_diagnfreqval,
+         'vparam.burninfracval_': req.query.burninfracval,
+         'vparam.runtime_': 4,
+      }
+    }
   }
   const formData3 = {
      'vparam.zipfilename_': filename,
   }
 
   const formDataForSubmission = {...formData1, ...formData2, ...formData3};
-  //const crs = await CipresRequestService.create(matrixId, req.user)
   const msg = await CipresRequestService.createCipresRequest( matrixId, req.user, req.query.jobNote? req.query.jobNote:' ', req.query.jobName, formData2, formDataForSubmission)
 
   res.status(200).json({ message: msg.message })
