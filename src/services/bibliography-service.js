@@ -35,6 +35,11 @@ export async function getBibliographiesByGroupId(groupId) {
 }
 
 export async function getBibliographiesByIds(referenceIds) {
+  // If no reference IDs provided, return empty array to avoid SQL syntax error
+  if (!referenceIds || referenceIds.length === 0) {
+    return []
+  }
+  
   const [rows] = await sequelizeConn.query(
     `
       SELECT *
@@ -68,6 +73,11 @@ export async function getMediaIds(referenceId, mediaIds) {
 }
 
 export async function getTaxaIds(referenceId, taxaIds) {
+  // If no taxa IDs provided, return empty array to avoid SQL syntax error
+  if (!taxaIds || taxaIds.length === 0) {
+    return []
+  }
+  
   const [rows] = await sequelizeConn.query(
     `
       SELECT taxon_id

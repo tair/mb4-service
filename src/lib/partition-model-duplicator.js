@@ -17,6 +17,14 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
   }
 
   /**
+   * Helper method to safely join IDs for SQL IN clauses.
+   * Returns "NULL" if the array is empty to avoid SQL syntax errors.
+   */
+  safeJoinIds(ids) {
+    return ids.length > 0 ? ids.join(',') : 'NULL'
+  }
+
+  /**
    * Returns all the associated files in a given table. This is used to complex
    * values like matrices and media_files which are include getting their values
    * several ways.
@@ -154,7 +162,7 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
               characters_x_partitions.partition_id = ${this.partitionId} AND
               characters.project_id = ?`
       case 'matrix_character_order': {
-        const matrixIds = (await this.getAllIdsInTable('matrices')).join(',')
+        const matrixIds = this.safeJoinIds(await this.getAllIdsInTable('matrices'))
         return `SELECT matrix_character_order.*
             FROM matrix_character_order
             INNER JOIN characters USING(character_id)
@@ -183,7 +191,7 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
               characters.project_id = ?`
       }
       case 'matrices': {
-        const matrixIds = (await this.getAllIdsInTable('matrices')).join(',')
+        const matrixIds = this.safeJoinIds(await this.getAllIdsInTable('matrices'))
         return `SELECT matrices.*
             FROM matrices
             WHERE matrix_id IN (${matrixIds}) AND project_id = ? `
