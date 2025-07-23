@@ -21,7 +21,6 @@ export async function logProjectView(req, res) {
       { replacements: [session_key, user_id || null, hit_type, project_id, row_id || null] }
     )
     
-    console.log(`Project view logged: project_id=${project_id}, session=${session_key.substring(0, 8)}..., user_id=${user_id || 'anonymous'}`)
     res.status(200).json({ message: 'Project view logged' })
   } catch (e) {
     console.error('Error logging project view:', e)
@@ -54,7 +53,6 @@ export async function logDownload(req, res) {
       }
     )
     
-    console.log(`Download logged: project_id=${project_id}, type=${download_type}, session=${session_key.substring(0, 8)}..., user_id=${user_id || 'anonymous'}`)
     res.status(200).json({ message: 'Download logged' })
   } catch (e) {
     console.error('Error logging download:', e)

@@ -51,6 +51,8 @@ export async function getSessionInfo(req, res) {
   }
 }
 
+
+
 /**
  * Get session statistics
  */

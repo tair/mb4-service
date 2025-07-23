@@ -67,8 +67,7 @@ async function login(req, res, next) {
           logUserLogin(
             req.sessionInfo.sessionKey,
             userResponse.user_id,
-            req.sessionInfo.ipAddr,
-            req.sessionInfo.userAgent
+            req
           ).catch(error => {
             console.error('Failed to log user login:', error)
           })
@@ -376,8 +375,7 @@ async function authenticateORCID(req, res) {
           logUserLogin(
             req.sessionInfo.sessionKey,
             userResponse.user_id,
-            req.sessionInfo.ipAddr,
-            req.sessionInfo.userAgent
+            req
           ).catch(error => {
             console.error('Failed to log ORCID user login:', error)
           })

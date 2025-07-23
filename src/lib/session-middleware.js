@@ -18,7 +18,8 @@ export function trackSession(req, res, next) {
   try {
     const sessionKey = req.headers['x-session-key']
     const fingerprint = req.headers['x-session-fingerprint']
-    const ipAddr = req.ip || req.connection.remoteAddress || 'unknown'
+    const rawIpAddr = extractRealIpAddress(req)
+    const ipAddr = normalizeIpAddress(rawIpAddr)
     const userAgent = req.headers['user-agent'] || 'unknown'
 
     // If no session key, continue without logging
@@ -68,6 +69,70 @@ export function trackSession(req, res, next) {
 }
 
 /**
+ * Extract the real client IP address, handling Docker/proxy scenarios
+ */
+function extractRealIpAddress(req) {
+  // Priority order for IP extraction:
+  // 1. X-Forwarded-For (most common proxy header, may contain multiple IPs)
+  // 2. X-Real-IP (nginx proxy header)
+  // 3. X-Client-IP (Apache proxy header)
+  // 4. CF-Connecting-IP (Cloudflare)
+  // 5. X-Cluster-Client-IP (load balancer)
+  // 6. Forwarded (RFC 7239 standard)
+  // 7. req.ip (Express default)
+  // 8. req.connection.remoteAddress (fallback)
+
+  // X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
+  // We want the first (leftmost) IP which is the original client
+  const xForwardedFor = req.headers['x-forwarded-for']
+  if (xForwardedFor) {
+    const ips = xForwardedFor.split(',').map(ip => ip.trim())
+    if (ips.length > 0 && ips[0] !== '') {
+      return ips[0]
+    }
+  }
+
+  // Check other proxy headers
+  const xRealIp = req.headers['x-real-ip']
+  if (xRealIp && xRealIp !== '') {
+    return xRealIp
+  }
+
+  const xClientIp = req.headers['x-client-ip']
+  if (xClientIp && xClientIp !== '') {
+    return xClientIp
+  }
+
+  const cfConnectingIp = req.headers['cf-connecting-ip']
+  if (cfConnectingIp && cfConnectingIp !== '') {
+    return cfConnectingIp
+  }
+
+  const xClusterClientIp = req.headers['x-cluster-client-ip']
+  if (xClusterClientIp && xClusterClientIp !== '') {
+    return xClusterClientIp
+  }
+
+  // RFC 7239 Forwarded header (more complex parsing)
+  const forwarded = req.headers['forwarded']
+  if (forwarded) {
+    const forMatch = forwarded.match(/for=([^;,\s]+)/)
+    if (forMatch && forMatch[1]) {
+      // Remove quotes and brackets if present
+      let ip = forMatch[1].replace(/["[\]]/g, '')
+      // Handle IPv6 format
+      if (ip.startsWith('[') && ip.endsWith(']')) {
+        ip = ip.slice(1, -1)
+      }
+      return ip
+    }
+  }
+
+  // Fallback to Express defaults
+  return req.ip || req.connection.remoteAddress || req.socket.remoteAddress || 'unknown'
+}
+
+/**
  * Normalize IP address for database storage (max 15 chars for IPv4)
  */
 function normalizeIpAddress(ipAddr) {
@@ -98,8 +163,6 @@ async function logNewSession(sessionKey, ipAddr, userAgent, fingerprint) {
         replacements: [sessionKey, currentTime, normalizedIpAddr, userAgent]
       }
     )
-
-    console.log(`New session logged: ${sessionKey.substring(0, 8)}...`)
   } catch (error) {
     // Ignore duplicate key errors (session already exists)
     if (error.name === 'SequelizeUniqueConstraintError' || 
@@ -118,26 +181,70 @@ async function logNewSession(sessionKey, ipAddr, userAgent, fingerprint) {
  * Log user login with session association
  * This enhances the existing login process to populate stats_login_log
  */
-export async function logUserLogin(sessionKey, userId, ipAddr, userAgent) {
+export async function logUserLogin(sessionKey, userId, req) {
   try {
     if (!sessionKey || !userId) {
       return
     }
 
     const currentTime = time()
+    const realIpAddr = extractRealIpAddress(req)
+    const normalizedIpAddr = normalizeIpAddress(realIpAddr)
+    const userAgent = req.headers['user-agent'] || 'unknown'
 
     // Insert into stats_login_log with session association
     await sequelizeConn.query(
       `INSERT INTO stats_login_log (session_key, user_id, datetime_started, datetime_ended, ip_addr, user_agent)
        VALUES (?, ?, ?, NULL, ?, ?)`,
       {
-        replacements: [sessionKey, userId, currentTime, ipAddr, userAgent]
+        replacements: [sessionKey, userId, currentTime, normalizedIpAddr, userAgent]
       }
     )
+
+    // Retroactively update analytics entries for this session
+    await updateSessionAnalytics(sessionKey, userId)
 
     console.log(`User login logged: user_id=${userId}, session=${sessionKey.substring(0, 8)}...`)
   } catch (error) {
     console.error('Failed to log user login:', error)
+  }
+}
+
+/**
+ * Update analytics entries to associate anonymous activities with the logged-in user
+ * This solves the "user logged in halfway through session" problem
+ */
+async function updateSessionAnalytics(sessionKey, userId) {
+  try {
+    // Update previous anonymous analytics hits for this session
+    const hitUpdateResult = await sequelizeConn.query(
+      `UPDATE stats_pub_hit_log 
+       SET user_id = ? 
+       WHERE session_key = ? AND user_id IS NULL`,
+      {
+        replacements: [userId, sessionKey]
+      }
+    )
+
+    // Update previous anonymous download logs for this session  
+    const downloadUpdateResult = await sequelizeConn.query(
+      `UPDATE stats_pub_download_log 
+       SET user_id = ? 
+       WHERE session_key = ? AND user_id IS NULL`,
+      {
+        replacements: [userId, sessionKey]
+      }
+    )
+
+    const hitsUpdated = hitUpdateResult[1]?.affectedRows || 0
+    const downloadsUpdated = downloadUpdateResult[1]?.affectedRows || 0
+    
+    if (hitsUpdated > 0 || downloadsUpdated > 0) {
+      console.log(`Retroactively associated ${hitsUpdated} hits and ${downloadsUpdated} downloads with user_id=${userId}`)
+    }
+  } catch (error) {
+    console.error('Failed to update session analytics:', error)
+    // Don't throw - this is a nice-to-have feature that shouldn't break login
   }
 }
 

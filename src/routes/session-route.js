@@ -1,12 +1,12 @@
 import express from 'express'
-import * as sessionController from '../controllers/session-controller.js'
+import { getSessionInfo, getSessionStats } from '../controllers/session-controller.js'
 
 const sessionRouter = express.Router()
 
 // Get session information and bot detection
-sessionRouter.get('/info', sessionController.getSessionInfo)
+sessionRouter.get('/info', getSessionInfo)
 
 // Get session statistics
-sessionRouter.get('/stats', sessionController.getSessionStats)
+sessionRouter.get('/stats', getSessionStats)
 
 export default sessionRouter 

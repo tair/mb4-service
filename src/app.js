@@ -24,6 +24,10 @@ import { trackSession } from './lib/session-middleware.js'
 
 const app = express()
 
+// Trust proxy to get real IP addresses from proxy headers
+// This is essential for Docker deployments behind reverse proxies
+app.set('trust proxy', true)
+
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader(
