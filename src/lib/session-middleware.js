@@ -10,6 +10,42 @@ import { time } from '../util/util.js'
 // In-memory session tracking to avoid duplicate inserts
 const activeSessionsCache = new Map()
 
+// Periodic cleanup to prevent memory leaks
+const CLEANUP_INTERVAL = 60 * 60 * 1000 // 1 hour
+const SESSION_TIMEOUT = 24 * 60 * 60 // 24 hours in seconds
+
+// Schedule periodic cleanup
+setInterval(() => {
+  cleanupActiveSessionsCache()
+}, CLEANUP_INTERVAL)
+
+// Schedule database cleanup (every 6 hours)
+setInterval(() => {
+  cleanupOldSessions().catch(error => {
+    console.error('Scheduled session cleanup failed:', error)
+  })
+}, 6 * 60 * 60 * 1000) // 6 hours
+
+/**
+ * Clean up old sessions from memory cache
+ */
+function cleanupActiveSessionsCache() {
+  const now = time()
+  let cleanedCount = 0
+  
+  for (const [sessionKey, data] of activeSessionsCache.entries()) {
+    // Remove sessions older than 24 hours from memory
+    if (now - data.firstSeen > SESSION_TIMEOUT) {
+      activeSessionsCache.delete(sessionKey)
+      cleanedCount++
+    }
+  }
+  
+  if (cleanedCount > 0) {
+    console.log(`Cleaned up ${cleanedCount} old sessions from memory cache`)
+  }
+}
+
 /**
  * Session tracking middleware
  * Logs new sessions to stats_session_log table using existing schema
@@ -37,12 +73,22 @@ export function trackSession(req, res, next) {
 
     // Check if this session is already being tracked
     if (!activeSessionsCache.has(sessionKey)) {
+      // Check if there's an existing session from same IP/user agent that should be ended
+      const similarSession = findSimilarActiveSession(ipAddr, userAgent)
+      if (similarSession) {
+        // End the previous session (likely a renewal scenario)
+        endSession(similarSession.sessionKey).catch(error => {
+          console.error('Failed to end previous session:', error)
+        })
+      }
+
       // Mark session as active to prevent duplicate inserts
       activeSessionsCache.set(sessionKey, {
         ipAddr,
         userAgent,
         fingerprint,
-        firstSeen: time()
+        firstSeen: time(),
+        sessionKey
       })
 
       // Log new session to database asynchronously
@@ -66,6 +112,18 @@ export function trackSession(req, res, next) {
   }
 
   next()
+}
+
+/**
+ * Find existing session from same IP/user agent (for renewal detection)
+ */
+function findSimilarActiveSession(ipAddr, userAgent) {
+  for (const [sessionKey, data] of activeSessionsCache.entries()) {
+    if (data.ipAddr === ipAddr && data.userAgent === userAgent) {
+      return { sessionKey, ...data }
+    }
+  }
+  return null
 }
 
 /**

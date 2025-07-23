@@ -19,7 +19,6 @@ import analyticsRouter from './routes/analytics-route.js'
 import schedulerRouter from './routes/scheduler-route.js'
 import schedulerService from './services/scheduler-service.js'
 import s3Router from './routes/s3-route.js'
-import sessionRouter from './routes/session-route.js'
 import { trackSession } from './lib/session-middleware.js'
 
 const app = express()
@@ -73,7 +72,6 @@ app.use('/search', searchRouter)
 app.use('/analytics', analyticsRouter)
 app.use('/scheduler', schedulerRouter)
 app.use('/s3', s3Router)
-app.use('/session', sessionRouter)
 
 // Initialize stats cache
 initializeCache().catch((error) => {
