@@ -14,17 +14,77 @@ const activeSessionsCache = new Map()
 const CLEANUP_INTERVAL = 60 * 60 * 1000 // 1 hour
 const SESSION_TIMEOUT = 24 * 60 * 60 // 24 hours in seconds
 
-// Schedule periodic cleanup
-setInterval(() => {
+// Store interval references for cleanup
+let memoryCleanupInterval = null
+let databaseCleanupInterval = null
+
+// Schedule periodic cleanup with proper cleanup handling
+memoryCleanupInterval = setInterval(() => {
   cleanupActiveSessionsCache()
 }, CLEANUP_INTERVAL)
 
 // Schedule database cleanup (every 6 hours)
-setInterval(() => {
+databaseCleanupInterval = setInterval(() => {
   cleanupOldSessions().catch(error => {
     console.error('Scheduled session cleanup failed:', error)
   })
 }, 6 * 60 * 60 * 1000) // 6 hours
+
+// Graceful shutdown handling
+const cleanup = () => {
+  console.log('Cleaning up session middleware intervals...')
+  if (memoryCleanupInterval) {
+    clearInterval(memoryCleanupInterval)
+    memoryCleanupInterval = null
+  }
+  if (databaseCleanupInterval) {
+    clearInterval(databaseCleanupInterval)
+    databaseCleanupInterval = null
+  }
+}
+
+// Register cleanup handlers for various shutdown signals
+process.on('SIGTERM', cleanup)
+process.on('SIGINT', cleanup)
+process.on('SIGHUP', cleanup)
+
+// Export cleanup function for manual cleanup if needed
+export const cleanupSessionMiddleware = cleanup
+
+/**
+ * Retry operation with exponential backoff
+ */
+async function retryOperation(operation, maxRetries = 3, baseDelay = 1000) {
+  let lastError = null
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation()
+    } catch (error) {
+      lastError = error
+      
+      // Don't retry certain errors
+      if (error.name === 'SequelizeUniqueConstraintError' || 
+          error.code === 'ER_DUP_ENTRY' ||
+          error.message.includes('Duplicate entry')) {
+        // These are expected for session duplicates
+        return
+      }
+      
+      if (attempt === maxRetries) {
+        throw lastError
+      }
+      
+      // Exponential backoff with jitter
+      const delay = baseDelay * Math.pow(2, attempt - 1) + Math.random() * 1000
+      await new Promise(resolve => setTimeout(resolve, delay))
+      
+      console.warn(`Retrying operation (attempt ${attempt + 1}/${maxRetries}) after error:`, error.message)
+    }
+  }
+  
+  throw lastError
+}
 
 /**
  * Clean up old sessions from memory cache
@@ -33,6 +93,7 @@ function cleanupActiveSessionsCache() {
   const now = time()
   let cleanedCount = 0
   
+  // Clean up old sessions
   for (const [sessionKey, data] of activeSessionsCache.entries()) {
     // Remove sessions older than 24 hours from memory
     if (now - data.firstSeen > SESSION_TIMEOUT) {
@@ -50,7 +111,7 @@ function cleanupActiveSessionsCache() {
  * Session tracking middleware
  * Logs new sessions to stats_session_log table using existing schema
  */
-export function trackSession(req, res, next) {
+export async function trackSession(req, res, next) {
   try {
     const sessionKey = req.headers['x-session-key']
     const fingerprint = req.headers['x-session-fingerprint']
@@ -72,14 +133,18 @@ export function trackSession(req, res, next) {
     }
 
     // Check if this session is already being tracked
-    if (!activeSessionsCache.has(sessionKey)) {
+    const isNewSession = !activeSessionsCache.has(sessionKey)
+    
+    if (isNewSession) {
       // Check if there's an existing session from same IP/user agent that should be ended
       const similarSession = findSimilarActiveSession(ipAddr, userAgent)
       if (similarSession) {
-        // End the previous session (likely a renewal scenario)
-        endSession(similarSession.sessionKey).catch(error => {
+        // End the previous session (likely a renewal scenario) - await to prevent race condition
+        try {
+          await endSession(similarSession.sessionKey)
+        } catch (error) {
           console.error('Failed to end previous session:', error)
-        })
+        }
       }
 
       // Mark session as active to prevent duplicate inserts
@@ -91,11 +156,13 @@ export function trackSession(req, res, next) {
         sessionKey
       })
 
-      // Log new session to database asynchronously
-      logNewSession(sessionKey, ipAddr, userAgent, fingerprint)
-        .catch(error => {
-          console.error('Failed to log session:', error)
-        })
+      // Log new session to database with retry logic
+      try {
+        await retryOperation(() => logNewSession(sessionKey, ipAddr, userAgent, fingerprint))
+      } catch (error) {
+        console.error('Failed to log session after retries:', error)
+        // Continue processing - session logging failure shouldn't break the request
+      }
     }
 
     // Attach session info to request for other middleware
@@ -104,22 +171,40 @@ export function trackSession(req, res, next) {
       fingerprint,
       ipAddr,
       userAgent,
-      isNewSession: !activeSessionsCache.has(sessionKey)
+      isNewSession
     }
 
   } catch (error) {
     console.error('Session tracking error:', error)
+    
+    // Provide fallback session info even on error
+    req.sessionInfo = {
+      sessionKey: null,
+      fingerprint: null,
+      ipAddr: 'unknown',
+      userAgent: 'unknown',
+      isNewSession: false,
+      error: true
+    }
   }
 
   next()
 }
 
 /**
- * Find existing session from same IP/user agent (for renewal detection)
+ * Find existing session that should be ended (improved renewal detection)
+ * Only considers sessions older than 1 minute to avoid false positives
  */
 function findSimilarActiveSession(ipAddr, userAgent) {
+  const now = time()
+  const minSessionAge = 60 // 1 minute in seconds
+  
   for (const [sessionKey, data] of activeSessionsCache.entries()) {
-    if (data.ipAddr === ipAddr && data.userAgent === userAgent) {
+    // Only consider ending sessions that are at least 1 minute old
+    // This prevents legitimate users from ending each other's fresh sessions
+    if (data.ipAddr === ipAddr && 
+        data.userAgent === userAgent && 
+        (now - data.firstSeen) > minSessionAge) {
       return { sessionKey, ...data }
     }
   }
@@ -145,29 +230,29 @@ function extractRealIpAddress(req) {
   const xForwardedFor = req.headers['x-forwarded-for']
   if (xForwardedFor) {
     const ips = xForwardedFor.split(',').map(ip => ip.trim())
-    if (ips.length > 0 && ips[0] !== '') {
+    if (ips.length > 0 && ips[0] !== '' && isValidIpAddress(ips[0])) {
       return ips[0]
     }
   }
 
-  // Check other proxy headers
+  // Check other proxy headers with validation
   const xRealIp = req.headers['x-real-ip']
-  if (xRealIp && xRealIp !== '') {
+  if (xRealIp && xRealIp !== '' && isValidIpAddress(xRealIp)) {
     return xRealIp
   }
 
   const xClientIp = req.headers['x-client-ip']
-  if (xClientIp && xClientIp !== '') {
+  if (xClientIp && xClientIp !== '' && isValidIpAddress(xClientIp)) {
     return xClientIp
   }
 
   const cfConnectingIp = req.headers['cf-connecting-ip']
-  if (cfConnectingIp && cfConnectingIp !== '') {
+  if (cfConnectingIp && cfConnectingIp !== '' && isValidIpAddress(cfConnectingIp)) {
     return cfConnectingIp
   }
 
   const xClusterClientIp = req.headers['x-cluster-client-ip']
-  if (xClusterClientIp && xClusterClientIp !== '') {
+  if (xClusterClientIp && xClusterClientIp !== '' && isValidIpAddress(xClusterClientIp)) {
     return xClusterClientIp
   }
 
@@ -191,18 +276,55 @@ function extractRealIpAddress(req) {
 }
 
 /**
- * Normalize IP address for database storage (max 15 chars for IPv4)
+ * Validate IP address format
+ */
+function isValidIpAddress(ip) {
+  if (!ip || typeof ip !== 'string') return false
+  
+  // IPv4 regex
+  const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+  
+  // IPv6 regex (simplified)
+  const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::1$|^::$/
+  
+  // Check for private/localhost IPs that might be spoofed
+  if (ipv4Regex.test(ip)) {
+    const parts = ip.split('.').map(Number)
+    // Block obviously invalid IPs
+    if (parts[0] === 0 || parts[0] === 255) return false
+    return true
+  }
+  
+  return ipv6Regex.test(ip)
+}
+
+/**
+ * Normalize IP address for database storage with improved handling
  */
 function normalizeIpAddress(ipAddr) {
   if (!ipAddr) return 'unknown'
   
-  // Convert IPv4-mapped IPv6 addresses to IPv4
-  if (ipAddr.startsWith('::ffff:')) {
-    ipAddr = ipAddr.substring(7) // Remove '::ffff:' prefix
+  // Validate IP format first
+  if (!isValidIpAddress(ipAddr)) {
+    console.warn('Invalid IP address format detected:', ipAddr)
+    return 'invalid'
   }
   
-  // Truncate to 15 characters to fit database schema
-  return ipAddr.substring(0, 15)
+  // Convert IPv4-mapped IPv6 addresses to IPv4
+  if (ipAddr.startsWith('::ffff:')) {
+    const ipv4Part = ipAddr.substring(7)
+    if (isValidIpAddress(ipv4Part)) {
+      return ipv4Part.substring(0, 15)
+    }
+  }
+  
+  // For IPv6, store first 15 chars but log truncation
+  if (ipAddr.length > 15) {
+    console.warn('IP address truncated for database storage:', ipAddr)
+    return ipAddr.substring(0, 15)
+  }
+  
+  return ipAddr
 }
 
 /**
@@ -250,21 +372,29 @@ export async function logUserLogin(sessionKey, userId, req) {
     const normalizedIpAddr = normalizeIpAddress(realIpAddr)
     const userAgent = req.headers['user-agent'] || 'unknown'
 
-    // Insert into stats_login_log with session association
-    await sequelizeConn.query(
-      `INSERT INTO stats_login_log (session_key, user_id, datetime_started, datetime_ended, ip_addr, user_agent)
-       VALUES (?, ?, ?, NULL, ?, ?)`,
-      {
-        replacements: [sessionKey, userId, currentTime, normalizedIpAddr, userAgent]
-      }
-    )
+    // Insert into stats_login_log with session association - with retry
+    await retryOperation(async () => {
+      await sequelizeConn.query(
+        `INSERT INTO stats_login_log (session_key, user_id, datetime_started, datetime_ended, ip_addr, user_agent)
+         VALUES (?, ?, ?, NULL, ?, ?)`,
+        {
+          replacements: [sessionKey, userId, currentTime, normalizedIpAddr, userAgent]
+        }
+      )
+    })
 
-    // Retroactively update analytics entries for this session
-    await updateSessionAnalytics(sessionKey, userId)
+    // Retroactively update analytics entries for this session - with retry
+    try {
+      await retryOperation(() => updateSessionAnalytics(sessionKey, userId))
+    } catch (error) {
+      console.error('Failed to update session analytics after retries:', error)
+      // Continue - this is not critical for login functionality
+    }
 
     console.log(`User login logged: user_id=${userId}, session=${sessionKey.substring(0, 8)}...`)
   } catch (error) {
-    console.error('Failed to log user login:', error)
+    console.error('Failed to log user login after retries:', error)
+    // Don't throw - login logging failure shouldn't break authentication
   }
 }
 
@@ -317,21 +447,24 @@ export async function logUserLogout(sessionKey, userId) {
 
     const currentTime = time()
 
-    // Update the most recent login record for this session/user
-    await sequelizeConn.query(
-      `UPDATE stats_login_log 
-       SET datetime_ended = ?
-       WHERE session_key = ? AND user_id = ? AND datetime_ended IS NULL
-       ORDER BY datetime_started DESC
-       LIMIT 1`,
-      {
-        replacements: [currentTime, sessionKey, userId]
-      }
-    )
+    // Update the most recent login record for this session/user - with retry
+    await retryOperation(async () => {
+      await sequelizeConn.query(
+        `UPDATE stats_login_log 
+         SET datetime_ended = ?
+         WHERE session_key = ? AND user_id = ? AND datetime_ended IS NULL
+         ORDER BY datetime_started DESC
+         LIMIT 1`,
+        {
+          replacements: [currentTime, sessionKey, userId]
+        }
+      )
+    })
 
     console.log(`User logout logged: user_id=${userId}, session=${sessionKey.substring(0, 8)}...`)
   } catch (error) {
-    console.error('Failed to log user logout:', error)
+    console.error('Failed to log user logout after retries:', error)
+    // Don't throw - logout logging failure shouldn't break logout process
   }
 }
 
@@ -346,22 +479,27 @@ export async function endSession(sessionKey) {
 
     const currentTime = time()
 
-    // Update session end time
-    await sequelizeConn.query(
-      `UPDATE stats_session_log 
-       SET datetime_ended = ?
-       WHERE session_key = ? AND datetime_ended IS NULL`,
-      {
-        replacements: [currentTime, sessionKey]
-      }
-    )
+    // Update session end time - with retry
+    await retryOperation(async () => {
+      await sequelizeConn.query(
+        `UPDATE stats_session_log 
+         SET datetime_ended = ?
+         WHERE session_key = ? AND datetime_ended IS NULL`,
+        {
+          replacements: [currentTime, sessionKey]
+        }
+      )
+    })
 
-    // Remove from active sessions cache
+    // Remove from active sessions cache (do this after successful DB update)
     activeSessionsCache.delete(sessionKey)
 
     console.log(`Session ended: ${sessionKey.substring(0, 8)}...`)
   } catch (error) {
-    console.error('Failed to end session:', error)
+    console.error('Failed to end session after retries:', error)
+    // Still remove from cache even if DB update failed to prevent memory leak
+    activeSessionsCache.delete(sessionKey)
+    throw error // Re-throw for caller to handle
   }
 }
 
@@ -429,25 +567,30 @@ export async function cleanupOldSessions() {
   try {
     const cutoffTime = time() - (7 * 24 * 60 * 60) // 7 days ago
 
-    // End sessions that haven't been seen in 7 days
-    await sequelizeConn.query(
-      `UPDATE stats_session_log 
-       SET datetime_ended = datetime_started + 86400
-       WHERE datetime_ended IS NULL AND datetime_started < ?`,
-      {
-        replacements: [cutoffTime]
-      }
-    )
+    // End sessions that haven't been seen in 7 days - with retry
+    await retryOperation(async () => {
+      await sequelizeConn.query(
+        `UPDATE stats_session_log 
+         SET datetime_ended = datetime_started + 86400
+         WHERE datetime_ended IS NULL AND datetime_started < ?`,
+        {
+          replacements: [cutoffTime]
+        }
+      )
+    })
 
     // Clean up memory cache for very old sessions
+    let cleanedCount = 0
     for (const [sessionKey, data] of activeSessionsCache.entries()) {
       if (data.firstSeen < cutoffTime) {
         activeSessionsCache.delete(sessionKey)
+        cleanedCount++
       }
     }
 
-    console.log('Old sessions cleaned up')
+    console.log(`Old sessions cleaned up: ${cleanedCount} removed from memory cache`)
   } catch (error) {
-    console.error('Failed to cleanup old sessions:', error)
+    console.error('Failed to cleanup old sessions after retries:', error)
+    // Don't throw - this is a background cleanup operation
   }
 } 
