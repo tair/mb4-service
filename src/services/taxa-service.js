@@ -172,6 +172,11 @@ export async function isTaxaInProject(taxaIds, projectId) {
 }
 
 export async function getMatrixIds(taxaIds) {
+  // If no taxa IDs provided, return empty array to avoid SQL syntax error
+  if (!taxaIds || taxaIds.length === 0) {
+    return []
+  }
+  
   const [rows] = await sequelizeConn.query(
     'SELECT taxon_id, matrix_id FROM matrix_taxa_order WHERE taxon_id IN (?)',
     {
