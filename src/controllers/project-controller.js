@@ -8,6 +8,8 @@ import * as projectService from '../services/projects-service.js'
 import * as projectStatsService from '../services/project-stats-service.js'
 import * as projectUserService from '../services/project-user-service.js'
 import * as mediaService from '../services/media-service.js'
+import { FileUploader } from '../lib/file-uploader.js'
+import { S3MediaUploader } from '../lib/s3-media-uploader.js'
 import axios from 'axios'
 import { MembershipType } from '../models/projects-x-user.js'
 
@@ -397,10 +399,23 @@ export async function getJournalCover(req, res, next) {
   }
 }
 
-// Create a new project
+// Create a new project with optional journal cover upload
 export async function createProject(req, res, next) {
   try {
-    // Extract data from request body
+    // Extract data from request body - handle both JSON and FormData
+    let projectData = req.body
+    
+    // If projectData is a JSON string (from FormData), parse it
+    if (req.body.projectData) {
+      try {
+        projectData = JSON.parse(req.body.projectData)
+      } catch (parseError) {
+        return res.status(400).json({
+          message: 'Invalid project data format',
+        })
+      }
+    }
+
     const {
       name,
       nsf_funded,
@@ -417,57 +432,114 @@ export async function createProject(req, res, next) {
       journal_url,
       article_pp,
       description,
-    } = req.body
+    } = projectData
 
     // Validate required fields
-    if (!name || !nsf_funded) {
+    if (!name || nsf_funded === undefined || nsf_funded === null || nsf_funded === '') {
       return res.status(400).json({
         message: 'Project name and NSF funding status are required',
       })
     }
 
-    // Create project with user object for changelog hook
-    const currentTime = Math.floor(Date.now() / 1000) // Current timestamp in seconds
-    const project = await models.Project.create(
-      {
-        name,
-        nsf_funded,
-        exemplar_media_id,
-        allow_reviewer_login,
-        reviewer_login_password,
-        journal_title: journal_title_other || journal_title,
-        article_authors,
-        article_title,
-        article_doi,
-        journal_year,
-        journal_volume,
-        journal_url,
-        article_pp,
-        description,
-        user_id: req.user.user_id,
-        published: 0,
-        last_accessed_on: currentTime, // Set last accessed to creation time
-      },
-      {
-        user: req.user, // Pass the user object for the changelog hook
-      }
-    )
+    const transaction = await sequelizeConn.transaction()
+    const currentTime = Math.floor(Date.now() / 1000)
+    let mediaUploader = null
 
-    console.log('create project project done')
-    // Add user as project admin
-    await models.ProjectsXUser.create(
-      {
-        project_id: project.project_id,
-        user_id: req.user.user_id,
-        membership_type: MembershipType.ADMIN,
-        last_accessed_on: currentTime, // Set initial access time to creation time
-      },
-      {
-        user: req.user, // Pass the user object for the changelog hook
-      }
-    )
+    try {
+      // Create the project first
+      const project = await models.Project.create(
+        {
+          name,
+          nsf_funded,
+          exemplar_media_id,
+          allow_reviewer_login,
+          reviewer_login_password,
+          journal_title: journal_title_other || journal_title,
+          article_authors,
+          article_title,
+          article_doi,
+          journal_year,
+          journal_volume,
+          journal_url,
+          article_pp,
+          description,
+          user_id: req.user.user_id,
+          published: 0,
+          last_accessed_on: currentTime,
+        },
+        { transaction, user: req.user }
+      )
 
-    res.status(201).json(project)
+      await models.ProjectsXUser.create(
+        {
+          project_id: project.project_id,
+          user_id: req.user.user_id,
+          membership_type: MembershipType.ADMIN,
+          last_accessed_on: currentTime,
+        },
+        { transaction, user: req.user }
+      )
+
+      // Handle journal cover upload if provided
+      if (req.file) {
+        mediaUploader = new S3MediaUploader(transaction, req.user)
+        
+        // Create a new media file record
+        const media = await models.MediaFile.create(
+          {
+            project_id: project.project_id,
+            user_id: req.user.user_id,
+            notes: 'Journal cover image',
+            published: 0,
+            access: 0,
+            cataloguing_status: 1,
+            media_type: 'image',
+          },
+          {
+            transaction,
+            user: req.user,
+          }
+        )
+
+        // Process and upload the image using S3MediaUploader
+        await mediaUploader.setMedia(media, 'media', req.file)
+        
+        await media.save({
+          transaction,
+          user: req.user,
+          shouldSkipLogChange: true,
+        })
+
+        // Update the project to link to this media file
+        project.exemplar_media_id = media.media_id
+        await project.save({
+          transaction,
+          user: req.user,
+          shouldSkipLogChange: true,
+        })
+
+        // Commit the media uploader
+        mediaUploader.commit()
+      }
+
+      await transaction.commit()
+      
+      // Return the project with media info if journal cover was uploaded
+      const response = { ...project.toJSON() }
+      if (req.file) {
+        response.journal_cover_uploaded = true
+        response.media_id = project.exemplar_media_id
+      }
+      
+      res.status(201).json(response)
+    } catch (error) {
+      await transaction.rollback()
+      if (mediaUploader) {
+        await mediaUploader.rollback()
+      }
+      throw error
+    }
+
   } catch (error) {
     console.error('create project error', error)
     next(error)
@@ -561,7 +633,7 @@ export async function createBulkMediaViews(req, res) {
     const projectUser = await models.ProjectsXUser.findOne({
       where: {
         project_id: projectId,
-        user_id: req.user.id,
+        user_id: req.user.user_id,
       },
     })
 
