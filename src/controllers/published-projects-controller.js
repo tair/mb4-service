@@ -13,7 +13,7 @@ export async function getProjects(req, res) {
 
 export async function getProjectsById(req, res) {
   const projectId = req.params.projectId
-  console.log(projectId)
+  // console.log(projectId)
   try {
     const result = await ProjectService.getProject(projectId)
     res.status(200).json(result)
