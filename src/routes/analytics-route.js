@@ -6,7 +6,15 @@ const analyticsRouter = express.Router()
 
 // Use maybeAuthenticateToken to populate req.credential for logged-in users
 // while still allowing anonymous users to log analytics
-analyticsRouter.post('/view', maybeAuthenticateToken, analyticsController.logProjectView)
-analyticsRouter.post('/download', maybeAuthenticateToken, analyticsController.logDownload)
+analyticsRouter.post(
+  '/view',
+  maybeAuthenticateToken,
+  analyticsController.logProjectView
+)
+analyticsRouter.post(
+  '/download',
+  maybeAuthenticateToken,
+  analyticsController.logDownload
+)
 
 export default analyticsRouter

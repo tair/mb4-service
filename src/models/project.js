@@ -369,11 +369,11 @@ export default class Project extends Model {
     try {
       // Always update project-level access time
       this.last_accessed_on = currentTime
-      
+
       // Save with user object for changelog hook, but disable logging for access time updates
       await this.save({
         user: user,
-        shouldSkipLogChange: true
+        shouldSkipLogChange: true,
       })
 
       // Find the project-user relationship
@@ -389,12 +389,14 @@ export default class Project extends Model {
         projectUser.last_accessed_on = currentTime
         await projectUser.save({
           user: user,
-          shouldSkipLogChange: true
+          shouldSkipLogChange: true,
         })
       } else if (isProjectOwner) {
-        // If user is project owner but not in projects_x_users table, 
+        // If user is project owner but not in projects_x_users table,
         // this might be an inconsistency, but we still update project level
-        console.warn(`Project owner ${userId} not found in projects_x_users for project ${this.project_id}`)
+        console.warn(
+          `Project owner ${userId} not found in projects_x_users for project ${this.project_id}`
+        )
       }
 
       return true

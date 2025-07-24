@@ -36,4 +36,4 @@ export class S3FileDeletionHandler extends Handler {
   getName() {
     return 'S3FileDeletion'
   }
-} 
+}

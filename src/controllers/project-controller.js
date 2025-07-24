@@ -69,12 +69,12 @@ export async function getProjects(req, res) {
       const projectId = projectUser.project_id
       const project = resultMap.get(projectId)
       const memberName = projectUser.fname + ' ' + projectUser.lname
-      
+
       // Add to members list
       project.members.push({
         name: memberName,
       })
-      
+
       // Set administrator if this user is the project admin
       if (projectUser.user_id === project.admin_user_id) {
         project.administrator = memberName
@@ -153,18 +153,18 @@ export async function updateProject(req, res) {
     // Handle administrator transfer (ownership change)
     if (req.body.user_id !== undefined) {
       const newAdminId = parseInt(req.body.user_id)
-      
+
       // Check if the current user has permission to transfer ownership
       const userRoles = await getRoles(req.user.user_id)
-      const canTransferOwnership = 
-        project.user_id === req.user.user_id ||  // Current project owner
-        userRoles.includes('admin') ||           // Global admin
-        userRoles.includes('curator')            // Curator
+      const canTransferOwnership =
+        project.user_id === req.user.user_id || // Current project owner
+        userRoles.includes('admin') || // Global admin
+        userRoles.includes('curator') // Curator
 
       if (!canTransferOwnership) {
         await transaction.rollback()
-        return res.status(403).json({ 
-          message: 'Only the project administrator can transfer ownership' 
+        return res.status(403).json({
+          message: 'Only the project administrator can transfer ownership',
         })
       }
 
@@ -206,12 +206,26 @@ export async function updateProject(req, res) {
 
     // Handle other project field updates
     const updatableFields = [
-      'name', 'description', 'nsf_funded', 'exemplar_media_id',
-      'allow_reviewer_login', 'reviewer_login_password', 'journal_title',
-      'journal_url', 'journal_volume', 'journal_number', 'journal_year',
-      'article_authors', 'article_title', 'article_pp', 'article_doi',
-      'publish_cc0', 'publish_character_comments', 'publish_cell_comments',
-      'publish_change_logs', 'publish_matrix_media_only'
+      'name',
+      'description',
+      'nsf_funded',
+      'exemplar_media_id',
+      'allow_reviewer_login',
+      'reviewer_login_password',
+      'journal_title',
+      'journal_url',
+      'journal_volume',
+      'journal_number',
+      'journal_year',
+      'article_authors',
+      'article_title',
+      'article_pp',
+      'article_doi',
+      'publish_cc0',
+      'publish_character_comments',
+      'publish_cell_comments',
+      'publish_change_logs',
+      'publish_matrix_media_only',
     ]
 
     for (const field of updatableFields) {
@@ -404,7 +418,7 @@ export async function createProject(req, res, next) {
   try {
     // Extract data from request body - handle both JSON and FormData
     let projectData = req.body
-    
+
     // If projectData is a JSON string (from FormData), parse it
     if (req.body.projectData) {
       try {
@@ -435,7 +449,12 @@ export async function createProject(req, res, next) {
     } = projectData
 
     // Validate required fields
-    if (!name || nsf_funded === undefined || nsf_funded === null || nsf_funded === '') {
+    if (
+      !name ||
+      nsf_funded === undefined ||
+      nsf_funded === null ||
+      nsf_funded === ''
+    ) {
       return res.status(400).json({
         message: 'Project name and NSF funding status are required',
       })
@@ -483,7 +502,7 @@ export async function createProject(req, res, next) {
       // Handle journal cover upload if provided
       if (req.file) {
         mediaUploader = new S3MediaUploader(transaction, req.user)
-        
+
         // Create a new media file record
         const media = await models.MediaFile.create(
           {
@@ -503,7 +522,7 @@ export async function createProject(req, res, next) {
 
         // Process and upload the image using S3MediaUploader
         await mediaUploader.setMedia(media, 'media', req.file)
-        
+
         await media.save({
           transaction,
           user: req.user,
@@ -523,14 +542,14 @@ export async function createProject(req, res, next) {
       }
 
       await transaction.commit()
-      
+
       // Return the project with media info if journal cover was uploaded
       const response = { ...project.toJSON() }
       if (req.file) {
         response.journal_cover_uploaded = true
         response.media_id = project.exemplar_media_id
       }
-      
+
       res.status(201).json(response)
     } catch (error) {
       await transaction.rollback()
@@ -539,7 +558,6 @@ export async function createProject(req, res, next) {
       }
       throw error
     }
-
   } catch (error) {
     console.error('create project error', error)
     next(error)

@@ -240,31 +240,32 @@ export async function checkCitations(req, res) {
 
     // Combine results
     const citationCounts = {}
-    referenceIds.forEach(id => {
+    referenceIds.forEach((id) => {
       citationCounts[id] = {
         reference_id: id,
         specimen_count: 0,
         media_count: 0,
         taxa_count: 0,
-        total_count: 0
+        total_count: 0,
       }
     })
 
-    specimenCitations.forEach(row => {
+    specimenCitations.forEach((row) => {
       citationCounts[row.reference_id].specimen_count = row.specimen_count
     })
 
-    mediaCitations.forEach(row => {
+    mediaCitations.forEach((row) => {
       citationCounts[row.reference_id].media_count = row.media_count
     })
 
-    taxaCitations.forEach(row => {
+    taxaCitations.forEach((row) => {
       citationCounts[row.reference_id].taxa_count = row.taxa_count
     })
 
     // Calculate totals
-    Object.values(citationCounts).forEach(counts => {
-      counts.total_count = counts.specimen_count + counts.media_count + counts.taxa_count
+    Object.values(citationCounts).forEach((counts) => {
+      counts.total_count =
+        counts.specimen_count + counts.media_count + counts.taxa_count
     })
 
     res.status(200).json({ citations: Object.values(citationCounts) })
@@ -519,7 +520,9 @@ export async function exportEndNoteAsTabFile(req, res) {
       const row = []
 
       // Reference Type
-      row.push(models.BibliographicReference.getReferenceTypeString(ref.reference_type))
+      row.push(
+        models.BibliographicReference.getReferenceTypeString(ref.reference_type)
+      )
 
       // Primary Authors
       const primaryAuthors =

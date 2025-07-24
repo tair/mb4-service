@@ -25,7 +25,7 @@ memoryCleanupInterval = setInterval(() => {
 
 // Schedule database cleanup (every 6 hours)
 databaseCleanupInterval = setInterval(() => {
-  cleanupOldSessions().catch(error => {
+  cleanupOldSessions().catch((error) => {
     console.error('Scheduled session cleanup failed:', error)
   })
 }, 6 * 60 * 60 * 1000) // 6 hours
@@ -56,33 +56,40 @@ export const cleanupSessionMiddleware = cleanup
  */
 async function retryOperation(operation, maxRetries = 3, baseDelay = 1000) {
   let lastError = null
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       return await operation()
     } catch (error) {
       lastError = error
-      
+
       // Don't retry certain errors
-      if (error.name === 'SequelizeUniqueConstraintError' || 
-          error.code === 'ER_DUP_ENTRY' ||
-          error.message.includes('Duplicate entry')) {
+      if (
+        error.name === 'SequelizeUniqueConstraintError' ||
+        error.code === 'ER_DUP_ENTRY' ||
+        error.message.includes('Duplicate entry')
+      ) {
         // These are expected for session duplicates
         return
       }
-      
+
       if (attempt === maxRetries) {
         throw lastError
       }
-      
+
       // Exponential backoff with jitter
       const delay = baseDelay * Math.pow(2, attempt - 1) + Math.random() * 1000
-      await new Promise(resolve => setTimeout(resolve, delay))
-      
-      console.warn(`Retrying operation (attempt ${attempt + 1}/${maxRetries}) after error:`, error.message)
+      await new Promise((resolve) => setTimeout(resolve, delay))
+
+      console.warn(
+        `Retrying operation (attempt ${
+          attempt + 1
+        }/${maxRetries}) after error:`,
+        error.message
+      )
     }
   }
-  
+
   throw lastError
 }
 
@@ -92,7 +99,7 @@ async function retryOperation(operation, maxRetries = 3, baseDelay = 1000) {
 function cleanupActiveSessionsCache() {
   const now = time()
   let cleanedCount = 0
-  
+
   // Clean up old sessions
   for (const [sessionKey, data] of activeSessionsCache.entries()) {
     // Remove sessions older than 24 hours from memory
@@ -101,7 +108,7 @@ function cleanupActiveSessionsCache() {
       cleanedCount++
     }
   }
-  
+
   if (cleanedCount > 0) {
     console.log(`Cleaned up ${cleanedCount} old sessions from memory cache`)
   }
@@ -134,7 +141,7 @@ export async function trackSession(req, res, next) {
 
     // Check if this session is already being tracked
     const isNewSession = !activeSessionsCache.has(sessionKey)
-    
+
     if (isNewSession) {
       // Check if there's an existing session from same IP/user agent that should be ended
       const similarSession = findSimilarActiveSession(ipAddr, userAgent)
@@ -153,12 +160,14 @@ export async function trackSession(req, res, next) {
         userAgent,
         fingerprint,
         firstSeen: time(),
-        sessionKey
+        sessionKey,
       })
 
       // Log new session to database with retry logic
       try {
-        await retryOperation(() => logNewSession(sessionKey, ipAddr, userAgent, fingerprint))
+        await retryOperation(() =>
+          logNewSession(sessionKey, ipAddr, userAgent, fingerprint)
+        )
       } catch (error) {
         console.error('Failed to log session after retries:', error)
         // Continue processing - session logging failure shouldn't break the request
@@ -171,12 +180,11 @@ export async function trackSession(req, res, next) {
       fingerprint,
       ipAddr,
       userAgent,
-      isNewSession
+      isNewSession,
     }
-
   } catch (error) {
     console.error('Session tracking error:', error)
-    
+
     // Provide fallback session info even on error
     req.sessionInfo = {
       sessionKey: null,
@@ -184,7 +192,7 @@ export async function trackSession(req, res, next) {
       ipAddr: 'unknown',
       userAgent: 'unknown',
       isNewSession: false,
-      error: true
+      error: true,
     }
   }
 
@@ -198,13 +206,15 @@ export async function trackSession(req, res, next) {
 function findSimilarActiveSession(ipAddr, userAgent) {
   const now = time()
   const minSessionAge = 60 // 1 minute in seconds
-  
+
   for (const [sessionKey, data] of activeSessionsCache.entries()) {
     // Only consider ending sessions that are at least 1 minute old
     // This prevents legitimate users from ending each other's fresh sessions
-    if (data.ipAddr === ipAddr && 
-        data.userAgent === userAgent && 
-        (now - data.firstSeen) > minSessionAge) {
+    if (
+      data.ipAddr === ipAddr &&
+      data.userAgent === userAgent &&
+      now - data.firstSeen > minSessionAge
+    ) {
       return { sessionKey, ...data }
     }
   }
@@ -229,7 +239,7 @@ function extractRealIpAddress(req) {
   // We want the first (leftmost) IP which is the original client
   const xForwardedFor = req.headers['x-forwarded-for']
   if (xForwardedFor) {
-    const ips = xForwardedFor.split(',').map(ip => ip.trim())
+    const ips = xForwardedFor.split(',').map((ip) => ip.trim())
     if (ips.length > 0 && ips[0] !== '' && isValidIpAddress(ips[0])) {
       return ips[0]
     }
@@ -247,12 +257,20 @@ function extractRealIpAddress(req) {
   }
 
   const cfConnectingIp = req.headers['cf-connecting-ip']
-  if (cfConnectingIp && cfConnectingIp !== '' && isValidIpAddress(cfConnectingIp)) {
+  if (
+    cfConnectingIp &&
+    cfConnectingIp !== '' &&
+    isValidIpAddress(cfConnectingIp)
+  ) {
     return cfConnectingIp
   }
 
   const xClusterClientIp = req.headers['x-cluster-client-ip']
-  if (xClusterClientIp && xClusterClientIp !== '' && isValidIpAddress(xClusterClientIp)) {
+  if (
+    xClusterClientIp &&
+    xClusterClientIp !== '' &&
+    isValidIpAddress(xClusterClientIp)
+  ) {
     return xClusterClientIp
   }
 
@@ -272,7 +290,12 @@ function extractRealIpAddress(req) {
   }
 
   // Fallback to Express defaults
-  return req.ip || req.connection.remoteAddress || req.socket.remoteAddress || 'unknown'
+  return (
+    req.ip ||
+    req.connection.remoteAddress ||
+    req.socket.remoteAddress ||
+    'unknown'
+  )
 }
 
 /**
@@ -280,13 +303,14 @@ function extractRealIpAddress(req) {
  */
 function isValidIpAddress(ip) {
   if (!ip || typeof ip !== 'string') return false
-  
+
   // IPv4 regex
-  const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
-  
+  const ipv4Regex =
+    /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
+
   // IPv6 regex (simplified)
   const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::1$|^::$/
-  
+
   // Check for private/localhost IPs that might be spoofed
   if (ipv4Regex.test(ip)) {
     const parts = ip.split('.').map(Number)
@@ -294,7 +318,7 @@ function isValidIpAddress(ip) {
     if (parts[0] === 0 || parts[0] === 255) return false
     return true
   }
-  
+
   return ipv6Regex.test(ip)
 }
 
@@ -303,13 +327,13 @@ function isValidIpAddress(ip) {
  */
 function normalizeIpAddress(ipAddr) {
   if (!ipAddr) return 'unknown'
-  
+
   // Validate IP format first
   if (!isValidIpAddress(ipAddr)) {
     console.warn('Invalid IP address format detected:', ipAddr)
     return 'invalid'
   }
-  
+
   // Convert IPv4-mapped IPv6 addresses to IPv4
   if (ipAddr.startsWith('::ffff:')) {
     const ipv4Part = ipAddr.substring(7)
@@ -317,13 +341,13 @@ function normalizeIpAddress(ipAddr) {
       return ipv4Part.substring(0, 15)
     }
   }
-  
+
   // For IPv6, store first 15 chars but log truncation
   if (ipAddr.length > 15) {
     console.warn('IP address truncated for database storage:', ipAddr)
     return ipAddr.substring(0, 15)
   }
-  
+
   return ipAddr
 }
 
@@ -334,24 +358,26 @@ async function logNewSession(sessionKey, ipAddr, userAgent, fingerprint) {
   try {
     const currentTime = time()
     const normalizedIpAddr = normalizeIpAddress(ipAddr)
-    
+
     // Insert into stats_session_log using existing schema
     await sequelizeConn.query(
       `INSERT INTO stats_session_log (session_key, datetime_started, datetime_ended, ip_addr, user_agent)
        VALUES (?, ?, NULL, ?, ?)`,
       {
-        replacements: [sessionKey, currentTime, normalizedIpAddr, userAgent]
+        replacements: [sessionKey, currentTime, normalizedIpAddr, userAgent],
       }
     )
   } catch (error) {
     // Ignore duplicate key errors (session already exists)
-    if (error.name === 'SequelizeUniqueConstraintError' || 
-        error.code === 'ER_DUP_ENTRY' ||
-        error.message.includes('Duplicate entry')) {
+    if (
+      error.name === 'SequelizeUniqueConstraintError' ||
+      error.code === 'ER_DUP_ENTRY' ||
+      error.message.includes('Duplicate entry')
+    ) {
       // Session already logged, ignore silently
       return
     }
-    
+
     console.error('Failed to log session:', error)
     // Don't throw - logging failure shouldn't break the request
   }
@@ -378,7 +404,13 @@ export async function logUserLogin(sessionKey, userId, req) {
         `INSERT INTO stats_login_log (session_key, user_id, datetime_started, datetime_ended, ip_addr, user_agent)
          VALUES (?, ?, ?, NULL, ?, ?)`,
         {
-          replacements: [sessionKey, userId, currentTime, normalizedIpAddr, userAgent]
+          replacements: [
+            sessionKey,
+            userId,
+            currentTime,
+            normalizedIpAddr,
+            userAgent,
+          ],
         }
       )
     })
@@ -391,7 +423,12 @@ export async function logUserLogin(sessionKey, userId, req) {
       // Continue - this is not critical for login functionality
     }
 
-    console.log(`User login logged: user_id=${userId}, session=${sessionKey.substring(0, 8)}...`)
+    console.log(
+      `User login logged: user_id=${userId}, session=${sessionKey.substring(
+        0,
+        8
+      )}...`
+    )
   } catch (error) {
     console.error('Failed to log user login after retries:', error)
     // Don't throw - login logging failure shouldn't break authentication
@@ -410,25 +447,27 @@ async function updateSessionAnalytics(sessionKey, userId) {
        SET user_id = ? 
        WHERE session_key = ? AND user_id IS NULL`,
       {
-        replacements: [userId, sessionKey]
+        replacements: [userId, sessionKey],
       }
     )
 
-    // Update previous anonymous download logs for this session  
+    // Update previous anonymous download logs for this session
     const downloadUpdateResult = await sequelizeConn.query(
       `UPDATE stats_pub_download_log 
        SET user_id = ? 
        WHERE session_key = ? AND user_id IS NULL`,
       {
-        replacements: [userId, sessionKey]
+        replacements: [userId, sessionKey],
       }
     )
 
     const hitsUpdated = hitUpdateResult[1]?.affectedRows || 0
     const downloadsUpdated = downloadUpdateResult[1]?.affectedRows || 0
-    
+
     if (hitsUpdated > 0 || downloadsUpdated > 0) {
-      console.log(`Retroactively associated ${hitsUpdated} hits and ${downloadsUpdated} downloads with user_id=${userId}`)
+      console.log(
+        `Retroactively associated ${hitsUpdated} hits and ${downloadsUpdated} downloads with user_id=${userId}`
+      )
     }
   } catch (error) {
     console.error('Failed to update session analytics:', error)
@@ -456,12 +495,17 @@ export async function logUserLogout(sessionKey, userId) {
          ORDER BY datetime_started DESC
          LIMIT 1`,
         {
-          replacements: [currentTime, sessionKey, userId]
+          replacements: [currentTime, sessionKey, userId],
         }
       )
     })
 
-    console.log(`User logout logged: user_id=${userId}, session=${sessionKey.substring(0, 8)}...`)
+    console.log(
+      `User logout logged: user_id=${userId}, session=${sessionKey.substring(
+        0,
+        8
+      )}...`
+    )
   } catch (error) {
     console.error('Failed to log user logout after retries:', error)
     // Don't throw - logout logging failure shouldn't break logout process
@@ -486,7 +530,7 @@ export async function endSession(sessionKey) {
          SET datetime_ended = ?
          WHERE session_key = ? AND datetime_ended IS NULL`,
         {
-          replacements: [currentTime, sessionKey]
+          replacements: [currentTime, sessionKey],
         }
       )
     })
@@ -519,11 +563,17 @@ export function detectBot(fingerprint, userAgent) {
 
     // Check for common bot user agents
     const botPatterns = [
-      /bot/i, /crawler/i, /spider/i, /scraper/i,
-      /headless/i, /phantom/i, /selenium/i, /puppeteer/i
+      /bot/i,
+      /crawler/i,
+      /spider/i,
+      /scraper/i,
+      /headless/i,
+      /phantom/i,
+      /selenium/i,
+      /puppeteer/i,
     ]
-    
-    if (botPatterns.some(pattern => pattern.test(userAgent))) {
+
+    if (botPatterns.some((pattern) => pattern.test(userAgent))) {
       score += 0.5
       reasons.push('Bot user agent detected')
     }
@@ -543,11 +593,11 @@ export function detectBot(fingerprint, userAgent) {
     // Check for very old or very new timestamps (possible manipulation)
     const now = Date.now()
     const timeDiff = Math.abs(now - fpData.timestamp)
-    if (timeDiff > 60000) { // More than 1 minute difference
+    if (timeDiff > 60000) {
+      // More than 1 minute difference
       score += 0.1
       reasons.push('Timestamp anomaly')
     }
-
   } catch (error) {
     score += 0.3
     reasons.push('Invalid fingerprint format')
@@ -556,7 +606,7 @@ export function detectBot(fingerprint, userAgent) {
   return {
     isBot: score >= 0.5,
     confidence: Math.min(score, 1.0),
-    reasons
+    reasons,
   }
 }
 
@@ -565,7 +615,7 @@ export function detectBot(fingerprint, userAgent) {
  */
 export async function cleanupOldSessions() {
   try {
-    const cutoffTime = time() - (7 * 24 * 60 * 60) // 7 days ago
+    const cutoffTime = time() - 7 * 24 * 60 * 60 // 7 days ago
 
     // End sessions that haven't been seen in 7 days - with retry
     await retryOperation(async () => {
@@ -574,7 +624,7 @@ export async function cleanupOldSessions() {
          SET datetime_ended = datetime_started + 86400
          WHERE datetime_ended IS NULL AND datetime_started < ?`,
         {
-          replacements: [cutoffTime]
+          replacements: [cutoffTime],
         }
       )
     })
@@ -588,9 +638,11 @@ export async function cleanupOldSessions() {
       }
     }
 
-    console.log(`Old sessions cleaned up: ${cleanedCount} removed from memory cache`)
+    console.log(
+      `Old sessions cleaned up: ${cleanedCount} removed from memory cache`
+    )
   } catch (error) {
     console.error('Failed to cleanup old sessions after retries:', error)
     // Don't throw - this is a background cleanup operation
   }
-} 
+}

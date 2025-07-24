@@ -39,7 +39,7 @@ export async function getBibliographiesByIds(referenceIds) {
   if (!referenceIds || referenceIds.length === 0) {
     return []
   }
-  
+
   const [rows] = await sequelizeConn.query(
     `
       SELECT *
@@ -77,7 +77,7 @@ export async function getTaxaIds(referenceId, taxaIds) {
   if (!taxaIds || taxaIds.length === 0) {
     return []
   }
-  
+
   const [rows] = await sequelizeConn.query(
     `
       SELECT taxon_id

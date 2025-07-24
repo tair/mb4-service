@@ -68,7 +68,7 @@ async function login(req, res, next) {
             req.sessionInfo.sessionKey,
             userResponse.user_id,
             req
-          ).catch(error => {
+          ).catch((error) => {
             console.error('Failed to log user login:', error)
           })
         }
@@ -92,13 +92,17 @@ async function login(req, res, next) {
 
 function logout(req, res) {
   // Log user logout with session association
-  if (req.sessionInfo && req.sessionInfo.sessionKey && req.credential && req.credential.user_id) {
-    logUserLogout(
-      req.sessionInfo.sessionKey,
-      req.credential.user_id
-    ).catch(error => {
-      console.error('Failed to log user logout:', error)
-    })
+  if (
+    req.sessionInfo &&
+    req.sessionInfo.sessionKey &&
+    req.credential &&
+    req.credential.user_id
+  ) {
+    logUserLogout(req.sessionInfo.sessionKey, req.credential.user_id).catch(
+      (error) => {
+        console.error('Failed to log user logout:', error)
+      }
+    )
   }
 
   res.clearCookie('authorization')
@@ -376,7 +380,7 @@ async function authenticateORCID(req, res) {
             req.sessionInfo.sessionKey,
             userResponse.user_id,
             req
-          ).catch(error => {
+          ).catch((error) => {
             console.error('Failed to log ORCID user login:', error)
           })
         }

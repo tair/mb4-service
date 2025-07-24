@@ -16,4 +16,4 @@ router.get('/*', controller.getObject)
 // HEAD /s3/*key - Check if object exists in default S3 bucket
 router.head('/*', controller.checkObject)
 
-export default router 
+export default router
