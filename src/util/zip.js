@@ -8,13 +8,12 @@ import mime from 'mime'
 const tempDirectories = new Set()
 
 export async function unzip(filePath) {
-  
   let directory = null
-  
+
   try {
     // Verify the file exists and is readable
     await fs.access(filePath, fs.constants.R_OK)
-    
+
     const tempPath = path.join(os.tmpdir(), 'mb-downloads')
     await fs.mkdir(tempPath, { recursive: true })
 
@@ -22,7 +21,7 @@ export async function unzip(filePath) {
     tempDirectories.add(directory)
 
     const files = await decompress(filePath, directory)
-    
+
     if (files.length === 0) {
       throw new Error('ZIP file is empty or contains no files')
     }
@@ -30,25 +29,24 @@ export async function unzip(filePath) {
     const processedFiles = files.map((file) => {
       const filePath = path.join(directory, file.path)
       const mimetype = mime.getType(filePath) || 'application/octet-stream'
-            
+
       return {
         originalname: file.path,
         path: filePath,
         mimetype: mimetype,
-        size: file.data ? file.data.length : 0
+        size: file.data ? file.data.length : 0,
       }
     })
 
     return processedFiles
-    
   } catch (error) {
     console.error('Error during ZIP extraction:', error)
-    
+
     // Clean up on error
     if (directory) {
       await cleanupTempDirectory(directory)
     }
-    
+
     if (error.code === 'ENOENT') {
       throw new Error('ZIP file not found or not accessible')
     } else if (error.message.includes('Invalid file signature')) {
@@ -73,6 +71,8 @@ export async function cleanupTempDirectory(directory) {
 }
 
 export async function cleanupAllTempDirectories() {
-  const cleanupPromises = Array.from(tempDirectories).map(dir => cleanupTempDirectory(dir))
+  const cleanupPromises = Array.from(tempDirectories).map((dir) =>
+    cleanupTempDirectory(dir)
+  )
   await Promise.all(cleanupPromises)
 }

@@ -162,7 +162,9 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
               characters_x_partitions.partition_id = ${this.partitionId} AND
               characters.project_id = ?`
       case 'matrix_character_order': {
-        const matrixIds = this.safeJoinIds(await this.getAllIdsInTable('matrices'))
+        const matrixIds = this.safeJoinIds(
+          await this.getAllIdsInTable('matrices')
+        )
         return `SELECT matrix_character_order.*
             FROM matrix_character_order
             INNER JOIN characters USING(character_id)
@@ -191,7 +193,9 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
               characters.project_id = ?`
       }
       case 'matrices': {
-        const matrixIds = this.safeJoinIds(await this.getAllIdsInTable('matrices'))
+        const matrixIds = this.safeJoinIds(
+          await this.getAllIdsInTable('matrices')
+        )
         return `SELECT matrices.*
             FROM matrices
             WHERE matrix_id IN (${matrixIds}) AND project_id = ? `

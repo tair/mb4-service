@@ -30,11 +30,15 @@ export async function getMediaFiles(req, res) {
 
 export async function createMediaFile(req, res) {
   const projectId = req.params.projectId
-  
+
   const media = models.MediaFile.build(req.body)
 
   // Ensure that the specimen_id is within the same project.
-  if (media.specimen_id && media.specimen_id !== '' && media.specimen_id !== 'null') {
+  if (
+    media.specimen_id &&
+    media.specimen_id !== '' &&
+    media.specimen_id !== 'null'
+  ) {
     const specimen = await models.Specimen.findByPk(media.specimen_id)
     if (specimen == null || specimen.project_id != projectId) {
       res.status(404).json({ message: 'Specimen is not found' })
@@ -119,12 +123,16 @@ export async function createMediaFiles(req, res) {
   const allowedMimeTypes = [
     'application/zip',
     'application/x-zip-compressed',
-    'application/octet-stream' // Some systems send this for ZIP files
+    'application/octet-stream', // Some systems send this for ZIP files
   ]
-  
-  if (!allowedMimeTypes.includes(req.file.mimetype) && !req.file.originalname.toLowerCase().endsWith('.zip')) {
-    res.status(400).json({ 
-      message: 'Uploaded file must be a ZIP archive. Please ensure you are uploading a .zip file.' 
+
+  if (
+    !allowedMimeTypes.includes(req.file.mimetype) &&
+    !req.file.originalname.toLowerCase().endsWith('.zip')
+  ) {
+    res.status(400).json({
+      message:
+        'Uploaded file must be a ZIP archive. Please ensure you are uploading a .zip file.',
     })
     return
   }
@@ -132,14 +140,19 @@ export async function createMediaFiles(req, res) {
   // Validate ZIP file size (max 100MB)
   const maxZipSize = 100 * 1024 * 1024 // 100MB
   if (req.file.size > maxZipSize) {
-    res.status(400).json({ 
-      message: 'ZIP file is too large. Maximum size is 100MB. Please split your files into smaller archives.' 
+    res.status(400).json({
+      message:
+        'ZIP file is too large. Maximum size is 100MB. Please split your files into smaller archives.',
     })
     return
   }
 
   // Ensure that the specimen is within the same project.
-  if (values.specimen_id && values.specimen_id !== '' && values.specimen_id !== 'null') {
+  if (
+    values.specimen_id &&
+    values.specimen_id !== '' &&
+    values.specimen_id !== 'null'
+  ) {
     const specimen = await models.Specimen.findByPk(values.specimen_id)
     if (specimen == null || specimen.project_id != projectId) {
       res.status(404).json({ message: 'Specimen is not found' })
@@ -171,41 +184,55 @@ export async function createMediaFiles(req, res) {
   const transaction = await sequelizeConn.transaction()
   const mediaUploader = new S3MediaUploader(transaction, req.user)
   let files = []
-  
+
   try {
     files = await unzip(req.file.path)
-    
+
     if (files.length === 0) {
-      res.status(400).json({ message: 'ZIP file is empty or contains no valid files' })
+      res
+        .status(400)
+        .json({ message: 'ZIP file is empty or contains no valid files' })
       return
     }
 
     // Filter out non-media files and validate file types
-    const extractedFiles = files.filter(file => {
+    const extractedFiles = files.filter((file) => {
       const extension = file.originalname.split('.').pop().toLowerCase()
-      const supportedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'tif', 'webp']
-      
+      const supportedExtensions = [
+        'jpg',
+        'jpeg',
+        'png',
+        'gif',
+        'bmp',
+        'tiff',
+        'tif',
+        'webp',
+      ]
+
       // Skip macOS metadata files and system files
-      if (file.originalname.startsWith('__MACOSX/') || 
-          file.originalname.startsWith('._') ||
-          file.originalname.startsWith('.DS_Store') ||
-          file.originalname.includes('/.DS_Store') ||
-          file.originalname.startsWith('Thumbs.db') ||
-          file.originalname.includes('/Thumbs.db')) {
+      if (
+        file.originalname.startsWith('__MACOSX/') ||
+        file.originalname.startsWith('._') ||
+        file.originalname.startsWith('.DS_Store') ||
+        file.originalname.includes('/.DS_Store') ||
+        file.originalname.startsWith('Thumbs.db') ||
+        file.originalname.includes('/Thumbs.db')
+      ) {
         return false
       }
-      
+
       // Skip directories
       if (!file.originalname.includes('.')) {
         return false
       }
-      
+
       return supportedExtensions.includes(extension)
     })
 
     if (extractedFiles.length === 0) {
-      res.status(400).json({ 
-        message: 'ZIP file contains no supported image files. Supported formats: JPG, PNG, GIF, BMP, TIFF, WebP' 
+      res.status(400).json({
+        message:
+          'ZIP file contains no supported image files. Supported formats: JPG, PNG, GIF, BMP, TIFF, WebP',
       })
       return
     }
@@ -213,19 +240,19 @@ export async function createMediaFiles(req, res) {
     // Limit the number of files that can be processed in a single batch
     const maxFilesPerBatch = 50
     if (extractedFiles.length > maxFilesPerBatch) {
-      res.status(400).json({ 
-        message: `ZIP file contains too many files (${extractedFiles.length}). Maximum allowed is ${maxFilesPerBatch} files per batch. Please split your files into smaller archives.` 
+      res.status(400).json({
+        message: `ZIP file contains too many files (${extractedFiles.length}). Maximum allowed is ${maxFilesPerBatch} files per batch. Please split your files into smaller archives.`,
       })
       return
     }
 
     for (let i = 0; i < extractedFiles.length; i++) {
       const file = extractedFiles[i]
-      
+
       try {
         // Determine media type from the individual file, not the ZIP
         const mediaType = convertMediaTypeFromMimeType(file.mimetype)
-        
+
         const media = models.MediaFile.build(values)
         media.set({
           project_id: req.project.project_id,
@@ -233,7 +260,7 @@ export async function createMediaFiles(req, res) {
           cataloguing_status: 1,
           media_type: mediaType,
         })
-        
+
         await media.save({
           transaction,
           user: req.user,
@@ -248,12 +275,11 @@ export async function createMediaFiles(req, res) {
         })
 
         mediaFiles.push(media)
-        
       } catch (fileError) {
         console.error(`Failed to process file ${file.originalname}:`, fileError)
         failedFiles.push({
           filename: file.originalname,
-          error: fileError.message
+          error: fileError.message,
         })
         // Continue processing other files instead of failing completely
       }
@@ -262,9 +288,9 @@ export async function createMediaFiles(req, res) {
     if (mediaFiles.length === 0) {
       await transaction.rollback()
       await mediaUploader.rollback()
-      res.status(500).json({ 
+      res.status(500).json({
         message: 'Failed to process any files from the ZIP archive',
-        failedFiles: failedFiles
+        failedFiles: failedFiles,
       })
       return
     }
@@ -278,12 +304,11 @@ export async function createMediaFiles(req, res) {
     } catch (cleanupError) {
       console.error('Error cleaning up temporary files:', cleanupError)
     }
-
   } catch (e) {
     await transaction.rollback()
     await mediaUploader.rollback()
     console.error('Batch upload error:', e)
-    
+
     // Clean up temporary files on error
     try {
       if (files && files.length > 0) {
@@ -292,11 +317,11 @@ export async function createMediaFiles(req, res) {
     } catch (cleanupError) {
       console.error('Error cleaning up temporary files on error:', cleanupError)
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       message: 'Failed to create media with server error',
       error: e.message,
-      failedFiles: failedFiles
+      failedFiles: failedFiles,
     })
     return
   }
@@ -305,8 +330,8 @@ export async function createMediaFiles(req, res) {
     media: mediaFiles.map((media) => convertMediaResponse(media)),
     summary: {
       totalProcessed: mediaFiles.length,
-      failedFiles: failedFiles
-    }
+      failedFiles: failedFiles,
+    },
   })
 }
 
@@ -400,7 +425,11 @@ export async function editMediaFile(req, res) {
   const values = req.body
 
   // Ensure that the specimen_id is within the same project.
-  if (values.specimen_id && values.specimen_id !== '' && values.specimen_id !== 'null') {
+  if (
+    values.specimen_id &&
+    values.specimen_id !== '' &&
+    values.specimen_id !== 'null'
+  ) {
     const specimen = await models.Specimen.findByPk(values.specimen_id)
     if (specimen == null || specimen.project_id != projectId) {
       res.status(404).json({ message: 'Specimen is not found' })
@@ -478,12 +507,16 @@ export async function editMediaFiles(req, res) {
   const projectId = req.project.project_id
   const mediaIds = req.body.media_ids
   const values = req.body.media
-  
+
   // Validate that we're not accidentally updating the media field
   if (values.media) {
-    console.error('ERROR: Attempting to update media field directly:', values.media)
+    console.error(
+      'ERROR: Attempting to update media field directly:',
+      values.media
+    )
     return res.status(400).json({
-      message: 'Cannot update media field directly. Use cataloguing_status, specimen_id, view_id, etc.',
+      message:
+        'Cannot update media field directly. Use cataloguing_status, specimen_id, view_id, etc.',
     })
   }
 
@@ -541,37 +574,37 @@ export async function editMediaFiles(req, res) {
     // Remove any media field from values to prevent corruption
     const cleanValues = { ...values }
     delete cleanValues.media
-    
+
     // Check current status before update
     const beforeUpdate = await models.MediaFile.findAll({
       where: { media_id: mediaIds },
       transaction: transaction,
     })
-    
+
     const updateResult = await models.MediaFile.update(cleanValues, {
       where: { media_id: mediaIds },
       transaction: transaction,
       individualHooks: true,
       user: req.user,
     })
-    
+
     const results = await models.MediaFile.findAll({
       where: {
         media_id: mediaIds,
       },
       transaction: transaction,
     })
-    
+
     await transaction.commit()
-    
+
     // Double-check the database after commit
     const [finalCheck] = await sequelizeConn.query(
       `SELECT media_id, cataloguing_status FROM media_files WHERE media_id IN (?)`,
       { replacements: [mediaIds] }
     )
-    
+
     const responseData = results.map((media) => convertMediaResponse(media))
-    
+
     res.status(200).json({
       media: responseData,
     })
@@ -824,13 +857,15 @@ function convertMediaResponse(row) {
 export async function serveMediaFile(req, res) {
   try {
     const { projectId, mediaId, fileSize = 'original' } = req.params
-    
+
     // Validate file size
     const supportedFileSizes = ['original', 'large', 'thumbnail']
     if (!supportedFileSizes.includes(fileSize)) {
       return res.status(400).json({
         error: 'Invalid file size',
-        message: `File size '${fileSize}' is not supported. Supported sizes: ${supportedFileSizes.join(', ')}`,
+        message: `File size '${fileSize}' is not supported. Supported sizes: ${supportedFileSizes.join(
+          ', '
+        )}`,
       })
     }
 
@@ -848,17 +883,19 @@ export async function serveMediaFile(req, res) {
     }
 
     const mediaData = mediaRows[0].media
-    
+
     if (!mediaData || !mediaData[fileSize]) {
       return res.status(404).json({
         error: 'File size not found',
-        message: `The requested file size '${fileSize}' is not available for this media. Available sizes: ${mediaData ? Object.keys(mediaData).join(', ') : 'none'}`,
+        message: `The requested file size '${fileSize}' is not available for this media. Available sizes: ${
+          mediaData ? Object.keys(mediaData).join(', ') : 'none'
+        }`,
       })
     }
 
     // Extract S3 key from the media data (new system) or construct it (old system)
     const mediaVersion = mediaData[fileSize]
-    
+
     let s3Key
     if (mediaVersion.S3_KEY) {
       // New S3-based system
@@ -898,10 +935,9 @@ export async function serveMediaFile(req, res) {
 
     // Send the data
     res.send(result.data)
-
   } catch (error) {
     console.error('Media serve error:', error.message)
-    
+
     if (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey')) {
       return res.status(404).json({
         error: 'File not found',
@@ -938,7 +974,7 @@ export async function serveBatchMediaFiles(req, res) {
   try {
     const { projectId } = req.params
     const { mediaIds, fileSize = 'original' } = req.query
-    
+
     if (!mediaIds) {
       return res.status(400).json({
         error: 'Missing parameters',
@@ -951,12 +987,14 @@ export async function serveBatchMediaFiles(req, res) {
     if (!supportedFileSizes.includes(fileSize)) {
       return res.status(400).json({
         error: 'Invalid file size',
-        message: `File size '${fileSize}' is not supported. Supported sizes: ${supportedFileSizes.join(', ')}`,
+        message: `File size '${fileSize}' is not supported. Supported sizes: ${supportedFileSizes.join(
+          ', '
+        )}`,
       })
     }
 
-    const mediaIdArray = mediaIds.split(',').map(id => parseInt(id.trim()))
-    
+    const mediaIdArray = mediaIds.split(',').map((id) => parseInt(id.trim()))
+
     // Get media files info from database
     const [mediaRows] = await sequelizeConn.query(
       `SELECT media_id, media FROM media_files WHERE project_id = ? AND media_id IN (?)`,
@@ -990,7 +1028,7 @@ export async function serveBatchMediaFiles(req, res) {
         if (!mediaData || !mediaData[fileSize]) {
           errors.push({
             mediaId: mediaRow.media_id,
-            error: `File size '${fileSize}' not available`
+            error: `File size '${fileSize}' not available`,
           })
           continue
         }
@@ -1009,7 +1047,7 @@ export async function serveBatchMediaFiles(req, res) {
         } else {
           errors.push({
             mediaId: mediaRow.media_id,
-            error: 'Media data is missing file information'
+            error: 'Media data is missing file information',
           })
           continue
         }
@@ -1023,14 +1061,13 @@ export async function serveBatchMediaFiles(req, res) {
           contentType: result.contentType,
           contentLength: result.contentLength,
           lastModified: result.lastModified,
-          s3Key
+          s3Key,
         })
-
       } catch (error) {
         console.error(`Error serving media ${mediaRow.media_id}:`, error)
         errors.push({
           mediaId: mediaRow.media_id,
-          error: error.message
+          error: error.message,
         })
       }
     }
@@ -1038,16 +1075,17 @@ export async function serveBatchMediaFiles(req, res) {
     // Return response
     const response = {
       success: results.length > 0,
-      message: errors.length > 0 
-        ? `Served ${results.length} files with ${errors.length} errors`
-        : `Successfully served ${results.length} files`,
+      message:
+        errors.length > 0
+          ? `Served ${results.length} files with ${errors.length} errors`
+          : `Successfully served ${results.length} files`,
       data: {
         projectId,
         fileSize,
         files: results,
         totalServed: results.length,
-        totalErrors: errors.length
-      }
+        totalErrors: errors.length,
+      },
     }
 
     if (errors.length > 0) {
@@ -1057,7 +1095,6 @@ export async function serveBatchMediaFiles(req, res) {
     // Return appropriate status code
     const statusCode = results.length > 0 ? 200 : 400
     res.status(statusCode).json(response)
-
   } catch (error) {
     console.error('Batch Media Serve Error:', error)
     res.status(500).json({

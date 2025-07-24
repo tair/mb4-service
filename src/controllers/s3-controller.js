@@ -44,7 +44,7 @@ export const getObject = async (req, res) => {
     res.send(result.data)
   } catch (error) {
     console.error('S3 Controller Error:', error)
-    
+
     if (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey')) {
       return res.status(404).json({
         error: 'Object not found',
@@ -89,7 +89,7 @@ export const checkObject = async (req, res) => {
     }
 
     const exists = await s3Service.objectExists(bucket, key)
-    
+
     if (exists) {
       res.status(200).end()
     } else {
@@ -110,17 +110,28 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     // Allow only image files for now (can be extended for other media types)
     if (req.body.mediaType === 'image') {
-      const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+      const allowedImageTypes = [
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+      ]
       if (allowedImageTypes.includes(file.mimetype)) {
         cb(null, true)
       } else {
-        cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.'), false)
+        cb(
+          new Error(
+            'Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.'
+          ),
+          false
+        )
       }
     } else {
       // For future media types, allow all files
       cb(null, true)
     }
-  }
+  },
 })
 
 // Configure multer for bulk uploads (multiple files)
@@ -133,17 +144,28 @@ const bulkUpload = multer({
   fileFilter: (req, file, cb) => {
     // Allow only image files for now (can be extended for other media types)
     if (req.body.mediaType === 'image') {
-      const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+      const allowedImageTypes = [
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+      ]
       if (allowedImageTypes.includes(file.mimetype)) {
         cb(null, true)
       } else {
-        cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.'), false)
+        cb(
+          new Error(
+            'Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.'
+          ),
+          false
+        )
       }
     } else {
       // For future media types, allow all files
       cb(null, true)
     }
-  }
+  },
 })
 
 /**
@@ -179,7 +201,9 @@ export const uploadObject = [
       if (!supportedMediaTypes.includes(mediaType)) {
         return res.status(400).json({
           error: 'Unsupported media type',
-          message: `Media type '${mediaType}' is not supported. Supported types: ${supportedMediaTypes.join(', ')}`,
+          message: `Media type '${mediaType}' is not supported. Supported types: ${supportedMediaTypes.join(
+            ', '
+          )}`,
         })
       }
 
@@ -188,13 +212,16 @@ export const uploadObject = [
       if (!supportedFileSizes.includes(fileSize)) {
         return res.status(400).json({
           error: 'Invalid file size',
-          message: `File size '${fileSize}' is not supported. Supported sizes: ${supportedFileSizes.join(', ')}`,
+          message: `File size '${fileSize}' is not supported. Supported sizes: ${supportedFileSizes.join(
+            ', '
+          )}`,
         })
       }
 
       // Get file extension
-      const fileExtension = path.extname(file.originalname).toLowerCase() || 
-                           getExtensionFromMimeType(file.mimetype)
+      const fileExtension =
+        path.extname(file.originalname).toLowerCase() ||
+        getExtensionFromMimeType(file.mimetype)
 
       // Construct S3 key based on the required structure
       // Format: {mediaType}s/{projectId}/{mediaId}/{projectId}_{mediaId}_{fileSize}.{extension}
@@ -238,13 +265,12 @@ export const uploadObject = [
             originalFilename: file.originalname,
             uploadedFileSize: file.size,
             contentType: file.mimetype,
-          }
-        }
+          },
+        },
       })
-
     } catch (error) {
       console.error('S3 Upload Error:', error)
-      
+
       // Handle multer errors
       if (error.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({
@@ -280,7 +306,7 @@ export const uploadObject = [
         message: 'Failed to upload file to S3',
       })
     }
-  }
+  },
 ]
 
 /**
@@ -293,7 +319,7 @@ export const uploadBulkObjects = [
   bulkUpload.fields([
     { name: 'original', maxCount: 1 },
     { name: 'large', maxCount: 1 },
-    { name: 'thumbnail', maxCount: 1 }
+    { name: 'thumbnail', maxCount: 1 },
   ]),
   async (req, res) => {
     try {
@@ -320,7 +346,9 @@ export const uploadBulkObjects = [
       if (!supportedMediaTypes.includes(mediaType)) {
         return res.status(400).json({
           error: 'Unsupported media type',
-          message: `Media type '${mediaType}' is not supported. Supported types: ${supportedMediaTypes.join(', ')}`,
+          message: `Media type '${mediaType}' is not supported. Supported types: ${supportedMediaTypes.join(
+            ', '
+          )}`,
         })
       }
 
@@ -344,8 +372,9 @@ export const uploadBulkObjects = [
 
           try {
             // Get file extension
-            const fileExtension = path.extname(file.originalname).toLowerCase() || 
-                               getExtensionFromMimeType(file.mimetype)
+            const fileExtension =
+              path.extname(file.originalname).toLowerCase() ||
+              getExtensionFromMimeType(file.mimetype)
 
             // Construct S3 key based on the required structure
             // Format: {mediaType}s/{projectId}/{mediaId}/{projectId}_{mediaId}_{fileSize}.{extension}
@@ -371,15 +400,14 @@ export const uploadBulkObjects = [
                 originalFilename: file.originalname,
                 uploadedFileSize: file.size,
                 contentType: file.mimetype,
-              }
+              },
             })
-
           } catch (error) {
             console.error(`S3 Upload Error for ${fileSize}:`, error)
             errors.push({
               fileSize,
               error: error.message,
-              originalFilename: file.originalname
+              originalFilename: file.originalname,
             })
           }
         }
@@ -388,9 +416,10 @@ export const uploadBulkObjects = [
       // Return response
       const response = {
         success: uploadResults.length > 0,
-        message: errors.length > 0 
-          ? `Uploaded ${uploadResults.length} files with ${errors.length} errors`
-          : `Successfully uploaded ${uploadResults.length} files`,
+        message:
+          errors.length > 0
+            ? `Uploaded ${uploadResults.length} files with ${errors.length} errors`
+            : `Successfully uploaded ${uploadResults.length} files`,
         data: {
           mediaType,
           projectId,
@@ -398,8 +427,8 @@ export const uploadBulkObjects = [
           bucket,
           uploads: uploadResults,
           totalUploaded: uploadResults.length,
-          totalErrors: errors.length
-        }
+          totalErrors: errors.length,
+        },
       }
 
       if (errors.length > 0) {
@@ -409,10 +438,9 @@ export const uploadBulkObjects = [
       // Return appropriate status code
       const statusCode = uploadResults.length > 0 ? 200 : 400
       res.status(statusCode).json(response)
-
     } catch (error) {
       console.error('S3 Bulk Upload Error:', error)
-      
+
       // Handle multer errors
       if (error.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({
@@ -455,7 +483,7 @@ export const uploadBulkObjects = [
         message: 'Failed to upload files to S3',
       })
     }
-  }
+  },
 ]
 
 /**
@@ -473,9 +501,10 @@ function getExtensionFromMimeType(mimeType) {
     'application/pdf': '.pdf',
     'text/plain': '.txt',
     'application/msword': '.doc',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+      '.docx',
   }
-  
+
   return mimeTypeMap[mimeType] || '.bin'
 }
 
@@ -487,12 +516,12 @@ function getExtensionFromMimeType(mimeType) {
 function isValidBucket(bucketName) {
   // Get allowed buckets from config
   const allowedBuckets = config.aws.allowedBuckets || []
-  
+
   // If no specific buckets are configured, allow all (less secure)
   if (allowedBuckets.length === 0) {
     console.warn('No S3 bucket restrictions configured - allowing all buckets')
     return true
   }
-  
+
   return allowedBuckets.includes(bucketName)
-} 
+}

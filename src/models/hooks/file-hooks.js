@@ -79,7 +79,7 @@ async function unlink(tableName, rowId, json, transaction, user) {
     if (json.thumbnail.S3_KEY) s3Keys.push(json.thumbnail.S3_KEY)
     if (json.large && json.large.S3_KEY) s3Keys.push(json.large.S3_KEY)
     if (json.original && json.original.S3_KEY) s3Keys.push(json.original.S3_KEY)
-    
+
     if (s3Keys.length > 0) {
       const rowKey = `${tableName}/${rowId}/unlink-s3`
       await models.TaskQueue.create(

@@ -1,4 +1,9 @@
-import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import {
+  S3Client,
+  GetObjectCommand,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3'
 import config from '../config.js'
 
 class S3Service {
@@ -26,7 +31,7 @@ class S3Service {
       })
 
       const response = await this.s3Client.send(command)
-      
+
       // Convert stream to buffer
       const chunks = []
       for await (const chunk of response.Body) {
@@ -58,11 +63,14 @@ class S3Service {
         Bucket: bucketName,
         Key: key,
       })
-      
+
       await this.s3Client.send(command)
       return true
     } catch (error) {
-      if (error.name === 'NoSuchKey' || error.$metadata?.httpStatusCode === 404) {
+      if (
+        error.name === 'NoSuchKey' ||
+        error.$metadata?.httpStatusCode === 404
+      ) {
         return false
       }
       throw error
@@ -87,7 +95,7 @@ class S3Service {
       })
 
       const response = await this.s3Client.send(command)
-      
+
       return {
         key,
         etag: response.ETag,
@@ -120,4 +128,4 @@ class S3Service {
   }
 }
 
-export default new S3Service() 
+export default new S3Service()

@@ -118,7 +118,7 @@ async function projectStatsDump(req, res) {
     for (let i = 0; i < projects.length; i++) {
       const project = projects[i]
       const projectId = project.project_id
-      
+
       const project_views = await projectDetailService.getProjectViews(
         projectId,
         matrixMap,
@@ -134,7 +134,7 @@ async function projectStatsDump(req, res) {
         project_id: projectId,
         project_views: project_views,
         project_downloads: project_downloads,
-        generated_at: new Date().toISOString()
+        generated_at: new Date().toISOString(),
       }
 
       await utilService.writeToFile(
@@ -148,7 +148,9 @@ async function projectStatsDump(req, res) {
     return
   } catch (err) {
     console.error(`Error while dumping project stats data. `, err.message)
-    res.status(500).json({ message: 'Error while running project stats dump process.' })
+    res
+      .status(500)
+      .json({ message: 'Error while running project stats dump process.' })
   }
 }
 

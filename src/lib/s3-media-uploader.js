@@ -27,7 +27,7 @@ export class S3MediaUploader {
     }
 
     const extension = file.originalname.split('.').pop().toLowerCase()
-    
+
     // Process image with Sharp
     const image = sharp(file.path)
     const metadata = await image.metadata()
@@ -36,7 +36,7 @@ export class S3MediaUploader {
     const sizes = {
       original: null, // No resizing, but will compress
       large: { maxWidth: 800, maxHeight: 800 },
-      thumbnail: { width: 120, height: 120 }
+      thumbnail: { width: 120, height: 120 },
     }
 
     const json = {
@@ -47,21 +47,28 @@ export class S3MediaUploader {
     for (const [sizeName, dimensions] of Object.entries(sizes)) {
       try {
         let processedImage = image
-        
+
         // Resize if dimensions are specified
         if (dimensions) {
           if (sizeName === 'large') {
             // For large, maintain aspect ratio and compress if larger than 800px
-            if (metadata.width > dimensions.maxWidth || metadata.height > dimensions.maxHeight) {
-              processedImage = image.resize(dimensions.maxWidth, dimensions.maxHeight, {
-                fit: 'inside',
-                withoutEnlargement: true
-              })
+            if (
+              metadata.width > dimensions.maxWidth ||
+              metadata.height > dimensions.maxHeight
+            ) {
+              processedImage = image.resize(
+                dimensions.maxWidth,
+                dimensions.maxHeight,
+                {
+                  fit: 'inside',
+                  withoutEnlargement: true,
+                }
+              )
             }
           } else if (sizeName === 'thumbnail') {
             // For thumbnail, resize to exact dimensions
             processedImage = image.resize(dimensions.width, dimensions.height, {
-              fit: 'cover'
+              fit: 'cover',
             })
           }
         }
@@ -70,7 +77,7 @@ export class S3MediaUploader {
         const buffer = await processedImage
           .jpeg({ quality: 85, progressive: true })
           .toBuffer()
-        
+
         const processedMetadata = await processedImage.metadata()
 
         // Generate S3 key - always use .jpg extension since we're converting to JPEG
@@ -106,12 +113,13 @@ export class S3MediaUploader {
         this.uploadedFiles.push({
           bucket: config.aws.defaultBucket,
           key: s3Key,
-          etag: result.etag
+          etag: result.etag,
         })
-
       } catch (error) {
         console.error(`Error processing ${sizeName} variant:`, error)
-        throw new Error(`Failed to process ${sizeName} variant: ${error.message}`)
+        throw new Error(
+          `Failed to process ${sizeName} variant: ${error.message}`
+        )
       }
     }
 
@@ -125,9 +133,11 @@ export class S3MediaUploader {
 
   async rollback() {
     // Log rollback for debugging - files will remain in S3
-    console.log(`Rollback requested for ${this.uploadedFiles.length} uploaded files`)
+    console.log(
+      `Rollback requested for ${this.uploadedFiles.length} uploaded files`
+    )
     for (const file of this.uploadedFiles) {
       console.log(`Uploaded file: ${file.bucket}/${file.key}`)
     }
   }
-} 
+}

@@ -40,7 +40,7 @@ export async function authorizeProject(req, res, next) {
     permissions.push('view')
   } else if (canRoleAccessAnyProject(req.user?.roles)) {
     permissions.push('view', 'edit', 'manage')
-    
+
     // Update access time for admin/curator users accessing the project
     // Note: Global admins/curators may not be in projects_x_users table
     if (req.user?.user_id) {
@@ -48,7 +48,7 @@ export async function authorizeProject(req, res, next) {
     }
   } else if (req.user?.user_id == project.user_id) {
     permissions.push('view', 'edit', 'manage')
-    
+
     // Update access time for project owner
     await project.setUserAccessTime(req.user.user_id, true, req.user)
   } else {
@@ -73,7 +73,7 @@ export async function authorizeProject(req, res, next) {
 
     // Set the project user so that it can be read downstream too.
     req.project.user = projectUser
-    
+
     // Update access time for project members
     await project.setUserAccessTime(req.user.user_id, false, req.user)
   }

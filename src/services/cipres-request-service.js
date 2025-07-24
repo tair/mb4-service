@@ -80,7 +80,7 @@ export default class CipresRequestService {
     if (!matrixIds || matrixIds.length === 0) {
       return []
     }
-    
+
     const [rows] = await sequelizeConn.query(
       `   
         SELECT request_id, matrix_id, user_id, jobname, FROM_UNIXTIME(created_on, '%Y-%m-%d %h:%i:%s') created_on,  cipres_job_id, cipres_tool, cipres_last_status, cipres_settings, notes, '${URL}' as cu, '${KEY}' as ck, '${CRE}' as cr, '${CRA_USER}' as ca

@@ -16,7 +16,10 @@ import projectUsersRouter from './project-users-route.js'
 import specimensRouter from './specimens-route.js'
 import taxaRouter from './taxa-route.js'
 import * as controller from '../controllers/project-controller.js'
-import { authenticateToken, maybeAuthenticateToken } from './auth-interceptor.js'
+import {
+  authenticateToken,
+  maybeAuthenticateToken,
+} from './auth-interceptor.js'
 import { authorizeProject } from './project-interceptor.js'
 import { authorizeUser } from './user-interceptor.js'
 
@@ -28,9 +31,9 @@ const upload = multer({
     },
     filename: (req, file, cb) => {
       // Generate unique filename
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9)
       cb(null, file.fieldname + '-' + uniqueSuffix + '-' + file.originalname)
-    }
+    },
   }),
   limits: {
     fileSize: 9 * 1024 * 1024, // 9MB limit
@@ -54,10 +57,18 @@ projectsRouter.get('/journals', controller.getJournalList)
 projectsRouter.get('/journal-cover', controller.getJournalCover)
 
 // Overview endpoint with optional authentication (must be before /:projectId middleware)
-projectsRouter.get('/:projectId/overview', maybeAuthenticateToken, controller.getOverview)
+projectsRouter.get(
+  '/:projectId/overview',
+  maybeAuthenticateToken,
+  controller.getOverview
+)
 
 // Project creation and DOI retrieval routes
-projectsRouter.post('/create', upload.single('journal_cover'), controller.createProject)
+projectsRouter.post(
+  '/create',
+  upload.single('journal_cover'),
+  controller.createProject
+)
 projectsRouter.post('/doi', controller.retrieveDOI)
 
 // This is a sub-route focused on /projects/<ID>
