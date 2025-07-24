@@ -16,7 +16,7 @@ import projectUsersRouter from './project-users-route.js'
 import specimensRouter from './specimens-route.js'
 import taxaRouter from './taxa-route.js'
 import * as controller from '../controllers/project-controller.js'
-import { authenticateToken } from './auth-interceptor.js'
+import { authenticateToken, maybeAuthenticateToken } from './auth-interceptor.js'
 import { authorizeProject } from './project-interceptor.js'
 import { authorizeUser } from './user-interceptor.js'
 
@@ -52,6 +52,9 @@ projectsRouter.get('/journals', controller.getJournalList)
 
 // Add a new route for retrieving journal cover
 projectsRouter.get('/journal-cover', controller.getJournalCover)
+
+// Overview endpoint with optional authentication (must be before /:projectId middleware)
+projectsRouter.get('/:projectId/overview', maybeAuthenticateToken, controller.getOverview)
 
 // Project creation and DOI retrieval routes
 projectsRouter.post('/create', upload.single('journal_cover'), controller.createProject)

@@ -19,8 +19,13 @@ import analyticsRouter from './routes/analytics-route.js'
 import schedulerRouter from './routes/scheduler-route.js'
 import schedulerService from './services/scheduler-service.js'
 import s3Router from './routes/s3-route.js'
+import { trackSession } from './lib/session-middleware.js'
 
 const app = express()
+
+// Trust proxy to get real IP addresses from proxy headers
+// This is essential for Docker deployments behind reverse proxies
+app.set('trust proxy', true)
 
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -29,9 +34,12 @@ app.use((req, res, next) => {
     'OPTIONS, GET, POST, PUT, PATCH, DELETE'
   )
   res.setHeader('Access-Control-Allow-Credentials', 'true')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-session-key, x-session-fingerprint')
   next()
 })
+
+// Session tracking middleware (applied to all routes)
+app.use(trackSession)
 
 app.use(cors())
 app.use('/email', express.json({ limit: '10mb' }))
