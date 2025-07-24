@@ -20,6 +20,8 @@ import schedulerRouter from './routes/scheduler-route.js'
 import schedulerService from './services/scheduler-service.js'
 import s3Router from './routes/s3-route.js'
 import { trackSession } from './lib/session-middleware.js'
+import { gracefulShutdown } from './controllers/analytics-controller.js'
+import loggingService from './services/logging-service.js'
 
 const app = express()
 
@@ -81,6 +83,9 @@ initializeCache().catch((error) => {
   console.error('Failed to initialize stats cache:', error)
 })
 
+// Start unified logging service (handles analytics + sessions)
+loggingService.start()
+
 // Start scheduler service if enabled
 // Default to true if undefined, only disable if explicitly set to 'false'
 const schedulerEnabled = process.env.SCHEDULER_ENABLED !== 'false'
@@ -106,5 +111,33 @@ app.use((err, req, res, next) => {
     next(err)
   }
 })
+
+// Graceful shutdown handling for analytics buffer
+const handleShutdown = async (signal) => {
+  console.log(`\n[${signal}] Graceful shutdown initiated...`)
+  
+  try {
+    // Stop the scheduler service
+    if (schedulerService.isRunning) {
+      schedulerService.stop()
+      console.log('✓ Scheduler service stopped')
+    }
+    
+    // Stop logging service and flush all buffers
+    await gracefulShutdown()
+    console.log('✓ Logging service stopped and all buffers flushed')
+    
+    console.log('Graceful shutdown complete. Exiting...')
+    process.exit(0)
+  } catch (error) {
+    console.error('Error during graceful shutdown:', error)
+    process.exit(1)
+  }
+}
+
+// Handle various shutdown signals
+process.on('SIGTERM', () => handleShutdown('SIGTERM'))
+process.on('SIGINT', () => handleShutdown('SIGINT'))
+process.on('SIGUSR2', () => handleShutdown('SIGUSR2')) // nodemon restart
 
 export default app

@@ -6,6 +6,7 @@
 
 import sequelizeConn from '../util/db.js'
 import { time } from '../util/util.js'
+import loggingService from '../services/logging-service.js'
 
 // In-memory session tracking to avoid duplicate inserts
 const activeSessionsCache = new Map()
@@ -32,7 +33,6 @@ databaseCleanupInterval = setInterval(() => {
 
 // Graceful shutdown handling
 const cleanup = () => {
-  console.log('Cleaning up session middleware intervals...')
   if (memoryCleanupInterval) {
     clearInterval(memoryCleanupInterval)
     memoryCleanupInterval = null
@@ -109,9 +109,7 @@ function cleanupActiveSessionsCache() {
     }
   }
 
-  if (cleanedCount > 0) {
-    console.log(`Cleaned up ${cleanedCount} old sessions from memory cache`)
-  }
+  // cleanedCount tracked but not logged
 }
 
 /**
@@ -163,13 +161,16 @@ export async function trackSession(req, res, next) {
         sessionKey,
       })
 
-      // Log new session to database with retry logic
+      // Log new session using the logging service (batched)
       try {
-        await retryOperation(() =>
-          logNewSession(sessionKey, ipAddr, userAgent, fingerprint)
-        )
+        loggingService.logSession({
+          session_key: sessionKey,
+          ip_addr: ipAddr,
+          user_agent: userAgent,
+          fingerprint: fingerprint
+        })
       } catch (error) {
-        console.error('Failed to log session after retries:', error)
+        console.error('Failed to queue session for logging:', error)
         // Continue processing - session logging failure shouldn't break the request
       }
     }
@@ -351,37 +352,7 @@ function normalizeIpAddress(ipAddr) {
   return ipAddr
 }
 
-/**
- * Log new session to stats_session_log table
- */
-async function logNewSession(sessionKey, ipAddr, userAgent, fingerprint) {
-  try {
-    const currentTime = time()
-    const normalizedIpAddr = normalizeIpAddress(ipAddr)
-
-    // Insert into stats_session_log using existing schema
-    await sequelizeConn.query(
-      `INSERT INTO stats_session_log (session_key, datetime_started, datetime_ended, ip_addr, user_agent)
-       VALUES (?, ?, NULL, ?, ?)`,
-      {
-        replacements: [sessionKey, currentTime, normalizedIpAddr, userAgent],
-      }
-    )
-  } catch (error) {
-    // Ignore duplicate key errors (session already exists)
-    if (
-      error.name === 'SequelizeUniqueConstraintError' ||
-      error.code === 'ER_DUP_ENTRY' ||
-      error.message.includes('Duplicate entry')
-    ) {
-      // Session already logged, ignore silently
-      return
-    }
-
-    console.error('Failed to log session:', error)
-    // Don't throw - logging failure shouldn't break the request
-  }
-}
+// logNewSession function removed - now handled by logging service
 
 /**
  * Log user login with session association
@@ -393,87 +364,27 @@ export async function logUserLogin(sessionKey, userId, req) {
       return
     }
 
-    const currentTime = time()
     const realIpAddr = extractRealIpAddress(req)
     const normalizedIpAddr = normalizeIpAddress(realIpAddr)
     const userAgent = req.headers['user-agent'] || 'unknown'
 
-    // Insert into stats_login_log with session association - with retry
-    await retryOperation(async () => {
-      await sequelizeConn.query(
-        `INSERT INTO stats_login_log (session_key, user_id, datetime_started, datetime_ended, ip_addr, user_agent)
-         VALUES (?, ?, ?, NULL, ?, ?)`,
-        {
-          replacements: [
-            sessionKey,
-            userId,
-            currentTime,
-            normalizedIpAddr,
-            userAgent,
-          ],
-        }
-      )
+    // Log user login using the logging service (batched)
+    // This automatically handles retroactive analytics updates
+    loggingService.logLogin({
+      session_key: sessionKey,
+      user_id: userId,
+      ip_addr: normalizedIpAddr,
+      user_agent: userAgent
     })
 
-    // Retroactively update analytics entries for this session - with retry
-    try {
-      await retryOperation(() => updateSessionAnalytics(sessionKey, userId))
-    } catch (error) {
-      console.error('Failed to update session analytics after retries:', error)
-      // Continue - this is not critical for login functionality
-    }
-
-    console.log(
-      `User login logged: user_id=${userId}, session=${sessionKey.substring(
-        0,
-        8
-      )}...`
-    )
+    // User login queued for logging
   } catch (error) {
-    console.error('Failed to log user login after retries:', error)
+    console.error('Failed to queue user login for logging:', error)
     // Don't throw - login logging failure shouldn't break authentication
   }
 }
 
-/**
- * Update analytics entries to associate anonymous activities with the logged-in user
- * This solves the "user logged in halfway through session" problem
- */
-async function updateSessionAnalytics(sessionKey, userId) {
-  try {
-    // Update previous anonymous analytics hits for this session
-    const hitUpdateResult = await sequelizeConn.query(
-      `UPDATE stats_pub_hit_log 
-       SET user_id = ? 
-       WHERE session_key = ? AND user_id IS NULL`,
-      {
-        replacements: [userId, sessionKey],
-      }
-    )
-
-    // Update previous anonymous download logs for this session
-    const downloadUpdateResult = await sequelizeConn.query(
-      `UPDATE stats_pub_download_log 
-       SET user_id = ? 
-       WHERE session_key = ? AND user_id IS NULL`,
-      {
-        replacements: [userId, sessionKey],
-      }
-    )
-
-    const hitsUpdated = hitUpdateResult[1]?.affectedRows || 0
-    const downloadsUpdated = downloadUpdateResult[1]?.affectedRows || 0
-
-    if (hitsUpdated > 0 || downloadsUpdated > 0) {
-      console.log(
-        `Retroactively associated ${hitsUpdated} hits and ${downloadsUpdated} downloads with user_id=${userId}`
-      )
-    }
-  } catch (error) {
-    console.error('Failed to update session analytics:', error)
-    // Don't throw - this is a nice-to-have feature that shouldn't break login
-  }
-}
+// updateSessionAnalytics function removed - now handled by logging service
 
 /**
  * Log user logout
@@ -484,30 +395,15 @@ export async function logUserLogout(sessionKey, userId) {
       return
     }
 
-    const currentTime = time()
-
-    // Update the most recent login record for this session/user - with retry
-    await retryOperation(async () => {
-      await sequelizeConn.query(
-        `UPDATE stats_login_log 
-         SET datetime_ended = ?
-         WHERE session_key = ? AND user_id = ? AND datetime_ended IS NULL
-         ORDER BY datetime_started DESC
-         LIMIT 1`,
-        {
-          replacements: [currentTime, sessionKey, userId],
-        }
-      )
+    // Log user logout using the logging service (batched)
+    loggingService.logLogout({
+      session_key: sessionKey,
+      user_id: userId
     })
 
-    console.log(
-      `User logout logged: user_id=${userId}, session=${sessionKey.substring(
-        0,
-        8
-      )}...`
-    )
+    // User logout queued for logging
   } catch (error) {
-    console.error('Failed to log user logout after retries:', error)
+    console.error('Failed to queue user logout for logging:', error)
     // Don't throw - logout logging failure shouldn't break logout process
   }
 }
@@ -521,29 +417,20 @@ export async function endSession(sessionKey) {
       return
     }
 
-    const currentTime = time()
-
-    // Update session end time - with retry
-    await retryOperation(async () => {
-      await sequelizeConn.query(
-        `UPDATE stats_session_log 
-         SET datetime_ended = ?
-         WHERE session_key = ? AND datetime_ended IS NULL`,
-        {
-          replacements: [currentTime, sessionKey],
-        }
-      )
+    // Log session end using the logging service (batched)
+    loggingService.logSessionEnd({
+      session_key: sessionKey
     })
 
-    // Remove from active sessions cache (do this after successful DB update)
+    // Remove from active sessions cache immediately
     activeSessionsCache.delete(sessionKey)
 
-    console.log(`Session ended: ${sessionKey.substring(0, 8)}...`)
+    // Session end queued for logging
   } catch (error) {
-    console.error('Failed to end session after retries:', error)
-    // Still remove from cache even if DB update failed to prevent memory leak
+    console.error('Failed to queue session end for logging:', error)
+    // Still remove from cache even if logging failed to prevent memory leak
     activeSessionsCache.delete(sessionKey)
-    throw error // Re-throw for caller to handle
+    // Don't throw - session end logging failure shouldn't break the process
   }
 }
 
@@ -638,9 +525,7 @@ export async function cleanupOldSessions() {
       }
     }
 
-    console.log(
-      `Old sessions cleaned up: ${cleanedCount} removed from memory cache`
-    )
+    // Old sessions cleaned up from memory cache
   } catch (error) {
     console.error('Failed to cleanup old sessions after retries:', error)
     // Don't throw - this is a background cleanup operation
