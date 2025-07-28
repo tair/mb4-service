@@ -66,10 +66,23 @@ projectsRouter.get(
 // Project creation and DOI retrieval routes
 projectsRouter.post(
   '/create',
-  upload.single('journal_cover'),
+  upload.fields([
+    { name: 'journal_cover', maxCount: 1 },
+    { name: 'exemplar_media', maxCount: 1 }
+  ]),
   controller.createProject
 )
 projectsRouter.post('/doi', controller.retrieveDOI)
+
+// Add edit route with file upload support before sub-router
+projectsRouter.post(
+  '/:projectId/edit',
+  upload.fields([
+    { name: 'journal_cover', maxCount: 1 },
+    { name: 'exemplar_media', maxCount: 1 }
+  ]),
+  controller.editProject
+)
 
 // This is a sub-route focused on /projects/<ID>
 const projectRouter = express.Router({ mergeParams: true })
