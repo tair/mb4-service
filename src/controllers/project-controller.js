@@ -58,7 +58,10 @@ export async function getProjects(req, res) {
     const media = await mediaService.getMediaByIds(mediaIds)
     for (const row of media) {
       if (row.media) {
-        resultMap.get(row.project_id).media = getMedia(row.media, 'thumbnail')
+        const project = resultMap.get(row.project_id)
+        if (project) {
+          project.media = getMedia(row.media, 'thumbnail')
+        }
       }
     }
   }
@@ -249,6 +252,236 @@ export async function updateProject(req, res) {
   }
 }
 
+// Edit an existing project with optional file uploads
+export async function editProject(req, res, next) {
+  try {
+    const projectId = req.params.projectId
+    
+    // Extract data from request body - handle both JSON and FormData
+    let projectData = req.body
+
+    // If projectData is a JSON string (from FormData), parse it
+    if (req.body.projectData) {
+      try {
+        projectData = JSON.parse(req.body.projectData)
+      } catch (parseError) {
+        return res.status(400).json({
+          message: 'Invalid project data format',
+        })
+      }
+    }
+
+    const project = await models.Project.findByPk(projectId)
+    if (project == null) {
+      res.status(404).json({ message: 'Project is not found' })
+      return
+    }
+
+    const {
+      name,
+      nsf_funded,
+      allow_reviewer_login,
+      reviewer_login_password,
+      journal_title,
+      journal_title_other,
+      article_authors,
+      article_title,
+      article_doi,
+      journal_year,
+      journal_volume,
+      journal_number,
+      journal_url,
+      article_pp,
+      description,
+      disk_space_usage,
+      publication_status,
+    } = projectData
+
+    // Validate required fields
+    if (
+      !name ||
+      nsf_funded === undefined ||
+      nsf_funded === null ||
+      nsf_funded === ''
+    ) {
+      return res.status(400).json({
+        message: 'Project name and NSF funding status are required',
+      })
+    }
+
+    // Validate journal fields based on publication status
+    if (publication_status === '0' || publication_status === '1') {
+      // Published or In press - require basic journal fields
+      const requiredFields = ['description', 'article_authors', 'article_title', 'journal_year']
+      
+      if (!journal_title && !journal_title_other) {
+        return res.status(400).json({
+          message: 'Journal title is required for published or in-press articles',
+        })
+      }
+
+      for (const field of requiredFields) {
+        const value = projectData[field]
+        if (!value || (typeof value === 'string' && value.trim() === '')) {
+          return res.status(400).json({
+            message: `${field.replace(/_/g, ' ')} is required for published or in-press articles`,
+          })
+        }
+      }
+
+      // Additional fields required only for Published status
+      if (publication_status === '0') {
+        const publishedRequiredFields = ['journal_url', 'journal_volume', 'article_pp']
+        
+        for (const field of publishedRequiredFields) {
+          const value = projectData[field]
+          if (!value || (typeof value === 'string' && value.trim() === '')) {
+            return res.status(400).json({
+              message: `${field.replace(/_/g, ' ')} is required for published articles`,
+            })
+          }
+        }
+      }
+    }
+
+    const transaction = await sequelizeConn.transaction()
+    let mediaUploader = null
+
+    try {
+      // Update basic project fields
+      project.name = name
+      project.nsf_funded = nsf_funded
+      project.allow_reviewer_login = allow_reviewer_login
+      project.reviewer_login_password = reviewer_login_password
+      project.journal_title = journal_title_other || journal_title
+      project.article_authors = article_authors
+      project.article_title = article_title
+      project.article_doi = article_doi
+      project.journal_year = journal_year
+      project.journal_volume = journal_volume
+      project.journal_number = journal_number
+      project.journal_url = journal_url
+      project.article_pp = article_pp
+      project.description = description
+      project.disk_usage_limit = disk_space_usage || project.disk_usage_limit || 5368709120
+      project.journal_in_press = publication_status || 2
+
+      // Handle file uploads if provided
+      let journalCoverFile = req.files?.journal_cover?.[0]
+      let exemplarMediaFile = req.files?.exemplar_media?.[0]
+
+      // Handle journal cover upload
+      if (journalCoverFile) {
+        mediaUploader = new S3MediaUploader(transaction, req.user)
+
+        // Create a new media file record for journal cover
+        const journalCoverMedia = await models.MediaFile.create(
+          {
+            project_id: project.project_id,
+            user_id: req.user.user_id,
+            notes: 'Journal cover image',
+            published: 0,
+            access: 0,
+            cataloguing_status: 1,
+            media_type: 'image',
+          },
+          {
+            transaction,
+            user: req.user,
+          }
+        )
+
+        // Process and upload the journal cover image
+        await mediaUploader.setMedia(journalCoverMedia, 'media', journalCoverFile)
+
+        await journalCoverMedia.save({
+          transaction,
+          user: req.user,
+          shouldSkipLogChange: true,
+        })
+
+        // Update the project's journal_cover field (JSON field)
+        project.journal_cover = {
+          media_id: journalCoverMedia.media_id,
+          filename: journalCoverFile.originalname,
+        }
+
+        // Commit the media uploader
+        mediaUploader.commit()
+      }
+
+      // Handle exemplar media upload
+      if (exemplarMediaFile) {
+        if (!mediaUploader) {
+          mediaUploader = new S3MediaUploader(transaction, req.user)
+        }
+
+        // Create a new media file record for exemplar media
+        const exemplarMedia = await models.MediaFile.create(
+          {
+            project_id: project.project_id,
+            user_id: req.user.user_id,
+            notes: 'Exemplar media',
+            published: 0,
+            access: 0,
+            cataloguing_status: 1,
+            media_type: 'image',
+          },
+          {
+            transaction,
+            user: req.user,
+          }
+        )
+
+        // Process and upload the exemplar media
+        await mediaUploader.setMedia(exemplarMedia, 'media', exemplarMediaFile)
+
+        await exemplarMedia.save({
+          transaction,
+          user: req.user,
+          shouldSkipLogChange: true,
+        })
+
+        // Update the project to link to this exemplar media
+        project.exemplar_media_id = exemplarMedia.media_id
+
+        // Commit the media uploader
+        mediaUploader.commit()
+      }
+
+      // Save the updated project
+      await project.save({
+        transaction,
+        user: req.user,
+      })
+
+      await transaction.commit()
+
+      // Return the updated project with media info if files were uploaded
+      const response = { ...project.toJSON() }
+      if (journalCoverFile) {
+        response.journal_cover_uploaded = true
+      }
+      if (exemplarMediaFile) {
+        response.exemplar_media_uploaded = true
+        response.exemplar_media_id = project.exemplar_media_id
+      }
+
+      res.status(200).json({ message: 'Project updated successfully', project: response })
+    } catch (error) {
+      await transaction.rollback()
+      if (mediaUploader) {
+        await mediaUploader.rollback()
+      }
+      console.error('Error updating project:', error)
+      res.status(500).json({ message: 'Failed to update project' })
+    }
+  } catch (error) {
+    console.error('Error in editProject:', error)
+    res.status(500).json({ message: 'Internal server error' })
+  }
+}
+
 export async function createDuplicationRequest(req, res) {
   const projectId = req.params.projectId
   const remarks = req.body.remarks
@@ -433,7 +666,6 @@ export async function createProject(req, res, next) {
     const {
       name,
       nsf_funded,
-      exemplar_media_id,
       allow_reviewer_login,
       reviewer_login_password,
       journal_title,
@@ -443,9 +675,12 @@ export async function createProject(req, res, next) {
       article_doi,
       journal_year,
       journal_volume,
+      journal_number,
       journal_url,
       article_pp,
       description,
+      disk_space_usage,
+      publication_status,
     } = projectData
 
     // Validate required fields
@@ -460,34 +695,72 @@ export async function createProject(req, res, next) {
       })
     }
 
+    // Validate journal fields based on publication status
+    if (publication_status === '0' || publication_status === '1') {
+      // Published or In press - require basic journal fields
+      const requiredFields = ['description', 'article_authors', 'article_title', 'journal_year']
+      
+      if (!journal_title && !journal_title_other) {
+        return res.status(400).json({
+          message: 'Journal title is required for published or in-press articles',
+        })
+      }
+
+      for (const field of requiredFields) {
+        const value = projectData[field]
+        if (!value || (typeof value === 'string' && value.trim() === '')) {
+          return res.status(400).json({
+            message: `${field.replace(/_/g, ' ')} is required for published or in-press articles`,
+          })
+        }
+      }
+
+      // Additional fields required only for Published status
+      if (publication_status === '0') {
+        const publishedRequiredFields = ['journal_url', 'journal_volume', 'article_pp']
+        
+        for (const field of publishedRequiredFields) {
+          const value = projectData[field]
+          if (!value || (typeof value === 'string' && value.trim() === '')) {
+            return res.status(400).json({
+              message: `${field.replace(/_/g, ' ')} is required for published articles`,
+            })
+          }
+        }
+      }
+    }
+    // For publication_status === '2' (Article in prep or in review), no journal fields are required
+
     const transaction = await sequelizeConn.transaction()
     const currentTime = Math.floor(Date.now() / 1000)
     let mediaUploader = null
 
     try {
-      // Create the project first
-      const project = await models.Project.create(
-        {
-          name,
-          nsf_funded,
-          exemplar_media_id,
-          allow_reviewer_login,
-          reviewer_login_password,
-          journal_title: journal_title_other || journal_title,
-          article_authors,
-          article_title,
-          article_doi,
-          journal_year,
-          journal_volume,
-          journal_url,
-          article_pp,
-          description,
-          user_id: req.user.user_id,
-          published: 0,
-          last_accessed_on: currentTime,
-        },
-        { transaction, user: req.user }
-      )
+          // Create the project first
+    const project = await models.Project.create(
+      {
+        name,
+        nsf_funded,
+        allow_reviewer_login,
+        reviewer_login_password,
+        journal_title: journal_title_other || journal_title,
+        article_authors,
+        article_title,
+        article_doi,
+        journal_year,
+        journal_volume,
+        journal_number,
+        journal_url,
+        article_pp,
+        description,
+        disk_usage_limit: disk_space_usage || 5368709120, // Default 5GB in bytes
+        journal_in_press: publication_status || 2, // Default to "Article in prep or in review"
+        user_id: req.user.user_id,
+        published: 0,
+        last_accessed_on: currentTime,
+      },
+      { transaction, user: req.user }
+    )
 
       await models.ProjectsXUser.create(
         {
@@ -499,12 +772,16 @@ export async function createProject(req, res, next) {
         { transaction, user: req.user }
       )
 
-      // Handle journal cover upload if provided
-      if (req.file) {
+      // Handle file uploads if provided
+      let journalCoverFile = req.files?.journal_cover?.[0]
+      let exemplarMediaFile = req.files?.exemplar_media?.[0]
+
+      // Handle journal cover upload
+      if (journalCoverFile) {
         mediaUploader = new S3MediaUploader(transaction, req.user)
 
-        // Create a new media file record
-        const media = await models.MediaFile.create(
+        // Create a new media file record for journal cover
+        const journalCoverMedia = await models.MediaFile.create(
           {
             project_id: project.project_id,
             user_id: req.user.user_id,
@@ -520,34 +797,83 @@ export async function createProject(req, res, next) {
           }
         )
 
-        // Process and upload the image using S3MediaUploader
-        await mediaUploader.setMedia(media, 'media', req.file)
+        // Process and upload the journal cover image
+        await mediaUploader.setMedia(journalCoverMedia, 'media', journalCoverFile)
 
-        await media.save({
+        await journalCoverMedia.save({
           transaction,
           user: req.user,
           shouldSkipLogChange: true,
         })
 
-        // Update the project to link to this media file
-        project.exemplar_media_id = media.media_id
-        await project.save({
-          transaction,
-          user: req.user,
-          shouldSkipLogChange: true,
-        })
+        // Update the project's journal_cover field (JSON field)
+        project.journal_cover = {
+          media_id: journalCoverMedia.media_id,
+          filename: journalCoverFile.originalname,
+        }
 
         // Commit the media uploader
         mediaUploader.commit()
       }
 
+      // Handle exemplar media upload
+      if (exemplarMediaFile) {
+        if (!mediaUploader) {
+          mediaUploader = new S3MediaUploader(transaction, req.user)
+        }
+
+        // Create a new media file record for exemplar media
+        const exemplarMedia = await models.MediaFile.create(
+          {
+            project_id: project.project_id,
+            user_id: req.user.user_id,
+            notes: 'Exemplar media',
+            published: 0,
+            access: 0,
+            cataloguing_status: 1,
+            media_type: 'image',
+          },
+          {
+            transaction,
+            user: req.user,
+          }
+        )
+
+        // Process and upload the exemplar media
+        await mediaUploader.setMedia(exemplarMedia, 'media', exemplarMediaFile)
+
+        await exemplarMedia.save({
+          transaction,
+          user: req.user,
+          shouldSkipLogChange: true,
+        })
+
+        // Update the project to link to this exemplar media
+        project.exemplar_media_id = exemplarMedia.media_id
+
+        // Commit the media uploader
+        mediaUploader.commit()
+      }
+
+      // Save project if any fields were updated
+      if (journalCoverFile || exemplarMediaFile) {
+        await project.save({
+          transaction,
+          user: req.user,
+          shouldSkipLogChange: true,
+        })
+      }
+
       await transaction.commit()
 
-      // Return the project with media info if journal cover was uploaded
+      // Return the project with media info if files were uploaded
       const response = { ...project.toJSON() }
-      if (req.file) {
+      if (journalCoverFile) {
         response.journal_cover_uploaded = true
-        response.media_id = project.exemplar_media_id
+      }
+      if (exemplarMediaFile) {
+        response.exemplar_media_uploaded = true
+        response.exemplar_media_id = project.exemplar_media_id
       }
 
       res.status(201).json(response)
