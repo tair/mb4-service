@@ -3,6 +3,8 @@ import { models } from '../models/init-models.js'
 import { getDocumentPath, getDocumentUrl } from '../util/document.js'
 import { normalizeJson } from '../util/json.js'
 import { FileUploader } from '../lib/file-uploader.js'
+import s3Service from '../services/s3-service.js'
+import config from '../config.js'
 
 export async function getDocument(req, res) {
   const projectId = req.params.projectId
@@ -270,5 +272,101 @@ function convertFolderResponse(folder) {
     title: folder.title,
     description: folder.description,
     access: folder.access,
+  }
+}
+
+/**
+ * Serve a document file from S3
+ * GET /public/documents/:projectId/serve/:documentId
+ */
+export async function serveDocumentFile(req, res) {
+  try {
+    const { projectId, documentId } = req.params
+
+    // Get document info from database
+    const document = await models.ProjectDocument.findOne({
+      where: {
+        document_id: documentId,
+        project_id: projectId
+      }
+    })
+
+    if (!document) {
+      return res.status(404).json({
+        error: 'Document not found',
+        message: 'The requested document does not exist',
+      })
+    }
+
+    const json = normalizeJson(document.upload) ?? {}
+    const originalFileName = json['original_filename']
+    
+    if (!originalFileName) {
+      return res.status(404).json({
+        error: 'Invalid document data',
+        message: 'Document data is missing file information',
+      })
+    }
+
+    // Extract file extension from original filename
+    const fileExtension = originalFileName.split('.').pop() || 'bin'
+    
+    // Construct S3 key based on the expected structure
+    // Format: documents/{projectId}/{documentId}/{projectId}_{documentId}_original.{extension}
+    const fileName = `${projectId}_${documentId}_original.${fileExtension}`
+    const s3Key = `documents/${projectId}/${documentId}/${fileName}`
+
+    // Use default bucket from config
+    const bucket = config.aws.defaultBucket
+
+    if (!bucket) {
+      return res.status(500).json({
+        error: 'Configuration error',
+        message: 'Default S3 bucket not configured',
+      })
+    }
+
+    // Get object from S3
+    const result = await s3Service.getObject(bucket, s3Key)
+
+    // Set appropriate headers
+    res.set({
+      'Content-Type': result.contentType || 'application/octet-stream',
+      'Content-Length': result.contentLength,
+      'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+      'Last-Modified': result.lastModified,
+      'Content-Disposition': `inline; filename="${originalFileName}"`,
+    })
+
+    // Send the data
+    res.send(result.data)
+  } catch (error) {
+    console.error('Document serve error:', error.message)
+
+    if (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey')) {
+      return res.status(404).json({
+        error: 'File not found',
+        message: 'The requested document file does not exist in S3',
+      })
+    }
+
+    if (error.name === 'NoSuchBucket') {
+      return res.status(404).json({
+        error: 'Bucket not found',
+        message: 'The specified bucket does not exist',
+      })
+    }
+
+    if (error.name === 'AccessDenied') {
+      return res.status(403).json({
+        error: 'Access denied',
+        message: 'Insufficient permissions to access the requested file',
+      })
+    }
+
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to serve document file',
+    })
   }
 }
