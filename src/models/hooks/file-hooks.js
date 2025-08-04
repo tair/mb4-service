@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { models } from '../init-models.js'
 import { normalizeJson } from '../../util/json.js'
 import { Datamodel } from '../../lib/datamodel/datamodel.js'
+import s3Service from '../../services/s3-service.js'
 
 /**
  * This function is run as a sequelize hook such that if the model is changed
@@ -16,7 +17,7 @@ export async function fileChanged(model, options) {
   const rowId = getRowId(model)
   const { transaction, user } = options
   for (const [field, attributes] of Object.entries(model.rawAttributes)) {
-    if (attributes.file && model.changed(field)) {
+    if ((attributes.file || attributes.media) && model.changed(field)) {
       const fileJson = normalizeJson(model.previous(field))
       await unlink(tableName, rowId, fileJson, transaction, user)
     }
@@ -34,7 +35,7 @@ export async function fileDeleted(model, options) {
   const rowId = getRowId(model)
   const { transaction, user } = options
   for (const [field, attributes] of Object.entries(model.rawAttributes)) {
-    if (attributes.file) {
+    if (attributes.file || attributes.media) {
       const fileJson = normalizeJson(model.getDataValue(field))
       await unlink(tableName, rowId, fileJson, transaction, user)
     }
@@ -72,32 +73,35 @@ async function unlink(tableName, rowId, json, transaction, user) {
     return
   }
 
-  // Handle S3-based media files
-  if (json.thumbnail && json.thumbnail.S3_KEY) {
-    // This is a new S3-based media file
+  // Handle S3-based media files - check for any S3 keys (normalized to lowercase)
+  const hasS3Files = (json.thumbnail && json.thumbnail.s3_key) || 
+                     (json.large && json.large.s3_key) || 
+                     (json.original && json.original.s3_key)
+  
+  if (hasS3Files) {
+    // This is a new S3-based media file - delete directly from S3
     const s3Keys = []
-    if (json.thumbnail.S3_KEY) s3Keys.push(json.thumbnail.S3_KEY)
-    if (json.large && json.large.S3_KEY) s3Keys.push(json.large.S3_KEY)
-    if (json.original && json.original.S3_KEY) s3Keys.push(json.original.S3_KEY)
+    if (json.thumbnail && json.thumbnail.s3_key) s3Keys.push(json.thumbnail.s3_key)
+    if (json.large && json.large.s3_key) s3Keys.push(json.large.s3_key)
+    if (json.original && json.original.s3_key) s3Keys.push(json.original.s3_key)
 
     if (s3Keys.length > 0) {
-      const rowKey = `${tableName}/${rowId}/unlink-s3`
-      await models.TaskQueue.create(
-        {
-          user_id: user.user_id,
-          priority: 200,
-          entity_key: crypto.createHash('md5').update(rowKey).digest('hex'),
-          row_key: crypto.createHash('md5').update(rowKey).digest('hex'),
-          handler: 'S3FileDeletion',
-          parameters: {
-            s3_keys: s3Keys,
-          },
-        },
-        {
-          transaction: transaction,
-          user: user,
+      const bucket = config.aws.defaultBucket
+      console.log(`Deleting ${s3Keys.length} S3 files for ${tableName}/${rowId}:`, s3Keys)
+      
+      for (const s3Key of s3Keys) {
+        try {
+          await s3Service.deleteObject(bucket, s3Key)
+          console.log(`Successfully deleted S3 file: ${s3Key}`)
+        } catch (error) {
+          // Log error but don't fail the transaction
+          if (error.name === 'NoSuchKey') {
+            console.log(`S3 file already deleted: ${s3Key}`)
+          } else {
+            console.error(`Failed to delete S3 file ${s3Key}:`, error.message)
+          }
         }
-      )
+      }
     }
     return
   }

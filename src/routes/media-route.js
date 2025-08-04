@@ -18,6 +18,9 @@ mediaRouter.post(
   upload.single('file'),
   controller.createMediaFiles
 )
+mediaRouter.post('/create/3d', upload.single('file'), controller.create3DMediaFile)
+mediaRouter.post('/create/video', upload.single('file'), controller.createVideoMediaFile)
+mediaRouter.post('/create/stacks', upload.single('file'), controller.createStacksMediaFile)
 
 mediaRouter.get('/:mediaId', controller.getMediaFile)
 mediaRouter.post(
