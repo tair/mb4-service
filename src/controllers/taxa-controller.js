@@ -74,7 +74,7 @@ export async function createTaxon(req, res) {
 }
 
 export async function createTaxa(req, res) {
-  const taxa = req.body
+  const taxa = req.body.taxa
 
   try {
     const results = []
