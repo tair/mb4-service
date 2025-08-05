@@ -12,18 +12,19 @@ COPY . .
 
 # dev stage
 FROM build-stage as dev-stage
-RUN apk update && apk add bash
+RUN apk update && apk add bash ffmpeg=6.1.1-r7
 EXPOSE 8080
 CMD [ "npm", "run", "dev" ]
 
 # debug stage
 FROM build-stage as debug-stage
-RUN apk update && apk add bash
+RUN apk update && apk add bash ffmpeg=6.1.1-r7
 EXPOSE 8080
 CMD [ "npm", "run", "debug" ]
 
 # production stage
 FROM nginx:stable-alpine as production-stage
+RUN apk update && apk add ffmpeg
 COPY --from=build-stage /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 EXPOSE 80

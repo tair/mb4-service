@@ -1,5 +1,6 @@
 import config from '../config.js'
 import { normalizeJson } from './json.js'
+import { MEDIA_TYPES, MEDIA_MIME_TYPES, MEDIA_EXTENSIONS } from './media-constants.js'
 
 const MEDIA_PORT = config.media.port ? `:${config.media.port}` : ''
 export const MEDIA_PATH = `${config.media.directory}/${config.app.name}`
@@ -29,27 +30,32 @@ export function getMediaVersion(media, version) {
 }
 
 export function convertMediaTypeFromMimeType(mimeType) {
-  switch (mimeType) {
-    case 'audio/mpeg':
-    case 'audio/x-aiff':
-    case 'audio/x-wav':
-    case 'audio/x-realaudio':
-      return 'audio'
-    case 'video/mp4':
-    case 'video/quicktime':
-    case 'video/x-ms-asf':
-    case 'video/x-ms-wmv':
-    case 'video/x-flv':
-      return 'video'
-    case 'application/ply':
-    case 'application/stl':
-    case 'application/surf':
-      return '3d'
-    case 'image/gif':
-    case 'image/jpg':
-    case 'image/jpeg':
-    case 'image/png':
-    default:
-      return 'image'
+  if (!mimeType) return MEDIA_TYPES.IMAGE
+  
+  // Check each media type's MIME types
+  for (const [mediaType, mimeTypes] of Object.entries(MEDIA_MIME_TYPES)) {
+    if (mimeTypes.includes(mimeType)) {
+      return mediaType
+    }
   }
+  
+  // Default to image for unknown MIME types
+  return MEDIA_TYPES.IMAGE
+}
+
+// Helper function to determine media type from file extension when MIME type is ambiguous
+export function convertMediaTypeFromExtension(filename) {
+  if (!filename) return MEDIA_TYPES.IMAGE
+  
+  const extension = filename.toLowerCase().split('.').pop()
+  
+  // Check each media type's extensions
+  for (const [mediaType, extensions] of Object.entries(MEDIA_EXTENSIONS)) {
+    if (extensions.includes(extension)) {
+      return mediaType
+    }
+  }
+  
+  // Default to image for unknown extensions
+  return MEDIA_TYPES.IMAGE
 }

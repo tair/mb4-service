@@ -2,6 +2,7 @@ import s3Service from '../services/s3-service.js'
 import config from '../config.js'
 import multer from 'multer'
 import path from 'path'
+import { MEDIA_TYPES } from '../util/media-constants.js'
 
 /**
  * Get object from S3
@@ -105,11 +106,12 @@ export const checkObject = async (req, res) => {
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 100 * 1024 * 1024, // 100MB limit for video and 3D files
   },
   fileFilter: (req, file, cb) => {
-    // Allow only image files for now (can be extended for other media types)
-    if (req.body.mediaType === 'image') {
+    const mediaType = req.body.mediaType
+    
+    if (mediaType === MEDIA_TYPES.IMAGE) {
       const allowedImageTypes = [
         'image/jpeg',
         'image/jpg',
@@ -127,8 +129,75 @@ const upload = multer({
           false
         )
       }
+    } else if (mediaType === MEDIA_TYPES.VIDEO) {
+      const allowedVideoTypes = [
+        'video/mp4',
+        'video/quicktime',
+        'video/x-msvideo',
+        'video/avi',
+        'video/webm',
+        'video/x-matroska',
+        'video/x-ms-wmv',
+        'video/x-flv',
+        'video/x-m4v'
+      ]
+      if (allowedVideoTypes.includes(file.mimetype)) {
+        cb(null, true)
+      } else {
+        cb(
+          new Error(
+            'Invalid file type. Only MP4, MOV, AVI, WebM, MKV, WMV, FLV, and M4V video files are allowed.'
+          ),
+          false
+        )
+      }
+    } else if (mediaType === MEDIA_TYPES.MODEL_3D) {
+      const allowed3DTypes = [
+        'application/ply',
+        'application/stl',
+        'model/ply',
+        'model/stl',
+        'model/obj',
+        'model/gltf+json',
+        'model/gltf-binary',
+        'application/octet-stream' // For STL, PLY, and other binary formats
+      ]
+      if (allowed3DTypes.includes(file.mimetype)) {
+        cb(null, true)
+      } else {
+        // Also check by file extension for 3D files since MIME types can be inconsistent
+        const extension = file.originalname.split('.').pop()?.toLowerCase()
+        const allowed3DExtensions = ['ply', 'stl', 'obj', 'gltf', 'glb', 'fbx']
+        if (allowed3DExtensions.includes(extension)) {
+          cb(null, true)
+        } else {
+          cb(
+            new Error(
+              'Invalid file type. Only PLY, STL, OBJ, GLTF, GLB, and FBX 3D model files are allowed.'
+            ),
+            false
+          )
+        }
+      }
+    } else if (mediaType === MEDIA_TYPES.STACKS) {
+      // For stacks, we only accept ZIP files containing DICOM/TIFF
+      const allowedStacksTypes = [
+        'application/zip',
+        'application/x-zip-compressed',
+        'application/octet-stream' // Some systems send this for ZIP files
+      ]
+      if (allowedStacksTypes.includes(file.mimetype) || file.originalname.toLowerCase().endsWith('.zip')) {
+        cb(null, true)
+      } else {
+        cb(
+          new Error(
+            'Invalid file type. Only ZIP archives are allowed for stack uploads.'
+          ),
+          false
+        )
+      }
     } else {
-      // For future media types, allow all files
+      // For other media types, allow all files
       cb(null, true)
     }
   },
@@ -197,7 +266,7 @@ export const uploadObject = [
       }
 
       // Validate media type (currently only 'image' is supported)
-      const supportedMediaTypes = ['image']
+      const supportedMediaTypes = [MEDIA_TYPES.IMAGE, MEDIA_TYPES.VIDEO, MEDIA_TYPES.MODEL_3D]
       if (!supportedMediaTypes.includes(mediaType)) {
         return res.status(400).json({
           error: 'Unsupported media type',
@@ -342,7 +411,7 @@ export const uploadBulkObjects = [
       }
 
       // Validate media type (currently only 'image' is supported)
-      const supportedMediaTypes = ['image']
+      const supportedMediaTypes = [MEDIA_TYPES.IMAGE, MEDIA_TYPES.VIDEO, MEDIA_TYPES.MODEL_3D]
       if (!supportedMediaTypes.includes(mediaType)) {
         return res.status(400).json({
           error: 'Unsupported media type',

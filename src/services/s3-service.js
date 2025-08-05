@@ -14,6 +14,8 @@ class S3Service {
         accessKeyId: config.aws.accessKeyId,
         secretAccessKey: config.aws.secretAccessKey,
       },
+      maxAttempts: 3, // Retry up to 3 times on network errors
+      retryMode: 'adaptive', // Use adaptive retry mode for better handling
     })
   }
 

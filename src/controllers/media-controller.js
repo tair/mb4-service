@@ -2,11 +2,14 @@ import sequelizeConn from '../util/db.js'
 import * as service from '../services/media-service.js'
 import * as bibliographyService from '../services/bibliography-service.js'
 import * as folioService from '../services/folios-service.js'
-import { getMedia, convertMediaTypeFromMimeType } from '../util/media.js'
+import { convertMediaTypeFromMimeType } from '../util/media.js'
 import { unzip, cleanupTempDirectory } from '../util/zip.js'
 import { models } from '../models/init-models.js'
-import { MediaUploader } from '../lib/media-uploader.js'
 import { S3MediaUploader } from '../lib/s3-media-uploader.js'
+import { VideoProcessor } from '../lib/video-processor.js'
+import { convertMediaTypeFromExtension } from '../util/media.js'
+import { MEDIA_TYPES } from '../util/media-constants.js'
+import { promises as fs } from 'fs'
 import {
   ModelRefencialMapper,
   ModelReferencialConfig,
@@ -66,7 +69,7 @@ export async function createMediaFile(req, res) {
   }
 
   // Set media type based on uploaded file or default to image
-  let mediaType = 1 // Default to image
+  let mediaType = MEDIA_TYPES.IMAGE // Default to image
   if (req.file && req.file.mimetype) {
     mediaType = convertMediaTypeFromMimeType(req.file.mimetype)
   }
@@ -832,7 +835,8 @@ function convertMediaResponse(row) {
     user_id: parseInt(row.user_id),
     view_id: row.view_id ? parseInt(row.view_id) : undefined,
     specimen_id: row.specimen_id ? parseInt(row.specimen_id) : undefined,
-    // Don't set thumbnail/icon - let frontend construct URLs using buildMediaUrl
+    // Include media_type so frontend can show proper icons for 3D/video files
+    media_type: row.media_type,
     notes: row.notes,
     published: row.published,
     cataloguing_status: row.cataloguing_status,
@@ -1102,4 +1106,445 @@ export async function serveBatchMediaFiles(req, res) {
       message: 'Failed to serve batch media files',
     })
   }
+}
+
+export async function create3DMediaFile(req, res) {
+  const projectId = req.params.projectId
+
+  const media = models.MediaFile.build(req.body)
+
+  // Ensure that the specimen_id is within the same project.
+  if (
+    media.specimen_id &&
+    media.specimen_id !== '' &&
+    media.specimen_id !== 'null'
+  ) {
+    const specimen = await models.Specimen.findByPk(media.specimen_id)
+    if (specimen == null || specimen.project_id != projectId) {
+      res.status(404).json({ message: 'Specimen is not found' })
+      return
+    }
+  } else {
+    media.specimen_id = null
+  }
+
+  // Ensure that the media view is within the same project.
+  if (media.view_id && media.view_id !== '' && media.view_id !== 'null') {
+    const view = await models.MediaView.findByPk(media.view_id)
+    if (view == null || view.project_id != projectId) {
+      res.status(404).json({ message: 'View is not found' })
+      return
+    }
+  } else {
+    media.view_id = null
+  }
+
+  if (media.is_copyrighted == 0) {
+    media.copyright_permission = 0
+  }
+
+  // Set media type - use extension-based detection for 3D files
+  let mediaType = MEDIA_TYPES.MODEL_3D // 3D media type string
+  if (req.file && req.file.originalname) {
+    const detectedType = convertMediaTypeFromExtension(req.file.originalname)
+    if (detectedType === MEDIA_TYPES.MODEL_3D) {
+      mediaType = MEDIA_TYPES.MODEL_3D // 3D files use string value
+    }
+  }
+
+  media.set({
+    project_id: req.project.project_id,
+    user_id: req.user.user_id,
+    media_type: mediaType,
+    cataloguing_status: 1, // Needs curation like batch uploads
+  })
+
+  const transaction = await sequelizeConn.transaction()
+  const mediaUploader = new S3MediaUploader(transaction, req.user)
+  try {
+    await media.save({
+      transaction,
+      user: req.user,
+    })
+
+    if (req.file) {
+      await mediaUploader.setNonImageMedia(media, 'media', req.file)
+    }
+
+    await media.save({
+      transaction,
+      user: req.user,
+      shouldSkipLogChange: true,
+    })
+
+    await transaction.commit()
+    mediaUploader.commit()
+  } catch (e) {
+    await transaction.rollback()
+    await mediaUploader.rollback()
+    res
+      .status(500)
+      .json({ message: 'Failed to create 3D media with server error' })
+    return
+  }
+
+  res.status(200).json({ media: convertMediaResponse(media) })
+}
+
+export async function createVideoMediaFile(req, res) {
+  const projectId = req.params.projectId
+
+  if (!req.file) {
+    res.status(400).json({ message: 'No video file provided' })
+    return
+  }
+
+  const media = models.MediaFile.build(req.body)
+
+  // Ensure that the specimen_id is within the same project.
+  if (
+    media.specimen_id &&
+    media.specimen_id !== '' &&
+    media.specimen_id !== 'null'
+  ) {
+    const specimen = await models.Specimen.findByPk(media.specimen_id)
+    if (specimen == null || specimen.project_id != projectId) {
+      res.status(404).json({ message: 'Specimen is not found' })
+      return
+    }
+  } else {
+    media.specimen_id = null
+  }
+
+  // Ensure that the media view is within the same project.
+  if (media.view_id && media.view_id !== '' && media.view_id !== 'null') {
+    const view = await models.MediaView.findByPk(media.view_id)
+    if (view == null || view.project_id != projectId) {
+      res.status(404).json({ message: 'View is not found' })
+      return
+    }
+  } else {
+    media.view_id = null
+  }
+
+  if (media.is_copyrighted == 0) {
+    media.copyright_permission = 0
+  }
+
+  // Set media type for video
+  let mediaType = MEDIA_TYPES.VIDEO // Video media type string
+  if (req.file && req.file.mimetype) {
+    const detectedType = convertMediaTypeFromMimeType(req.file.mimetype)
+    if (detectedType === MEDIA_TYPES.VIDEO) {
+      mediaType = MEDIA_TYPES.VIDEO // Video files use string value
+    }
+  }
+
+  media.set({
+    project_id: req.project.project_id,
+    user_id: req.user.user_id,
+    media_type: mediaType,
+    cataloguing_status: 1, // Needs curation like batch uploads
+  })
+
+  const transaction = await sequelizeConn.transaction()
+  const mediaUploader = new S3MediaUploader(transaction, req.user)
+  const videoProcessor = new VideoProcessor()
+  
+  try {
+    await media.save({
+      transaction,
+      user: req.user,
+    })
+
+    if (req.file) {
+      // For video files, upload the original file and try to generate thumbnails
+      await mediaUploader.setNonImageMedia(media, 'media', req.file)
+      
+      // Try to generate video thumbnails
+      let tempVideoPath = null
+      let tempDir = null
+      
+      try {
+        tempVideoPath = req.file.path || `/tmp/video_${Date.now()}_${req.file.originalname}`
+        
+        // Write buffer to temporary file if needed
+        if (req.file.buffer && !req.file.path) {
+          await fs.writeFile(tempVideoPath, req.file.buffer)
+        }
+        
+        // Extract video metadata and generate thumbnails
+        const metadata = await videoProcessor.extractMetadata(tempVideoPath)
+        tempDir = `/tmp/thumbnails_${Date.now()}`
+        const thumbnailData = await videoProcessor.generateThumbnails(tempVideoPath, tempDir, metadata)
+        
+        // Upload thumbnails to S3 if they were generated
+        if (thumbnailData.large.path && thumbnailData.thumbnail.path) {
+          await mediaUploader.uploadVideoThumbnails(media, thumbnailData)
+          console.log('Video thumbnails generated and uploaded successfully')
+        } else {
+          console.log('Video uploaded successfully, but thumbnail generation was skipped (FFmpeg not available)')
+        }
+        
+      } catch (videoError) {
+        console.warn('Video thumbnail generation failed:', videoError.message)
+        console.log('Video uploaded successfully without thumbnails')
+      } finally {
+        // Always clean up temporary files, even if there was an error
+        if (tempVideoPath || tempDir) {
+          try {
+            const cleanupPaths = [tempVideoPath, tempDir].filter(path => path)
+            await videoProcessor.cleanup(cleanupPaths)
+          } catch (cleanupError) {
+            console.warn('Failed to cleanup temporary files:', cleanupError.message)
+          }
+        }
+      }
+    }
+
+    await media.save({
+      transaction,
+      user: req.user,
+      shouldSkipLogChange: true,
+    })
+
+    await transaction.commit()
+    mediaUploader.commit()
+    
+      } catch (e) {
+      await transaction.rollback()
+      await mediaUploader.rollback()
+      
+      console.error('Video upload error:', e)
+      res
+        .status(500)
+        .json({ 
+          message: 'Failed to create video media with server error',
+          details: process.env.NODE_ENV === 'development' ? e.message : undefined
+        })
+    return
+  }
+
+  res.status(200).json({ media: convertMediaResponse(media) })
+}
+
+export async function createStacksMediaFile(req, res) {
+  const projectId = req.params.projectId
+  const values = req.body
+
+  // Don't create media if the zip file is missing.
+  if (!req.file) {
+    res.status(400).json({ message: 'No zip file in request' })
+    return
+  }
+
+  // Validate that the uploaded file is actually a ZIP file
+  const allowedMimeTypes = [
+    'application/zip',
+    'application/x-zip-compressed',
+    'application/octet-stream', // Some systems send this for ZIP files
+  ]
+
+  if (
+    !allowedMimeTypes.includes(req.file.mimetype) &&
+    !req.file.originalname.toLowerCase().endsWith('.zip')
+  ) {
+    res.status(400).json({
+      message:
+        'Uploaded file must be a ZIP archive. Please ensure you are uploading a .zip file.',
+    })
+    return
+  }
+
+  // Validate ZIP file size (max 100MB)
+  const maxZipSize = 100 * 1024 * 1024 // 100MB
+  if (req.file.size > maxZipSize) {
+    res.status(400).json({
+      message:
+        'ZIP file is too large. Maximum size is 100MB. Please split your files into smaller archives.',
+    })
+    return
+  }
+
+  // Ensure that the specimen is within the same project.
+  if (
+    values.specimen_id &&
+    values.specimen_id !== '' &&
+    values.specimen_id !== 'null'
+  ) {
+    const specimen = await models.Specimen.findByPk(values.specimen_id)
+    if (specimen == null || specimen.project_id != projectId) {
+      res.status(404).json({ message: 'Specimen is not found' })
+      return
+    }
+  } else {
+    // Set specimen_id to null if it's empty or invalid
+    values.specimen_id = null
+  }
+
+  // Ensure that the view is within the same project.
+  if (values.view_id && values.view_id !== '' && values.view_id !== 'null') {
+    const view = await models.MediaView.findByPk(values.view_id)
+    if (view == null || view.project_id != projectId) {
+      res.status(404).json({ message: 'View is not found' })
+      return
+    }
+  } else {
+    // Set view_id to null if it's empty or invalid
+    values.view_id = null
+  }
+
+  if (values.is_copyrighted == 0) {
+    values.copyright_permission = 0
+  }
+
+  const mediaFiles = []
+  const failedFiles = []
+  const transaction = await sequelizeConn.transaction()
+  const mediaUploader = new S3MediaUploader(transaction, req.user)
+  let files = []
+
+  try {
+    files = await unzip(req.file.path)
+
+    if (files.length === 0) {
+      res
+        .status(400)
+        .json({ message: 'ZIP file is empty or contains no valid files' })
+      return
+    }
+
+    // Filter out non-medical files and validate file types for stacks
+    const extractedFiles = files.filter((file) => {
+      const extension = file.originalname.split('.').pop().toLowerCase()
+      const supportedExtensions = [
+        'dcm',
+        'dicom',
+        'tif',
+        'tiff',
+      ]
+
+      // Skip macOS metadata files and system files
+      if (
+        file.originalname.startsWith('__MACOSX/') ||
+        file.originalname.startsWith('._') ||
+        file.originalname.startsWith('.DS_Store') ||
+        file.originalname.includes('/.DS_Store') ||
+        file.originalname.startsWith('Thumbs.db') ||
+        file.originalname.includes('/Thumbs.db')
+      ) {
+        return false
+      }
+
+      // Skip directories
+      if (!file.originalname.includes('.')) {
+        return false
+      }
+
+      return supportedExtensions.includes(extension)
+    })
+
+    if (extractedFiles.length === 0) {
+      res.status(400).json({
+        message:
+          'ZIP file contains no supported medical imaging files. Supported formats: DICOM (.dcm, .dicom), TIFF (.tif, .tiff)',
+      })
+      return
+    }
+
+    // Limit the number of files that can be processed in a single batch
+    const maxFilesPerBatch = 200 // Higher limit for medical stacks
+    if (extractedFiles.length > maxFilesPerBatch) {
+      res.status(400).json({
+        message: `ZIP file contains too many files (${extractedFiles.length}). Maximum allowed is ${maxFilesPerBatch} files per batch. Please split your files into smaller archives.`,
+      })
+      return
+    }
+
+    for (let i = 0; i < extractedFiles.length; i++) {
+      const file = extractedFiles[i]
+
+      try {
+        // Determine media type from the individual file, not the ZIP
+        const mediaType = convertMediaTypeFromMimeType(file.mimetype) || convertMediaTypeFromExtension(file.originalname)
+        const extension = file.originalname.split('.').pop().toLowerCase()
+        
+        // Determine if this is a TIFF file that can be processed by Sharp
+        const isTiffFile = ['tif', 'tiff'].includes(extension)
+
+        const media = models.MediaFile.build(values)
+        media.set({
+          project_id: req.project.project_id,
+          user_id: req.user.user_id,
+          cataloguing_status: 1, // Stacks need curation like batch uploads
+          media_type: mediaType,
+        })
+
+        await media.save({
+          transaction,
+          user: req.user,
+        })
+
+        // Use appropriate upload method based on file type
+        if (isTiffFile) {
+          // TIFF files can be processed normally by Sharp for thumbnails
+          await mediaUploader.setMedia(media, 'media', file)
+        } else {
+          // DICOM files need special handling (no Sharp processing)
+          await mediaUploader.setNonImageMedia(media, 'media', file)
+        }
+
+        await media.save({
+          transaction,
+          user: req.user,
+          shouldSkipLogChange: true,
+        })
+
+        mediaFiles.push(media)
+      } catch (fileError) {
+        console.error(`Failed to process file ${file.originalname}:`, fileError)
+        failedFiles.push({
+          filename: file.originalname,
+          error: fileError.message,
+        })
+        // Continue processing other files instead of failing completely
+      }
+    }
+
+    if (mediaFiles.length === 0) {
+      await transaction.rollback()
+      await mediaUploader.rollback()
+      res.status(500).json({
+        message: 'Failed to process any files from the ZIP archive',
+        failedFiles: failedFiles,
+      })
+      return
+    }
+
+    await transaction.commit()
+    mediaUploader.commit()
+
+    // Clean up temporary files
+    try {
+      await cleanupTempDirectory(path.dirname(files[0]?.path || ''))
+    } catch (cleanupError) {
+      console.error('Error cleaning up temporary files:', cleanupError)
+    }
+  } catch (e) {
+    await transaction.rollback()
+    await mediaUploader.rollback()
+
+    console.error('Error creating stacks media:', e)
+    res.status(500).json({
+      message: 'Failed to create stacks media with server error',
+      failedFiles: failedFiles,
+    })
+    return
+  }
+
+  res.status(200).json({
+    media: mediaFiles.map(convertMediaResponse),
+    message: `Successfully processed ${mediaFiles.length} files from the stack archive.`,
+    failedFiles: failedFiles.length > 0 ? failedFiles : undefined,
+  })
 }
