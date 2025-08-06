@@ -5,7 +5,7 @@ import * as mediaService from '../services/media-service.js'
 import * as taxaService from '../services/taxa-service.js'
 import * as specimenService from '../services/specimen-service.js'
 import { EolMediaFetcher } from '../lib/eol-media-fetcher.js'
-import { MediaUploader } from '../lib/media-uploader.js'
+import { S3MediaUploader } from '../lib/s3-media-uploader.js'
 import { downloadUrl } from '../util/url.js'
 import { time } from '../util/util.js'
 
@@ -79,7 +79,14 @@ export async function fetchMedia(req, res) {
         taxon.eol_pulled_on = time()
       } else {
         result.retry = mediaInfo.retry
-        taxon.eol_no_results_on = time()
+        result.error = mediaInfo.error
+        result.errorType = mediaInfo.errorType
+        
+        // Only mark as "no results" if it's a legitimate no-media situation, not a timeout/network error
+        if (mediaInfo.retry === false && (mediaInfo.errorType === 'no_results' || mediaInfo.errorType === 'no_media')) {
+          taxon.eol_no_results_on = time()
+        }
+        // For timeout/network errors (retry=true), don't mark as no_results so user can try again
       }
 
       await taxon.save({
@@ -116,12 +123,12 @@ export async function importMedia(req, res) {
     return
   }
 
-  // Asynchronously download the URLs to the local file system so that we can
-  // incremently add images to the database without waiting for the entire
-  // set of files to download.
+  // Asynchronously download the URLs to temporary files and upload to S3 so that we can
+  // incrementally add images to the database without waiting for the entire
+  // set of files to download and process.
   const files = new Map()
   const transaction = await sequelizeConn.transaction()
-  const mediaUploader = new MediaUploader(transaction, req.user)
+  const mediaUploader = new S3MediaUploader(transaction, req.user)
   try {
     for (const [id, url] of urls) {
       files.set(id, downloadUrl(url))
@@ -185,12 +192,10 @@ export async function importMedia(req, res) {
             user_id: userId,
             specimen_id: specimenId,
             project_id: projectId,
-            notes: `Loaded from Eol.org: ${link}`,
+            notes: `Loaded from EOL.org: ${link}`,
             published: 0,
             access: 0,
             cataloguing_status: 1,
-            url: item.url,
-            url_description: 'Automatically pulled from EOL.org API',
             is_copyrighted: 1,
             copyright_permission: item.copyright_permission,
             copyright_license: item.copyright_license,
@@ -235,6 +240,7 @@ export async function importMedia(req, res) {
     }
 
     await transaction.commit()
+    mediaUploader.commit()
     res.status(200).json({ success: true })
   } catch (e) {
     await transaction.rollback()
@@ -251,8 +257,8 @@ export async function importMedia(req, res) {
 function convertEolInfo(eolInfo) {
   return {
     taxon_id: eolInfo.taxon_id,
-    no_results_on: eolInfo.eol_no_results_on || undefined,
-    pulled_on: eolInfo.eol_pulled_on || undefined,
-    set_on: eolInfo.eol_set_on || undefined,
+    no_results_on: eolInfo.eol_no_results_on || null,
+    pulled_on: eolInfo.eol_pulled_on || null,
+    set_on: eolInfo.eol_set_on || null,
   }
 }

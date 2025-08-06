@@ -23,7 +23,7 @@ async function fetchEolImagesForTaxonName(taxonName, size = 1) {
 
   try {
     const response = await fetchWithRetry(
-      'http://eol.org/api/search/1.0.json',
+      'https://eol.org/api/search/1.0.json',
       {
         params,
       }
@@ -40,6 +40,9 @@ async function fetchEolImagesForTaxonName(taxonName, size = 1) {
     if (results == null || !Array.isArray(results) || results.length == 0) {
       return {
         success: false,
+        retry: false, // This is legitimate "no results found", not a retriable error
+        error: 'No search results found for this taxon',
+        errorType: 'no_results',
       }
     }
 
@@ -56,12 +59,25 @@ async function fetchEolImagesForTaxonName(taxonName, size = 1) {
 
     return {
       success: false,
+      retry: false, // No images found for any search results - legitimate "no media"
+      error: 'No images found in any search results for this taxon',
+      errorType: 'no_media',
     }
   } catch (e) {
+    // Distinguish between network/timeout errors (retriable) vs other errors
+    const isNetworkError = 
+      e.code === 'ECONNABORTED' || // axios timeout
+      e.code === 'ENOTFOUND' ||   // DNS errors
+      e.code === 'ECONNRESET' ||  // connection reset
+      e.code === 'ETIMEDOUT' ||   // general timeout
+      e.message.includes('timeout') ||
+      e.message.includes('Network Error')
+    
     return {
       success: false,
-      retry: true,
+      retry: isNetworkError,
       error: e.message,
+      errorType: isNetworkError ? 'network' : 'other',
     }
   }
 }
@@ -83,7 +99,7 @@ async function getImagesFromLink(id, size) {
     vetted: 2,
   }
   const response = await fetchWithRetry(
-    `http://eol.org/api/pages/1.0/${id}.json`,
+    `https://eol.org/api/pages/1.0/${id}.json`,
     {
       params,
     }
@@ -100,6 +116,9 @@ async function getImagesFromLink(id, size) {
   if (dataObjects == null || !Array.isArray(dataObjects)) {
     return {
       success: false,
+      retry: false, // API worked but returned no data objects - legitimate "no media"
+      error: 'No data objects found for this taxon concept',
+      errorType: 'no_media',
     }
   }
 
@@ -123,7 +142,7 @@ async function getImagesFromLink(id, size) {
           case 'photographer':
           case 'creator':
             if (agent.homepage) {
-              imageRightsHolder.url += `<a href='${agent.homepage}' target='_blank'>`
+              imageRightsHolder.url = agent.homepage
             }
             imageRightsHolder.name = agent.full_name
             break
@@ -157,6 +176,14 @@ export function getCopyrightInfo(license) {
   let mediaCopyrightPermission = undefined
   let mediaCopyrightLicense = undefined
   const imageLicenseLink = license?.toLowerCase()
+  
+  // Handle null/undefined license
+  if (!imageLicenseLink) {
+    mediaCopyrightPermission = 2  // Assume copyrighted if no license info
+    mediaCopyrightLicense = 8     // Unknown license - onetime use
+    return [mediaCopyrightPermission, mediaCopyrightLicense]
+  }
+  
   if (imageLicenseLink.includes('publicdomain')) {
     mediaCopyrightPermission = 4
   } else {

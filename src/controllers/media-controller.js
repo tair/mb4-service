@@ -5,7 +5,6 @@ import * as folioService from '../services/folios-service.js'
 import { getMedia, convertMediaTypeFromMimeType } from '../util/media.js'
 import { unzip, cleanupTempDirectory } from '../util/zip.js'
 import { models } from '../models/init-models.js'
-import { MediaUploader } from '../lib/media-uploader.js'
 import { S3MediaUploader } from '../lib/s3-media-uploader.js'
 import {
   ModelRefencialMapper,
@@ -403,6 +402,7 @@ export async function deleteMediaFiles(req, res) {
       individualHooks: true,
       user: req.user,
     })
+    
     await transaction.commit()
     res.status(200).json({ media_ids: mediaIds })
   } catch (e) {
