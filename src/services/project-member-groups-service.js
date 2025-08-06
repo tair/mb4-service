@@ -31,6 +31,11 @@ export async function getUserGroups(projectId) {
 }
 
 export async function isGroupInProject(groupIds, projectId) {
+  // If no groups are provided, return true (empty groups are valid)
+  if (!groupIds || groupIds.length === 0) {
+    return true
+  }
+  
   const [[{ count }]] = await sequelizeConn.query(
     `
     SELECT COUNT(group_id) AS count
