@@ -406,6 +406,7 @@ export async function deleteMediaFiles(req, res) {
       individualHooks: true,
       user: req.user,
     })
+    
     await transaction.commit()
     res.status(200).json({ media_ids: mediaIds })
   } catch (e) {

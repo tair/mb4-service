@@ -114,7 +114,7 @@ export async function getUUIDs(projectId) {
       WHERE project_id = ? AND uuid IS NOT NULL`,
     { replacements: [projectId] }
   )
-  return rows.map((r) => r.eol_id)
+  return rows.map((r) => r.uuid)
 }
 
 export async function getCitations(projectId, mediaIds) {

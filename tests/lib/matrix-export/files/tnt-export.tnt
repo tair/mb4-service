@@ -1,4 +1,4 @@
-nstates num 3
+nstates num 3;
 xread
 'File output by Morphobank v4.0 (http://www.morphobank.org); 2024-4-5 12.34.56'
 3 2

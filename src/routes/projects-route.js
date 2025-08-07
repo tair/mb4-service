@@ -8,6 +8,7 @@ import eolRouter from './eol-route.js'
 import foliosRouter from './folios-route.js'
 import iDigBioRouter from './idigbio-route.js'
 import institutionRouter from './institution-route.js'
+import pbdbRouter from './pbdb-route.js'
 import matrixRouter from './matrix-route.js'
 import mediaRouter from './media-route.js'
 import mediaViewsRouter from './media-views-route.js'
@@ -98,6 +99,7 @@ projectRouter.use('/folios', foliosRouter)
 projectRouter.use('/groups', projectMemberGroupsRouter)
 projectRouter.use('/idigbio', iDigBioRouter)
 projectRouter.use('/institutions', institutionRouter)
+projectRouter.use('/pbdb', pbdbRouter)
 projectRouter.use('/matrices', matrixRouter)
 projectRouter.use('/media', mediaRouter)
 projectRouter.use('/specimens', specimensRouter)

@@ -147,6 +147,17 @@ export async function getiDigBioInfo(projectId) {
   return rows
 }
 
+export async function getPbdbInfo(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT taxon_id, pbdb_pulled_on, pbdb_taxon_id
+      FROM taxa
+      WHERE project_id = ?`,
+    { replacements: [projectId] }
+  )
+  return rows
+}
+
 export async function getTaxonIdsByHash(projectId, hashes) {
   const [rows] = await sequelizeConn.query(
     `
