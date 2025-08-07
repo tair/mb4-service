@@ -12,13 +12,13 @@ COPY . .
 
 # dev stage
 FROM build-stage as dev-stage
-RUN apk update && apk add bash ffmpeg=6.1.1-r7
+RUN apk update && apk add bash ffmpeg
 EXPOSE 8080
 CMD [ "npm", "run", "dev" ]
 
 # debug stage
 FROM build-stage as debug-stage
-RUN apk update && apk add bash ffmpeg=6.1.1-r7
+RUN apk update && apk add bash ffmpeg
 EXPOSE 8080
 CMD [ "npm", "run", "debug" ]
 
