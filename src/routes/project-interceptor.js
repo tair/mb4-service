@@ -44,13 +44,26 @@ export async function authorizeProject(req, res, next) {
     // Update access time for admin/curator users accessing the project
     // Note: Global admins/curators may not be in projects_x_users table
     if (req.user?.user_id) {
-      await project.setUserAccessTime(req.user.user_id, false, req.user)
+      // Fire-and-forget: Don't block request on access time updates
+      project
+        .setUserAccessTime(req.user.user_id, false, req.user)
+        .catch((err) => {
+          console.warn(
+            'Non-critical: Failed to update access time for admin/curator:',
+            err.message
+          )
+        })
     }
   } else if (req.user?.user_id == project.user_id) {
     permissions.push('view', 'edit', 'manage')
 
     // Update access time for project owner
-    await project.setUserAccessTime(req.user.user_id, true, req.user)
+    project.setUserAccessTime(req.user.user_id, true, req.user).catch((err) => {
+      console.warn(
+        'Non-critical: Failed to update access time for project owner:',
+        err.message
+      )
+    })
   } else {
     const projectUser = await models.ProjectsXUser.findOne({
       where: {
@@ -75,7 +88,14 @@ export async function authorizeProject(req, res, next) {
     req.project.user = projectUser
 
     // Update access time for project members
-    await project.setUserAccessTime(req.user.user_id, false, req.user)
+    project
+      .setUserAccessTime(req.user.user_id, false, req.user)
+      .catch((err) => {
+        console.warn(
+          'Non-critical: Failed to update access time for project member:',
+          err.message
+        )
+      })
   }
 
   req.project.permissions = permissions
