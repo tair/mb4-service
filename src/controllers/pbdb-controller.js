@@ -15,7 +15,6 @@ export async function getPbdbInfo(req, res) {
 
 export async function validateTaxa(req, res) {
   const projectId = req.params.projectId
-  const userId = req.user.user_id
   const { taxon_ids } = req.body
 
   if (!Array.isArray(taxon_ids) || taxon_ids.length === 0) {
@@ -132,7 +131,6 @@ export async function validateTaxa(req, res) {
 
 export async function importTaxaInfo(req, res) {
   const projectId = req.params.projectId
-  const userId = req.user.user_id
   const { taxa_info } = req.body
 
   if (!Array.isArray(taxa_info) || taxa_info.length === 0) {
