@@ -3,6 +3,7 @@ import * as projectMemberGroupsService from '../services/project-member-groups-s
 import sequelizeConn from '../util/db.js'
 import { models } from '../models/init-models.js'
 import { generateRandomString } from '../util/string.js'
+import { EmailManager } from '../lib/email-manager.js'
 
 export async function getProjectUsers(req, res) {
   const projectId = req.params.projectId
@@ -121,6 +122,8 @@ export async function addMember(req, res) {
   const projectId = req.project.project_id
   const values = req.body.json
   const transaction = await sequelizeConn.transaction()
+  const emailManager = new EmailManager()
+  
   try {
     const user = await models.User.findByPk(values.user_id, {
       attributes: ['fname', 'lname', 'email', 'user_id'],
@@ -136,33 +139,25 @@ export async function addMember(req, res) {
         user: req.user,
       }
     )
-    await models.TaskQueue.create(
-      {
-        user_id: req.user.user_id,
-        priority: 500,
-        entity_key: null,
-        row_key: null,
-        handler: 'Email',
-        parameters: {
-          template: 'project_member_invitation',
-          subject: `Invitation to Morphobank project ${projectId}`,
-          name: `${user.fname} ${user.lname}`,
-          projectId: projectId,
-          projectName: req.project.name,
-          inviteeName: `${req.user.fname} ${req.user.lname}`,
-          inviteeEmail: req.user.email,
-          messageStart: values.message
-            ? `${user.fname} ${user.lname} wrote:`
-            : null,
-          message: values.message,
-          to: user.email,
-        },
-      },
-      {
-        transaction: transaction,
-        user: req.user,
-      }
-    )
+    
+    // Send email synchronously
+    const emailParameters = {
+      template: 'project_member_invitation',
+      subject: `Invitation to Morphobank project ${projectId}`,
+      name: `${user.fname} ${user.lname}`,
+      projectId: projectId,
+      projectName: req.project.name,
+      inviteeName: `${req.user.fname} ${req.user.lname}`,
+      inviteeEmail: req.user.email,
+      messageStart: values.message
+        ? `${req.user.fname} ${req.user.lname} wrote:`
+        : '',
+      message: values.message || '',
+      passwordText: '', // Empty for existing users
+      to: user.email,
+    }
+    
+    await emailManager.email('project_member_invitation', emailParameters)
     await transaction.commit()
 
     res.status(200).json({
@@ -189,6 +184,8 @@ export async function createUser(req, res) {
   const projectId = req.project.project_id
   const values = req.body.json
   const transaction = await sequelizeConn.transaction()
+  const emailManager = new EmailManager()
+  
   try {
     const password = generateRandomString()
     const hashedPassword = await models.User.hashPassword(password)
@@ -198,7 +195,7 @@ export async function createUser(req, res) {
         fname: values.fname,
         lname: values.lname,
         password_hash: hashedPassword,
-        active: 0,
+        active: 1,
       },
       {
         transaction,
@@ -217,34 +214,25 @@ export async function createUser(req, res) {
         user: req.user,
       }
     )
-    await models.TaskQueue.create(
-      {
-        user_id: req.user.user_id,
-        priority: 500,
-        entity_key: null,
-        row_key: null,
-        handler: 'Email',
-        parameters: {
-          template: 'project_member_invitation',
-          subject: `Invitation to Morphobank project ${projectId}`,
-          name: `${user.fname} ${user.lname}`,
-          projectId: projectId,
-          projectName: req.project.name,
-          inviteeName: `${req.user.fname} ${req.user.lname}`,
-          inviteeEmail: req.user.email,
-          messageStart: values.message
-            ? `${user.fname} ${user.lname} wrote:`
-            : null,
-          message: values.message,
-          passwordText: `Your password is ${password}`,
-          to: user.email,
-        },
-      },
-      {
-        transaction: transaction,
-        user: req.user,
-      }
-    )
+    
+    // Send email synchronously
+    const emailParameters = {
+      template: 'project_member_invitation',
+      subject: `Invitation to Morphobank project ${projectId}`,
+      name: `${user.fname} ${user.lname}`,
+      projectId: projectId,
+      projectName: req.project.name,
+      inviteeName: `${req.user.fname} ${req.user.lname}`,
+      inviteeEmail: req.user.email,
+      messageStart: values.message
+        ? `${req.user.fname} ${req.user.lname} wrote:`
+        : '',
+      message: values.message || '',
+      passwordText: `Your password is ${password}`,
+      to: user.email,
+    }
+    
+    await emailManager.email('project_member_invitation', emailParameters)
     await transaction.commit()
 
     res.status(200).json({
@@ -262,8 +250,17 @@ export async function createUser(req, res) {
     })
   } catch (err) {
     await transaction.rollback()
-    console.error(`Error: Error while having user join group`, err)
-    res.status(500).json({ message: 'Error while having user join group.' })
+    console.error(`Error: Error while creating user and adding to project`, err)
+    console.error('Error details:', {
+      message: err.message,
+      stack: err.stack,
+      values: values,
+      projectId: projectId
+    })
+    res.status(500).json({ 
+      message: 'Error while creating user and adding to project.',
+      details: err.message 
+    })
   }
 }
 // check to see if the user is active and if not deleted
