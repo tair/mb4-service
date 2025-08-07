@@ -489,7 +489,8 @@ export async function createDuplicationRequest(req, res) {
 
   try {
     const transaction = await sequelizeConn.transaction()
-    await models.ProjectDuplicationRequest.create(
+    
+    const duplicationRequest = await models.ProjectDuplicationRequest.create(
       {
         project_id: projectId,
         request_remarks: remarks,
@@ -497,12 +498,18 @@ export async function createDuplicationRequest(req, res) {
         user_id: req.user.user_id,
         onetime_use_action: onetimeAction,
         notes: remarks,
+        new_project_number: '0', // Placeholder - will be updated when duplication is completed
       },
-      { transaction }
+      { transaction, user: req.user }
     )
 
     await transaction.commit()
-    res.status(200)
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'Duplication request submitted successfully',
+      requestId: duplicationRequest.request_id
+    })
   } catch (e) {
     console.error('Error making duplication request', e)
     res.status(500).json({ message: 'Could not create duplication request' })
