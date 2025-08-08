@@ -11,6 +11,8 @@ const CRA_USER = config.cipres.username
 const PASSWORD = config.cipres.password
 const KEY = config.cipres.key
 const CRE = btoa(`${CRA_USER}:${PASSWORD}`)
+const SEP = "^"
+const CONTAINWORDS = [ 'Exception', 'exception', 'Error', 'error' ]
 
 export default class CipresRequestService {
   static async createCipresRequest(
@@ -23,10 +25,21 @@ export default class CipresRequestService {
   ) {
     const response = await CipresRequestService.submitCipresJob(paramsIn)
     if (response != null) {
+      let block = null
+      if (paramsIn['tool'] == 'MRBAYES_XSEDE') {
+        if (paramsIn['vparam.mrbayesblockquery_'] == '1') {
+          const beginBlock = "begin mrbayes;"
+          const endBlock = "end;" 
+          block = CipresRequestService.getSubstringBetweenWords(paramsIn['input.infile_'], beginBlock, endBlock)
+          if (block)
+           block = SEP + block
+        }
+      }
+     
       let formDataForSubmission = {
         matrix_id: matrixId,
         user_id: userIn?.user_id,
-        notes: notesIn,
+        notes: (block? (notesIn + block) : notesIn),
         created_on: time(),
         cipres_job_id: response.jobHandle,
         cipres_tool: paramsIn['tool'],
@@ -83,7 +96,7 @@ export default class CipresRequestService {
 
     const [rows] = await sequelizeConn.query(
       `   
-        SELECT request_id, matrix_id, user_id, jobname, FROM_UNIXTIME(created_on, '%Y-%m-%d %H:%i:%s GMT') created_on,  cipres_job_id, cipres_tool, cipres_last_status, cipres_settings, notes, '${URL}' as cu, '${KEY}' as ck, '${CRE}' as cr, '${CRA_USER}' as ca
+        SELECT request_id, matrix_id, user_id, jobname, FROM_UNIXTIME(created_on, '%Y-%m-%dT%H:%i:%s.000Z') created_on,  cipres_job_id, cipres_tool, cipres_last_status, cipres_settings, IF(LOCATE('${SEP}', notes) > 0,SUBSTRING(notes, 1, LENGTH(notes) - LENGTH(SUBSTRING_INDEX(notes, '${SEP}', -1)) - 1), notes) as notes, IF(LOCATE('${SEP}', notes) > 0,SUBSTRING_INDEX(notes,'${SEP}',-1), NULL) as block, REGEXP_REPLACE(JSON_EXTRACT(output_file, '$.message'), '[\\r\\n]{2,}', '\n') as errors, '${URL}' as cu, '${KEY}' as ck, '${CRE}' as cr, '${CRA_USER}' as ca
         FROM cipres_requests
         WHERE matrix_id IN (?) and user_id = ? order by created_on desc`,
       { replacements: [matrixIds, userId] }
@@ -115,21 +128,36 @@ export default class CipresRequestService {
         const jobHandle = row.cipres_job_id
 
         try {
-          const jobStage = await CipresRequestService.getCipresJobStage(
+          const retData = await CipresRequestService.getCipresJobStage(
             jobHandle
           )
-
+          const jobStage = retData.jobStage
           if (jobStage && jobStage.trim() !== '') {
-            await sequelizeConn.query(
-              `UPDATE cipres_requests 
-               SET last_updated_on = ?, cipres_last_status = ? 
-               WHERE request_id = ? AND cipres_job_id = ?`,
-              {
-                replacements: [time(), jobStage, row.request_id, jobHandle],
-                type: QueryTypes.UPDATE,
-                transaction: transaction,
-              }
-            )
+            if (!retData.errorMsg || retData.errorMsg.trim() == '') {
+              await sequelizeConn.query(
+                `UPDATE cipres_requests 
+                 SET last_updated_on = ?, cipres_last_status = ? 
+                 WHERE request_id = ? AND cipres_job_id = ?`,
+                {
+                  replacements: [time(), jobStage, row.request_id, jobHandle],
+                  type: QueryTypes.UPDATE,
+                  transaction: transaction,
+                }
+              )
+            }
+            else {
+              //const errMsg = retData.errorMsg.replace(/(\r\n|\n|\r)/g, "^")
+              await sequelizeConn.query(
+                `UPDATE cipres_requests 
+                 SET last_updated_on = ?, cipres_last_status = ?, output_file = JSON_SET(COALESCE(output_file, '{}'), '$.message', ?) 
+                 WHERE request_id = ? AND cipres_job_id = ?`,
+                {
+                  replacements: [time(), jobStage, retData.errorMsg, row.request_id, jobHandle],
+                  type: QueryTypes.UPDATE,
+                  transaction: transaction,
+                }
+              )
+            }
             successCount++
             console.log(
               `Updated job ${jobHandle} (ID: ${row.request_id}) to status: ${jobStage}`
@@ -161,6 +189,7 @@ export default class CipresRequestService {
 
   static async getCipresJobStage(jobHandle) {
     let jobStage = ''
+    let errorMsg = ''
     try {
       const response = await axios.get(`${URL}/job/${CRA_USER}/${jobHandle}`, {
         headers: {
@@ -177,10 +206,16 @@ export default class CipresRequestService {
         response.data.indexOf(js) + js.length,
         response.data.lastIndexOf('</' + js.slice(1))
       )
+      errorMsg = CipresRequestService.getAllSubstringBetweenWords(response.data, '<text>', '</text>', CONTAINWORDS)  
+      console.info(errorMsg)
     } catch (error) {
       // console.error(error)
     }
-    return jobStage
+    const retData = {
+      'jobStage': jobStage,
+      'errorMsg': errorMsg,
+    }
+    return retData 
   }
 
   static async submitCipresJob(formDataForSubmission) {
@@ -259,4 +294,55 @@ export default class CipresRequestService {
     }
     return 'Successfully deleted job ' + cipresJobId
   }
+
+  static getSubstringBetweenWords(mainString, startWord, endWord) {
+    const startIndex = mainString.indexOf(startWord)
+    if (startIndex === -1) {
+      return null
+    }
+  
+    const actualStartIndex = startIndex + startWord.length
+    const endIndex = mainString.indexOf(endWord, actualStartIndex)
+  
+    if (endIndex === -1) {
+      return null
+    }
+  
+    return (startWord + mainString.substring(actualStartIndex, endIndex) + endWord)
+  }
+
+  static getAllSubstringBetweenWords(mainString, startWord, endWord, containWords) {
+    let resultString = ''
+    let actualStartIndex = 0
+    while (actualStartIndex < mainString.length) {
+      const startIndex = mainString.indexOf(startWord, actualStartIndex)
+      if (startIndex === -1) {
+        break 
+      }
+    
+      actualStartIndex = startIndex + startWord.length
+      const endIndex = mainString.indexOf(endWord, actualStartIndex)
+    
+      if (endIndex === -1) {
+        break
+      }
+      const textMsg = mainString.substring(actualStartIndex, endIndex)
+      if (containWords.some(x=>textMsg.includes(x)))
+        resultString += (textMsg + '\n')
+      actualStartIndex = endIndex + endWord.length
+    }
+  
+    return resultString
+  }
+
+  /* static getSubstringBetweenWords(mainString, startWord, endWord) {
+    const regex = new RegExp(`${startWord}(.*?)${endWord}`)
+    const match = mainString.match(regex)
+  
+    if (match && match[1]) {
+      return (startWord + match[1] + endWord)
+    } else {
+      return null
+    }
+  } */
 }

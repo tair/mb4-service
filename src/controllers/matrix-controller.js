@@ -529,10 +529,11 @@ export async function run(req, res) {
     jobChar = 'vparam.specify_pct_'
   }*/
 
-  const formData1 = {
+  console.info("Received tool = " + req.query.tool + " in the request")
+  /* const formData1 = {
     tool: req.query.tool,
     'input.infile_': fileContent,
-  }
+  } */
   let formData2 = null
   if (req.query.tool == 'PAUPRAT') {
     if (
@@ -558,12 +559,32 @@ export async function run(req, res) {
   }
   if (req.query.tool == 'MRBAYES_XSEDE') {
     if (req.query.mrbayesblockquery == '1') {
-      formData2 = {
-        'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
-        'vparam.nruns_specified_': req.query.nruns_specified,
-        'vparam.nchains_specified_': req.query.nchains_specified,
-        'vparam.runtime_': req.query.runtime,
+      if (req.query.mrbayesblock != null) {
+        if (req.query.set_outgroup == null)
+          formData2 = {
+            'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
+            'vparam.nruns_specified_': req.query.nruns_specified,
+            'vparam.nchains_specified_': req.query.nchains_specified,
+            'vparam.runtime_': 1,
+          }
+        else
+          formData2 = {
+            'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
+            'vparam.set_outgroup_': req.query.set_outgroup,
+            'vparam.nruns_specified_': req.query.nruns_specified,
+            'vparam.nchains_specified_': req.query.nchains_specified,
+            'vparam.runtime_': 1,
+          }
+        fileContent += "\n" + req.query.mrbayesblock
+        console.info(fileContent)
       }
+      else
+          formData2 = {
+            'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
+            'vparam.nruns_specified_': req.query.nruns_specified,
+            'vparam.nchains_specified_': req.query.nchains_specified,
+            'vparam.runtime_': req.query.runtime,
+          }
     }
     if (req.query.mrbayesblockquery == '0') {
       if (req.query.set_outgroup != null)
@@ -590,6 +611,10 @@ export async function run(req, res) {
           'vparam.runtime_': 4,
         }
     }
+  }
+  const formData1 = {
+    tool: req.query.tool,
+    'input.infile_': fileContent,
   }
   const formData3 = {
     'vparam.zipfilename_': filename,
