@@ -17,6 +17,7 @@ import projectUsersRouter from './project-users-route.js'
 import specimensRouter from './specimens-route.js'
 import taxaRouter from './taxa-route.js'
 import * as controller from '../controllers/project-controller.js'
+import * as publishingController from '../controllers/publishing-controller.js'
 import {
   authenticateToken,
   maybeAuthenticateToken,
@@ -69,7 +70,7 @@ projectsRouter.post(
   '/create',
   upload.fields([
     { name: 'journal_cover', maxCount: 1 },
-    { name: 'exemplar_media', maxCount: 1 }
+    { name: 'exemplar_media', maxCount: 1 },
   ]),
   controller.createProject
 )
@@ -80,7 +81,7 @@ projectsRouter.post(
   '/:projectId/edit',
   upload.fields([
     { name: 'journal_cover', maxCount: 1 },
-    { name: 'exemplar_media', maxCount: 1 }
+    { name: 'exemplar_media', maxCount: 1 },
   ]),
   controller.editProject
 )
@@ -125,5 +126,25 @@ projectRouter.post(
   '/publish/partition/:partitionId',
   controller.publishPartition
 )
+
+// Publishing routes
+projectRouter.get(
+  '/publishing/status',
+  publishingController.getPublishingStatus
+)
+projectRouter.get(
+  '/publishing/info-redirect',
+  publishingController.getProjectInfoRedirect
+)
+projectRouter.get(
+  '/publishing/preferences',
+  publishingController.getPublishingPreferences
+)
+projectRouter.post(
+  '/publishing/preferences',
+  publishingController.savePublishingPreferences
+)
+projectRouter.get('/publishing/form', publishingController.getPublishForm)
+projectRouter.post('/publishing/publish', publishingController.publishProject)
 
 export default projectsRouter

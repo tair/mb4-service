@@ -1,0 +1,13 @@
+MorphoBank Published Project Screenshot Notification
+
+Project ID: P$project_id
+
+A project with more than 27 media files has been published on MorphoBank. This project may need screenshots taken for promotional purposes.
+
+View Project: https://www.morphobank.org/myprojects/$project_id/overview
+
+MorphoBank Administration
+
+---
+This email was sent by the MorphoBank team.
+https://morphobank.org/
