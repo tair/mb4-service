@@ -103,6 +103,10 @@ export async function mergeMatrix(
   file
 ) {
   const matrix = await models.Matrix.findByPk(matrixId)
+  if (!matrix) {
+    throw new Error(`Matrix with ID ${matrixId} not found`)
+  }
+
   const transaction = await sequelizeConn.transaction()
   await importIntoMatrix(
     matrix,
@@ -204,6 +208,7 @@ async function importIntoMatrix(
     }
 
     // Second pass: create or use existing taxa
+
     for (const [taxonHash, { taxonObj, taxaObj }] of taxonObjects) {
       const existingTaxon = existingTaxaMap.get(taxonHash)
       let taxonId
@@ -286,7 +291,7 @@ async function importIntoMatrix(
         {
           name: characterObj.name,
           description: characterObj.note,
-          user_id: user.user_ud,
+          user_id: user.user_id,
           project_id: projectId,
           ordering: characterObj.ordering,
           type: characterObj.type,
@@ -367,7 +372,6 @@ async function importIntoMatrix(
       }
     }
   }
-
   const cellsTable = await getCells(matrixId)
   const cellNotes = await getCellNotes(matrixId)
   const cellNotesTable = new Table()
@@ -380,6 +384,7 @@ async function importIntoMatrix(
   const missingSymbol = matrixObj.parameters?.MISSING || '?'
   const gapSymbol = matrixObj.parameters?.GAP || '?'
   const symbols = parseSymbols(matrixObj.parameters?.SYMBOLS)
+
   for (let x = 0, l = matrixObj.cells.length; x < l; ++x) {
     const cellsInsertions = []
     const notesInsertions = []
@@ -463,7 +468,7 @@ async function importIntoMatrix(
             continue
           }
 
-          if (score == gapSymbol) {
+          if (score == gapSymbol || score == '-' || score == '–') {
             if (
               !existingCell ||
               !existingCell.some((score) => score.state_id == null)
@@ -479,7 +484,7 @@ async function importIntoMatrix(
           }
 
           let index
-          if (symbols) {
+          if (symbols && Object.keys(symbols).length > 0) {
             index = symbols[score]
           } else if (score >= '0' && score <= '9') {
             index = parseInt(score)
@@ -488,12 +493,54 @@ async function importIntoMatrix(
           }
 
           if (index == undefined || index < 0) {
-            throw `Undefined cell state ${score}`
+            console.error(
+              `ERROR: Could not parse cell value at position [${x}, ${y}]`
+            )
+            console.error(
+              `  - Taxon: ${matrixObj.taxa[x].name} (ID: ${taxonId})`
+            )
+            console.error(
+              `  - Character: ${
+                character.name || 'unnamed'
+              } (ID: ${characterId})`
+            )
+            console.error(`  - Cell value: "${score}" (type: ${typeof score})`)
+            console.error(
+              `  - Symbols available: ${
+                Object.keys(symbols).length > 0
+                  ? JSON.stringify(symbols)
+                  : 'none (using numeric/alpha parsing)'
+              }`
+            )
+            console.error(`  - Parsed index: ${index}`)
+            throw `Undefined cell state ${score} at position [${x}, ${y}] for character ${
+              character.name || characterId
+            }`
           }
 
           const state = character.states[index]
           if (!state) {
-            throw `Undefined cell state`
+            console.error(
+              `ERROR: Undefined cell state at position [${x}, ${y}]`
+            )
+            console.error(
+              `  - Taxon: ${matrixObj.taxa[x].name} (ID: ${taxonId})`
+            )
+            console.error(
+              `  - Character: ${
+                character.name || 'unnamed'
+              } (ID: ${characterId})`
+            )
+            console.error(`  - Cell value: "${score}" -> index: ${index}`)
+            console.error(
+              `  - Available states: [${character.states
+                .map((s, i) => `${i}:${s.name}`)
+                .join(', ')}]`
+            )
+            console.error(`  - Character has ${character.states.length} states`)
+            throw `Undefined cell state ${score} (index ${index}) for character ${
+              character.name || characterId
+            } at position [${x}, ${y}]`
           }
 
           const stateId = parseInt(state.state_id)
