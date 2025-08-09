@@ -71,7 +71,6 @@ export async function getMatrices(req, res) {
             .trim()
         )
       }
-      console.info(taxaNames)
       matrix.taxonNames = taxaNames
     }
 
