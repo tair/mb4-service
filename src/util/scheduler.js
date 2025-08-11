@@ -96,7 +96,7 @@ export function startScheduler() {
   }
 
   // Run every day at 10:01 PM (change to 10 for 10:01 AM if needed)
-  cron.schedule('7 16 * * *', runProjectStatsDump, {
+  cron.schedule('1 22 * * *', runProjectStatsDump, {
     scheduled: true,
     timezone: 'America/Chicago',
   })
