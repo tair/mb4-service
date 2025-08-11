@@ -370,6 +370,15 @@ export async function editProject(req, res, next) {
       let journalCoverFile = req.files?.journal_cover?.[0]
       let exemplarMediaFile = req.files?.exemplar_media?.[0]
 
+      // Ensure files are valid and not empty placeholders
+      // This prevents bad request errors when user wants to keep existing images
+      if (journalCoverFile && (!journalCoverFile.originalname || journalCoverFile.size === 0)) {
+        journalCoverFile = null
+      }
+      if (exemplarMediaFile && (!exemplarMediaFile.originalname || exemplarMediaFile.size === 0)) {
+        exemplarMediaFile = null
+      }
+
       // Handle journal cover upload
       if (journalCoverFile) {
         mediaUploader = new S3MediaUploader(transaction, req.user)
@@ -782,6 +791,15 @@ export async function createProject(req, res, next) {
       // Handle file uploads if provided
       let journalCoverFile = req.files?.journal_cover?.[0]
       let exemplarMediaFile = req.files?.exemplar_media?.[0]
+
+      // Ensure files are valid and not empty placeholders
+      // This prevents bad request errors when user wants to keep existing images
+      if (journalCoverFile && (!journalCoverFile.originalname || journalCoverFile.size === 0)) {
+        journalCoverFile = null
+      }
+      if (exemplarMediaFile && (!exemplarMediaFile.originalname || exemplarMediaFile.size === 0)) {
+        exemplarMediaFile = null
+      }
 
       // Handle journal cover upload
       if (journalCoverFile) {
