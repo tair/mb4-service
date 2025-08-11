@@ -71,7 +71,6 @@ async function setJournalCoverUrl(project) {
     }
   }
 
-  console.log('No cover info for project ' + project.project_id)
 }
 
 function getCoverUrlByJournalCover(journalCover) {

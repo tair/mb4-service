@@ -2,6 +2,7 @@ import cron from 'node-cron'
 import * as projectsService from '../services/published-projects-service.js'
 import * as projectDetailService from '../services/project-detail-service.js'
 import * as utilService from './util.js'
+import s3Service from '../services/s3-service.js'
 
 const dir = 'data'
 const projectStatsDir = 'project_stats'
@@ -13,62 +14,38 @@ async function runProjectStatsDump() {
       new Date().toISOString()
     )
 
-    console.log('Step 1: Fetching projects list...')
     const projects = await projectsService.getProjects()
-    console.log(`Step 1 complete: Found ${projects.length} projects`)
+    console.log(`Found ${projects.length} projects to process`)
 
-    console.log('Step 2: Creating project_stats directory...')
     utilService.createDir(`${dir}/${projectStatsDir}`)
-    console.log('Step 2 complete: Directory created')
-
-    console.log('Step 3: Fetching mapping data...')
+    
     const matrixMap = await projectDetailService.getMatrixMap()
-    console.log(
-      `Step 3a complete: Matrix map loaded with ${
-        Object.keys(matrixMap).length
-      } entries`
-    )
-
     const folioMap = await projectDetailService.getFolioMap()
-    console.log(
-      `Step 3b complete: Folio map loaded with ${
-        Object.keys(folioMap).length
-      } entries`
-    )
-
     const documentMap = await projectDetailService.getDocumentMap()
-    console.log(
-      `Step 3c complete: Document map loaded with ${
-        Object.keys(documentMap).length
-      } entries`
-    )
 
-    console.log('Step 4: Processing projects...')
+    let s3SuccessCount = 0
+    let s3FailureCount = 0
+
     for (let i = 0; i < projects.length; i++) {
       const project = projects[i]
       const projectId = project.project_id
 
-      console.log(
-        `Step 4.${i + 1}: Processing project ${projectId} (${i + 1}/${
-          projects.length
-        })`
-      )
+      // Progress log every 25 projects
+      if (i % 25 === 0 || i === projects.length - 1) {
+        console.log(`Processing project ${i + 1}/${projects.length}`)
+      }
 
-      console.log(`  - Fetching project views for project ${projectId}...`)
       const project_views = await projectDetailService.getProjectViews(
         projectId,
         matrixMap,
         folioMap
       )
-      console.log(`  - Project views fetched for project ${projectId}`)
-
-      console.log(`  - Fetching project downloads for project ${projectId}...`)
+      
       const project_downloads = await projectDetailService.getProjectDownloads(
         projectId,
         matrixMap,
         documentMap
       )
-      console.log(`  - Project downloads fetched for project ${projectId}`)
 
       const projectStats = {
         project_id: projectId,
@@ -77,15 +54,28 @@ async function runProjectStatsDump() {
         generated_at: new Date().toISOString(),
       }
 
-      console.log(`  - Writing stats file for project ${projectId}...`)
-      await utilService.writeToFile(
-        `${dir}/${projectStatsDir}/prj_${projectId}.json`,
-        JSON.stringify(projectStats, null, 2)
-      )
-      console.log(`  - Stats file written for project ${projectId}`)
+      const filePath = `${dir}/${projectStatsDir}/prj_${projectId}.json`
+      const fileContent = JSON.stringify(projectStats, null, 2)
+      await utilService.writeToFile(filePath, fileContent)
+
+      // Upload to S3
+      try {
+        const s3Key = `prj_stats/prj_${projectId}.json`
+        await s3Service.putObject(
+          'mb4-data',
+          s3Key,
+          Buffer.from(fileContent, 'utf8'),
+          'application/json'
+        )
+        s3SuccessCount++
+      } catch (s3Error) {
+        console.error(`Failed to upload S3 file for project ${projectId}:`, s3Error.message)
+        s3FailureCount++
+      }
     }
 
-    console.log('Step 4 complete: All projects processed')
+    console.log(`All ${projects.length} projects processed successfully`)
+    console.log(`S3 uploads: ${s3SuccessCount} successful, ${s3FailureCount} failed`)
     console.log(
       'Scheduled project stats dump completed at:',
       new Date().toISOString()
@@ -97,13 +87,22 @@ async function runProjectStatsDump() {
 }
 
 export function startScheduler() {
-  // Run every day at 10:01 PM
-  cron.schedule('1 22 * * *', runProjectStatsDump, {
+  // Check if scheduler is enabled via environment variable
+  const schedulerEnabled = process.env.SCHEDULER_ENABLED !== 'false'
+  
+  if (!schedulerEnabled) {
+    console.log('Project stats dump scheduler is disabled via SCHEDULER_ENABLED environment variable')
+    return
+  }
+
+  // Run every day at 10:01 PM (change to 10 for 10:01 AM if needed)
+  cron.schedule('7 16 * * *', runProjectStatsDump, {
     scheduled: true,
     timezone: 'America/Chicago',
   })
 
-  console.log('Project stats dump scheduler is currently disabled')
+  console.log('Project stats dump scheduler started - will run daily at 10:01 PM Chicago time')
+  console.log('Generated files will be saved locally in data/project_stats/ and uploaded to s3://mb4-data/prj_stats/')
 }
 
 export { runProjectStatsDump }
