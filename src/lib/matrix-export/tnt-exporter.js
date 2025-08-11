@@ -4,6 +4,13 @@ import { getTaxonName } from '../../util/taxa.js'
 const SYMBOLS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 export class TNTExporter extends Exporter {
+  // Specific method for cleaning taxon names in TNT format
+  formatTntText(text) {
+    return text
+      .replace(/[\r\n\t\s]+/g, '_') // replace whitespace with underscores
+      .trim()
+  }
+
   export({ taxa, characters, cellsTable }) {
     const taxaNameMap = new Map()
     const taxaIndicesMap = new Map()
@@ -11,7 +18,7 @@ export class TNTExporter extends Exporter {
     let maxTaxonNameLength = 0
     for (const taxon of taxa) {
       const taxonId = parseInt(taxon.taxon_id)
-      const name = this.cleanName(getTaxonName(taxon, null, false, false))
+      const name = this.formatTntText(this.cleanName(getTaxonName(taxon, null, false, false)))
       taxaIndicesMap.set(taxonId, currentTaxaIndex++)
       taxaNameMap.set(taxonId, name)
 
@@ -27,7 +34,7 @@ export class TNTExporter extends Exporter {
       const character = characters[i]
       const characterId = parseInt(character.character_id)
       characterIndicesMap.set(characterId, i)
-      const characterName = this.cleanName(character.name)
+      const characterName = this.formatTntText(this.cleanName(character.name))
       characterNamesMap.set(characterId, characterName)
       if (character.states) {
         for (const state of character.states) {
@@ -51,7 +58,7 @@ export class TNTExporter extends Exporter {
       for (const taxon of taxa) {
         const taxonId = parseInt(taxon.taxon_id)
         const taxonName = taxaNameMap.get(taxonId)
-        this.write(`'${taxonName}' `)
+        this.write(`${taxonName} `)
         this.write(' '.repeat(maxTaxonNameLength + 5 - taxonName.length))
         for (const character of continuousCharacters) {
           const characterId = parseInt(character.character_id)
@@ -82,7 +89,7 @@ export class TNTExporter extends Exporter {
       for (const taxon of taxa) {
         const taxonId = parseInt(taxon.taxon_id)
         const taxonName = taxaNameMap.get(taxonId)
-        this.write(`'${taxonName}' `)
+        this.write(`${taxonName} `)
         this.write(' '.repeat(maxTaxonNameLength + 5 - taxonName.length))
         for (const character of discreteCharacters) {
           const characterId = parseInt(character.character_id)
@@ -146,7 +153,7 @@ export class TNTExporter extends Exporter {
         for (const state of character.states) {
           const stateId = parseInt(state.state_id)
           statesMap.set(stateId, state)
-          const stateName = this.cleanText(state.name)
+          const stateName = this.formatTntText(this.cleanText(state.name))
           this.write(` '${stateName}'`)
         }
       }
