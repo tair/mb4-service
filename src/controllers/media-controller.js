@@ -745,22 +745,13 @@ export async function editCitation(req, res) {
   }
 
   const values = req.body.citation
-  const referenceId = req.body.citation.reference_id
-  const bibliography = await models.BibliographicReference.findByPk(referenceId)
-  if (bibliography == null) {
-    res.status(404).json({ message: 'Unable to find bibliography' })
-    return
-  }
 
-  if (bibliography.project_id != projectId) {
-    res
-      .status(403)
-      .json({ message: 'Bibliography is not assoicated with this project' })
-    return
-  }
-
+  // For editing, we only allow updating pp and notes, not reference_id
+  const allowedFields = ['pp', 'notes']
   for (const key in values) {
-    citation.set(key, values[key])
+    if (allowedFields.includes(key)) {
+      citation.set(key, values[key])
+    }
   }
   try {
     const transaction = await sequelizeConn.transaction()

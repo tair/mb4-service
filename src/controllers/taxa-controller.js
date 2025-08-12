@@ -387,14 +387,14 @@ export async function createCitation(req, res) {
 
   const taxon = await models.Taxon.findByPk(taxonId)
   if (taxon == null) {
-    res.status(404).json({ messeage: 'Unable to find taxon' })
+    res.status(404).json({ message: 'Unable to find taxon' })
     return
   }
 
   if (taxon.project_id != projectId) {
     res
       .status(403)
-      .json({ messeage: 'Taxon is not assoicated with this project' })
+      .json({ message: 'Taxon is not associated with this project' })
     return
   }
 
@@ -402,14 +402,14 @@ export async function createCitation(req, res) {
   const referenceId = req.body.citation.reference_id
   const bibliography = await models.BibliographicReference.findByPk(referenceId)
   if (bibliography == null) {
-    res.status(404).json({ messeage: 'Unable to find bibliography' })
+    res.status(404).json({ message: 'Unable to find bibliography' })
     return
   }
 
   if (bibliography.project_id != projectId) {
     res
       .status(403)
-      .json({ messeage: 'Bibliography is not assoicated with this project' })
+      .json({ message: 'Bibliography is not associated with this project' })
     return
   }
 
@@ -458,40 +458,31 @@ export async function editCitation(req, res) {
 
   const taxon = await models.Taxon.findByPk(taxonId)
   if (taxon == null) {
-    res.status(404).json({ messeage: 'Unable to find taxon' })
+    res.status(404).json({ message: 'Unable to find taxon' })
     return
   }
 
   if (taxon.project_id != projectId) {
     res
       .status(403)
-      .json({ messeage: 'Taxon is not assoicated with this project' })
+      .json({ message: 'Taxon is not associated with this project' })
     return
   }
 
   const citation = await models.TaxaXBibliographicReference.findByPk(citationId)
-  if (citation == null) {
-    res.status(404).json({ messeage: 'Unable to find citation' })
+  if (citation == null || citation.taxon_id != taxonId) {
+    res.status(404).json({ message: 'Unable to find citation' })
     return
   }
 
   const values = req.body.citation
-  const referenceId = req.body.citation.reference_id
-  const bibliography = await models.BibliographicReference.findByPk(referenceId)
-  if (bibliography == null) {
-    res.status(404).json({ messeage: 'Unable to find bibliography' })
-    return
-  }
 
-  if (bibliography.project_id != projectId) {
-    res
-      .status(403)
-      .json({ messeage: 'Bibliography is not assoicated with this project' })
-    return
-  }
-
+  // For editing, we only allow updating pp and notes, not reference_id
+  const allowedFields = ['pp', 'notes']
   for (const key in values) {
-    citation.set(key, values[key])
+    if (allowedFields.includes(key)) {
+      citation.set(key, values[key])
+    }
   }
   try {
     const transaction = await sequelizeConn.transaction()
