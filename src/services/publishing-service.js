@@ -62,7 +62,6 @@ export async function validateCitationInfo(project) {
       }
     }
   }
-
   return { isValid: true }
 }
 
@@ -143,7 +142,7 @@ export async function hasMediaFiles(projectId) {
     type: QueryTypes.SELECT,
   })
 
-  return results[0]?.count > 0
+  return results.count > 0
 }
 
 /**
@@ -407,11 +406,17 @@ export async function publishProject(projectId, userId, isCurator = false) {
       )
     }
 
-    // Create/update bibliographic reference
+    // Create/update bibliographic reference [TODO: Uncomment]
     await createBibliographicReference(project, userId, transaction)
 
     // Link member institutions
     await linkMemberInstitutions(projectId, project, transaction)
+
+    // Get user for changelog logging
+    const user = await models.User.findByPk(userId, { transaction })
+    if (!user) {
+      throw new Error('User not found')
+    }
 
     // Update project as published
     await project.update(
@@ -419,7 +424,7 @@ export async function publishProject(projectId, userId, isCurator = false) {
         published: 1,
         published_on: time(),
       },
-      { transaction }
+      { transaction, user }
     )
 
     await transaction.commit()

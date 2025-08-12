@@ -144,7 +144,7 @@ export async function savePublishingPreferences(req, res) {
         }
       })
 
-      await project.update(updateData, { transaction })
+      await project.update(updateData, { transaction, user: req.user })
 
       // Set exemplar media to publish if it exists
       if (project.exemplar_media_id) {
@@ -166,12 +166,12 @@ export async function savePublishingPreferences(req, res) {
         )
       }
 
-      // Create/update bibliographic reference
-      await publishingService.createBibliographicReference(
-        project,
-        userId,
-        transaction
-      )
+      // Create/update bibliographic reference [TODO: Uncomment]
+      // await publishingService.createBibliographicReference(
+      //   project,
+      //   userId,
+      //   transaction
+      // )
 
       await transaction.commit()
 
@@ -287,84 +287,84 @@ export async function publishProject(req, res) {
     }
 
     // Schedule asynchronous tasks after successful publication
-    try {
-      // Get the updated project with author info
-      const publishedProject = await models.Project.findByPk(projectId)
-      const user = await models.User.findByPk(userId)
+    // try {
+    //   // Get the updated project with author info
+    //   const publishedProject = await models.Project.findByPk(projectId)
+    //   const user = await models.User.findByPk(userId)
 
-      // Determine authors for DOI creation
-      let authors = publishedProject.article_authors?.trim()
-      if (!authors) {
-        const projectOwner = await models.User.findByPk(
-          publishedProject.user_id
-        )
-        if (projectOwner) {
-          authors = `${projectOwner.fname || ''} ${
-            projectOwner.lname || ''
-          }`.trim()
-        }
-        if (!authors && user) {
-          authors = `${user.fname || ''} ${user.lname || ''}`.trim()
-        }
-      }
+    //   // Determine authors for DOI creation
+    //   let authors = publishedProject.article_authors?.trim()
+    //   if (!authors) {
+    //     const projectOwner = await models.User.findByPk(
+    //       publishedProject.user_id
+    //     )
+    //     if (projectOwner) {
+    //       authors = `${projectOwner.fname || ''} ${
+    //         projectOwner.lname || ''
+    //       }`.trim()
+    //     }
+    //     if (!authors && user) {
+    //       authors = `${user.fname || ''} ${user.lname || ''}`.trim()
+    //     }
+    //   }
 
-      // Schedule DOI creation
-      await models.TaskQueue.create({
-        user_id: userId,
-        priority: 300,
-        handler: 'DOICreation',
-        parameters: {
-          project_id: projectId,
-          user_id: userId,
-          authors: authors,
-        },
-      })
+    //   // Schedule DOI creation
+    //   await models.TaskQueue.create({
+    //     user_id: userId,
+    //     priority: 300,
+    //     handler: 'DOICreation',
+    //     parameters: {
+    //       project_id: projectId,
+    //       user_id: userId,
+    //       authors: authors,
+    //     },
+    //   })
 
-      // Schedule project overview stats generation
-      await models.TaskQueue.create({
-        user_id: userId,
-        priority: 300,
-        handler: 'ProjectOverview',
-        parameters: {
-          project_ids: [projectId],
-        },
-      })
+    //   // Schedule project overview stats generation
+    //   await models.TaskQueue.create({
+    //     user_id: userId,
+    //     priority: 300,
+    //     handler: 'ProjectOverview',
+    //     parameters: {
+    //       project_ids: [projectId],
+    //     },
+    //   })
 
-      // Schedule publication notification email
-      const publishedMediaCount =
-        await publishingService.getPublishedMediaCount(
-          projectId,
-          publishedProject.publish_matrix_media_only
-        )
+    //   // Schedule publication notification email
+    //   const publishedMediaCount =
+    //     await publishingService.getPublishedMediaCount(
+    //       projectId,
+    //       publishedProject.publish_matrix_media_only
+    //     )
 
-      await models.TaskQueue.create({
-        user_id: userId,
-        priority: 500,
-        handler: 'Email',
-        parameters: {
-          template: 'publication_notification',
-          project_id: projectId,
-          project_admin: `${user.fname} ${user.lname}, ${user.email}`,
-          published_media_count: publishedMediaCount,
-        },
-      })
+    //   await models.TaskQueue.create({
+    //     user_id: userId,
+    //     priority: 500,
+    //     handler: 'Email',
+    //     parameters: {
+    //       template: 'publication_notification',
+    //       project_id: projectId,
+    //       project_admin: `${user.fname} ${user.lname}, ${user.email}`,
+    //       published_media_count: publishedMediaCount,
+    //     },
+    //   })
 
-      // Schedule media screenshot notification if needed (>27 media)
-      if (publishedMediaCount > 27) {
-        await models.TaskQueue.create({
-          user_id: userId,
-          priority: 500,
-          handler: 'Email',
-          parameters: {
-            template: 'publication_media_notification',
-            project_id: projectId,
-          },
-        })
-      }
-    } catch (taskError) {
-      // Log task scheduling errors but don't fail the publication
-      console.error('Error scheduling post-publication tasks:', taskError)
-    }
+    //   // Schedule media screenshot notification if needed (>27 media)
+    //   if (publishedMediaCount > 27) {
+    //     await models.TaskQueue.create({
+    //       user_id: userId,
+    //       priority: 500,
+    //       handler: 'Email',
+    //       parameters: {
+    //         template: 'publication_media_notification',
+    //         project_id: projectId,
+    //       },
+    //     })
+    //   }
+    // } catch (taskError) {
+    //   // Log task scheduling errors but don't fail the publication
+    //   console.error('Error scheduling post-publication tasks:', taskError)
+    // }
 
     return res.status(200).json({
       message: 'Project published successfully',
@@ -392,7 +392,12 @@ export async function getPublishingStatus(req, res) {
         'published_on',
         'journal_in_press',
         'journal_title',
+        'journal_year',
+        'journal_url',
+        'journal_volume',
+        'article_pp',
         'article_title',
+        'article_authors',
         'project_doi',
       ],
     })
