@@ -120,44 +120,89 @@ export async function getMaxPositionForFolioMedia(folioId) {
   return Math.max(position, 1)
 }
 
-export async function reorderMedia(folioId, linkIds, position) {
+export async function reorderMedia(folioId, linkIds, newPosition) {
   const transaction = await sequelizeConn.transaction()
 
-  await sequelizeConn.query(
-    `
-    UPDATE folios_x_media_files
-    SET position = position + ?
-    WHERE folio_id = ? AND position > ?
-    ORDER BY position DESC`,
-    {
-      replacements: [linkIds.length, folioId, position],
-      transaction: transaction,
-    }
-  )
+  try {
+    // For single item reordering (drag and drop)
+    if (linkIds.length === 1) {
+      const linkId = linkIds[0]
 
-  await sequelizeConn.query(
-    `
-    UPDATE folios_x_media_files
-    SET position=@tmp_position:=@tmp_position+1
-    WHERE (@tmp_position:=?)+1 AND folio_id = ? AND link_id IN (?)
-    ORDER BY position`,
-    {
-      replacements: [position, folioId, linkIds],
-      transaction: transaction,
-    }
-  )
+      // Get current position of the item being moved
+      const [[currentItem]] = await sequelizeConn.query(
+        `SELECT position FROM folios_x_media_files WHERE folio_id = ? AND link_id = ?`,
+        { replacements: [folioId, linkId], transaction }
+      )
 
-  await sequelizeConn.query(
-    `
-    UPDATE folios_x_media_files
-    SET position=@tmp_position:=@tmp_position+1
-    WHERE folio_id = ? AND (@tmp_position:=0)+1
-    ORDER BY position`,
-    {
-      replacements: [folioId],
-      transaction: transaction,
-    }
-  )
+      if (!currentItem) {
+        throw new Error('Link not found')
+      }
 
-  await transaction.commit()
+      const currentPosition = currentItem.position
+
+      if (currentPosition !== newPosition) {
+        if (currentPosition < newPosition) {
+          // Moving down: shift items between current and new position up
+          await sequelizeConn.query(
+            `UPDATE folios_x_media_files 
+             SET position = position - 1 
+             WHERE folio_id = ? AND position > ? AND position <= ?`,
+            {
+              replacements: [folioId, currentPosition, newPosition],
+              transaction,
+            }
+          )
+        } else {
+          // Moving up: shift items between new and current position down
+          await sequelizeConn.query(
+            `UPDATE folios_x_media_files 
+             SET position = position + 1 
+             WHERE folio_id = ? AND position >= ? AND position < ?`,
+            {
+              replacements: [folioId, newPosition, currentPosition],
+              transaction,
+            }
+          )
+        }
+
+        // Update the moved item to its new position
+        await sequelizeConn.query(
+          `UPDATE folios_x_media_files 
+           SET position = ? 
+           WHERE folio_id = ? AND link_id = ?`,
+          { replacements: [newPosition, folioId, linkId], transaction }
+        )
+      }
+    } else {
+      // Original logic for multiple items
+      await sequelizeConn.query(
+        `
+        UPDATE folios_x_media_files
+        SET position = position + ?
+        WHERE folio_id = ? AND position >= ?
+        ORDER BY position DESC`,
+        {
+          replacements: [linkIds.length, folioId, newPosition],
+          transaction: transaction,
+        }
+      )
+
+      await sequelizeConn.query(
+        `
+        UPDATE folios_x_media_files
+        SET position=@tmp_position:=@tmp_position+1
+        WHERE (@tmp_position:=?-1)+1 AND folio_id = ? AND link_id IN (?)
+        ORDER BY position`,
+        {
+          replacements: [newPosition, folioId, linkIds],
+          transaction: transaction,
+        }
+      )
+    }
+
+    await transaction.commit()
+  } catch (error) {
+    await transaction.rollback()
+    throw error
+  }
 }

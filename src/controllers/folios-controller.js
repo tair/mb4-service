@@ -206,9 +206,15 @@ export async function createMedia(req, res) {
 
 export async function reorderMedia(req, res) {
   const projectId = req.project.project_id
-  const folioId = req.params.folioId
-  const linkIds = req.param.link_ids
-  const index = req.body.index
+  const folioId = parseInt(req.params.folioId)
+  const linkIds = parseIntArray(req.body.link_ids)
+  const index = parseInt(req.body.index)
+
+  if (!linkIds || linkIds.length === 0 || !index || isNaN(index)) {
+    res.status(400).json({ message: 'Invalid parameters' })
+    return
+  }
+
   const folio = await models.Folio.findByPk(folioId)
   if (folio == null || folio.project_id != projectId) {
     res.status(404).json({ message: 'Folio is not found' })
@@ -219,8 +225,8 @@ export async function reorderMedia(req, res) {
     await service.reorderMedia(folioId, linkIds, index)
     res.status(200).json({ status: true })
   } catch (e) {
-    console.log(e)
-    res.status(500).json({ message: 'Failed to create media' })
+    console.log('Failed to reorder media:', e)
+    res.status(500).json({ message: 'Failed to reorder media' })
   }
 }
 
