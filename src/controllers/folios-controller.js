@@ -207,8 +207,8 @@ export async function createMedia(req, res) {
 export async function reorderMedia(req, res) {
   const projectId = req.project.project_id
   const folioId = req.params.folioId
-  const linkIds = req.param.link_ids
-  const index = req.body.index
+  const linkIds = parseIntArray(req.body.link_ids)
+  const index = parseInt(req.body.index)
   const folio = await models.Folio.findByPk(folioId)
   if (folio == null || folio.project_id != projectId) {
     res.status(404).json({ message: 'Folio is not found' })
@@ -219,8 +219,8 @@ export async function reorderMedia(req, res) {
     await service.reorderMedia(folioId, linkIds, index)
     res.status(200).json({ status: true })
   } catch (e) {
-    console.log(e)
-    res.status(500).json({ message: 'Failed to create media' })
+    console.log('Reorder media error:', e)
+    res.status(500).json({ message: 'Failed to reorder media' })
   }
 }
 
@@ -265,18 +265,30 @@ export async function deleteMedia(req, res) {
   }
 }
 
-// TODO(kenzley): Implement a real search.
+// NOTE: This endpoint is deprecated - AddMediaDialog now uses client-side search
+// Keeping for backward compatibility only
 export async function searchMedia(req, res) {
   const projectId = req.project.project_id
   const folioId = req.params.folioId
-  const projectMedia = await mediaService.getMediaFiles(projectId)
-  const folioMedia = await service.getMedia(projectId, folioId)
-  const folioMediaSet = new Set(folioMedia.map((m) => m.media_id))
-  res.status(200).json({
-    media_ids: projectMedia
-      .filter((m) => !folioMediaSet.has(m.media_id))
-      .map((m) => m.media_id),
-  })
+
+  try {
+    // Get media already in this folio to exclude from results
+    const folioMedia = await service.getMedia(projectId, folioId)
+    const folioMediaSet = new Set(folioMedia.map((m) => m.media_id))
+
+    // Return all project media not in folio (for backward compatibility)
+    const projectMedia = await mediaService.getMediaFiles(projectId)
+    res.status(200).json({
+      media_ids: projectMedia
+        .filter((m) => !folioMediaSet.has(m.media_id))
+        .map((m) => m.media_id),
+    })
+  } catch (error) {
+    console.error('Error getting folio media:', error)
+    res.status(500).json({
+      error: 'An error occurred while fetching media files.',
+    })
+  }
 }
 
 function convertFolioResponse(row) {
