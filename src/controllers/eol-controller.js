@@ -202,6 +202,8 @@ export async function importMedia(req, res) {
             copyright_info: item.copyright_info?.name,
             eol_id: item.id,
             media_type: 'image',
+            url: urls.get(id),
+            url_description: 'Automatically pulled from EOL.org API',
           },
           {
             user: req.user,
