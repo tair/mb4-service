@@ -58,8 +58,8 @@ sequelizeConn
   .sync()
   .then(() => {
     server.listen(port)
-    // Start the project stats dump scheduler
-    // startScheduler()
+    // Start the project stats dump scheduler (controlled by SCHEDULER_ENABLED env var)
+    startScheduler()
   })
   .catch((err) => {
     console.log(err)
