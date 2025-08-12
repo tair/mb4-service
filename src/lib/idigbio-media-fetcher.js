@@ -46,6 +46,7 @@ async function fetchiDigBioImagesForTaxonName(taxon, size = 1) {
         params,
       }
     )
+    
     if (response.status != 200) {
       return {
         success: false,
@@ -58,7 +59,9 @@ async function fetchiDigBioImagesForTaxonName(taxon, size = 1) {
     if (items == null || !Array.isArray(items) || items.length == 0) {
       return {
         success: false,
-        error: 'No results found on iDigBio.org for this taxon',
+        retry: false, // This is legitimate "no results found", not a retriable error
+        error: 'No search results found for this taxon',
+        errorType: 'no_results',
       }
     }
 
@@ -89,6 +92,8 @@ async function fetchiDigBioImagesForTaxonName(taxon, size = 1) {
       const [mediaCopyrightPermission, mediaCopyrightLicense] =
         getCopyrightInfo(imageLicense)
       const imageUrl = IMAGE_URL_PATH + item.uuid
+
+
 
       const attributionId = item['indexTerms']['recordset']
       const attribution = attributions.get(attributionId)
@@ -141,10 +146,20 @@ async function fetchiDigBioImagesForTaxonName(taxon, size = 1) {
       results: results,
     }
   } catch (e) {
+    // Distinguish between network/timeout errors (retriable) vs other errors
+    const isNetworkError = 
+      e.code === 'ECONNABORTED' || // axios timeout
+      e.code === 'ENOTFOUND' ||   // DNS errors
+      e.code === 'ECONNRESET' ||  // connection reset
+      e.code === 'ETIMEDOUT' ||   // general timeout
+      e.message.includes('timeout') ||
+      e.message.includes('Network Error')
+    
     return {
       success: false,
-      retry: true,
+      retry: isNetworkError,
       error: e.message,
+      errorType: isNetworkError ? 'network' : 'other',
     }
   }
 }

@@ -73,6 +73,11 @@ export default class CharacterOrdering extends Model {
             fields: [{ name: 'matrix_id' }],
           },
         ],
+        hooks: {
+          beforeUpdate: (characterOrdering) => {
+            characterOrdering.last_modified_on = time()
+          },
+        },
       }
     )
   }

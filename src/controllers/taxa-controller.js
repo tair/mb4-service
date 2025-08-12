@@ -5,6 +5,7 @@ import * as matrixService from '../services/matrix-service.js'
 import * as partitionService from '../services/partition-service.js'
 import * as taxaService from '../services/taxa-service.js'
 import { models } from '../models/init-models.js'
+import { getTaxonHash } from '../models/taxon.js'
 import {
   ModelRefencialMapper,
   ModelReferencialConfig,
@@ -74,23 +75,74 @@ export async function createTaxon(req, res) {
 }
 
 export async function createTaxa(req, res) {
-  const taxa = req.body
+  const taxa = req.body.taxa
+  const projectId = req.project.project_id
 
   try {
     const results = []
     const transaction = await sequelizeConn.transaction()
+
+    // First pass: prepare all taxon objects and collect hashes
+    const taxonHashes = []
+    const taxonObjects = new Map()
+
     for (const values of taxa) {
       const taxon = models.Taxon.build(values)
       taxon.set({
-        project_id: req.project.project_id,
+        project_id: projectId,
         user_id: req.user.user_id,
       })
-      await taxon.save({
-        transaction,
-        user: req.user,
-      })
-      results.push(taxon)
+
+      const hash = getTaxonHash(taxon)
+      taxonHashes.push(hash)
+      taxonObjects.set(hash, { taxon, values })
     }
+
+    // Bulk search for existing taxa by hash
+    let existingTaxaMap = new Map()
+    if (taxonHashes.length > 0) {
+      const placeholders = taxonHashes.map(() => '?').join(',')
+      const query = `
+        SELECT t.*
+        FROM taxa t
+        WHERE t.project_id = ?
+        AND t.taxon_hash IN (${placeholders})
+      `
+      const replacements = [projectId, ...taxonHashes]
+
+      const foundTaxa = await sequelizeConn.query(query, {
+        replacements,
+        transaction: transaction,
+        type: sequelizeConn.QueryTypes.SELECT,
+      })
+
+      // Create a map of existing taxa by their hash
+      if (Array.isArray(foundTaxa)) {
+        for (const taxon of foundTaxa) {
+          if (taxon && taxon.taxon_hash) {
+            existingTaxaMap.set(taxon.taxon_hash, taxon)
+          }
+        }
+      }
+    }
+
+    // Second pass: create or use existing taxa
+    for (const [hash, { taxon, values }] of taxonObjects) {
+      const existingTaxon = existingTaxaMap.get(hash)
+
+      if (existingTaxon) {
+        // Use existing taxon - just return it in results
+        results.push(existingTaxon)
+      } else {
+        // Create new taxon
+        await taxon.save({
+          transaction,
+          user: req.user,
+        })
+        results.push(taxon)
+      }
+    }
+
     await transaction.commit()
     res.status(200).json({ taxa: results })
   } catch (e) {
@@ -335,14 +387,14 @@ export async function createCitation(req, res) {
 
   const taxon = await models.Taxon.findByPk(taxonId)
   if (taxon == null) {
-    res.status(404).json({ messeage: 'Unable to find taxon' })
+    res.status(404).json({ message: 'Unable to find taxon' })
     return
   }
 
   if (taxon.project_id != projectId) {
     res
       .status(403)
-      .json({ messeage: 'Taxon is not assoicated with this project' })
+      .json({ message: 'Taxon is not associated with this project' })
     return
   }
 
@@ -350,14 +402,14 @@ export async function createCitation(req, res) {
   const referenceId = req.body.citation.reference_id
   const bibliography = await models.BibliographicReference.findByPk(referenceId)
   if (bibliography == null) {
-    res.status(404).json({ messeage: 'Unable to find bibliography' })
+    res.status(404).json({ message: 'Unable to find bibliography' })
     return
   }
 
   if (bibliography.project_id != projectId) {
     res
       .status(403)
-      .json({ messeage: 'Bibliography is not assoicated with this project' })
+      .json({ message: 'Bibliography is not associated with this project' })
     return
   }
 
@@ -406,40 +458,31 @@ export async function editCitation(req, res) {
 
   const taxon = await models.Taxon.findByPk(taxonId)
   if (taxon == null) {
-    res.status(404).json({ messeage: 'Unable to find taxon' })
+    res.status(404).json({ message: 'Unable to find taxon' })
     return
   }
 
   if (taxon.project_id != projectId) {
     res
       .status(403)
-      .json({ messeage: 'Taxon is not assoicated with this project' })
+      .json({ message: 'Taxon is not associated with this project' })
     return
   }
 
   const citation = await models.TaxaXBibliographicReference.findByPk(citationId)
-  if (citation == null) {
-    res.status(404).json({ messeage: 'Unable to find citation' })
+  if (citation == null || citation.taxon_id != taxonId) {
+    res.status(404).json({ message: 'Unable to find citation' })
     return
   }
 
   const values = req.body.citation
-  const referenceId = req.body.citation.reference_id
-  const bibliography = await models.BibliographicReference.findByPk(referenceId)
-  if (bibliography == null) {
-    res.status(404).json({ messeage: 'Unable to find bibliography' })
-    return
-  }
 
-  if (bibliography.project_id != projectId) {
-    res
-      .status(403)
-      .json({ messeage: 'Bibliography is not assoicated with this project' })
-    return
-  }
-
+  // For editing, we only allow updating pp and notes, not reference_id
+  const allowedFields = ['pp', 'notes']
   for (const key in values) {
-    citation.set(key, values[key])
+    if (allowedFields.includes(key)) {
+      citation.set(key, values[key])
+    }
   }
   try {
     const transaction = await sequelizeConn.transaction()
@@ -490,5 +533,64 @@ export async function deleteCitations(req, res) {
     await transaction.rollback()
     res.status(200).json({ message: "Error deleting taxa's citations" })
     console.log('Error deleting citations', e)
+  }
+}
+
+export async function updateExtinctStatusBatch(req, res) {
+  const projectId = req.project.project_id
+  const taxonIds = req.body.ids
+  const isExtinct = req.body.extinct ? 1 : 0
+
+  if (!Array.isArray(taxonIds) || taxonIds.length === 0) {
+    return res.status(400).json({
+      message: 'Invalid taxon IDs provided',
+    })
+  }
+
+  // Validate extinct status
+  if (typeof req.body.extinct !== 'number' && typeof req.body.extinct !== 'boolean') {
+    return res.status(400).json({
+      message: 'Invalid extinct status. Must be 0 or 1',
+    })
+  }
+
+  try {
+    // Verify all taxa exist and belong to this project
+    const isInProject = await taxaService.isTaxaInProject(taxonIds, projectId)
+    if (!isInProject) {
+      return res.status(400).json({
+        message: 'Not all taxa are in the specified project',
+      })
+    }
+
+    const transaction = await sequelizeConn.transaction()
+    
+    // Update extinct status for all specified taxa
+    await models.Taxon.update(
+      { is_extinct: isExtinct },
+      {
+        where: {
+          taxon_id: taxonIds,
+          project_id: projectId,
+        },
+        transaction: transaction,
+        individualHooks: true,
+        user: req.user,
+      }
+    )
+
+    await transaction.commit()
+    
+    res.status(200).json({
+      status: 'ok',
+      message: `Successfully updated ${taxonIds.length} taxa`,
+      updated_count: taxonIds.length,
+    })
+  } catch (e) {
+    console.log('Error updating extinct status:', e)
+    res.status(500).json({
+      status: 'error',
+      errors: ['Failed to update extinct status with server error'],
+    })
   }
 }

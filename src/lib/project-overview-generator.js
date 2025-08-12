@@ -939,11 +939,8 @@ export class ProjectOverviewGenerator {
           LEFT JOIN project_members_x_groups AS pmxg
             ON pmxg.membership_id = pxu.link_id
           WHERE
-            (
-              mto.group_id = pmxg.group_id OR
-              mto.user_id IS NULL OR
-              mto.group_id IS NULL) AND
-            m.project_id = ?
+            m.project_id = ? AND
+            (mto.group_id = pmxg.group_id OR mto.group_id IS NULL)
           GROUP BY pxu.user_id, m.matrix_id, ccl.character_id) AS lso
           ON lso.character_id = lco. character_id AND
             lso.matrix_id = lco.matrix_id

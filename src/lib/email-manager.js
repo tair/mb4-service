@@ -53,7 +53,7 @@ export class EmailManager {
       to: to,
       cc: options.cc,
       bcc: options.bcc,
-      subject: options.subject,
+      subject: parameters.subject || options.subject,
       html: htmlTemplate,
       text: textTemplate,
       attachments: attachments,
@@ -108,6 +108,7 @@ const DEFAULT_EMAIL_OPTIONS = {
     from: 'no-reply@morphobank.org',
   },
   project_member_invitation: {
+    subject: 'Invitation to Morphobank project',
     from: 'no-reply@morphobank.org',
     include_logo: true,
   },

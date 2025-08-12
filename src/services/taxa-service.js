@@ -147,6 +147,17 @@ export async function getiDigBioInfo(projectId) {
   return rows
 }
 
+export async function getPbdbInfo(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+      SELECT taxon_id, pbdb_pulled_on, pbdb_taxon_id
+      FROM taxa
+      WHERE project_id = ?`,
+    { replacements: [projectId] }
+  )
+  return rows
+}
+
 export async function getTaxonIdsByHash(projectId, hashes) {
   const [rows] = await sequelizeConn.query(
     `
@@ -172,6 +183,11 @@ export async function isTaxaInProject(taxaIds, projectId) {
 }
 
 export async function getMatrixIds(taxaIds) {
+  // If no taxa IDs provided, return empty array to avoid SQL syntax error
+  if (!taxaIds || taxaIds.length === 0) {
+    return []
+  }
+
   const [rows] = await sequelizeConn.query(
     'SELECT taxon_id, matrix_id FROM matrix_taxa_order WHERE taxon_id IN (?)',
     {

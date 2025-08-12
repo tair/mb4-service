@@ -364,6 +364,10 @@ export async function getRuleViolations(req, res) {
 
 export async function getCharacterChanges(req, res) {
   const characterId = parseInt(req.body.character_id)
+  if (isNaN(characterId) || characterId <= 0) {
+    res.status(400).json({ ok: false, errors: ['Invalid character ID'] })
+    return
+  }
   await applyMatrix(req, res, (service) =>
     service.getCharacterChanges(characterId)
   )
@@ -851,10 +855,10 @@ export async function applyMatrix(req, res, func) {
     res.status(200).json(data)
     return true
   } catch (e) {
-    console.log('Error', e)
     if (e instanceof UserError) {
       res.status(e.getStatus()).json({ ok: false, errors: [e.message] })
     } else {
+      console.log('Error', e)
       res.status(500).json({ ok: false, errors: ['Unknown error'] })
     }
     return false

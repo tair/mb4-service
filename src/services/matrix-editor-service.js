@@ -1,4 +1,5 @@
 import sequelizeConn from '../util/db.js'
+import { QueryTypes } from 'sequelize'
 import { CELL_BATCH_TYPES } from '../util/cells.js'
 import { MATRIX_OPTIONS } from '../util/matrix.js'
 import { Table } from '../lib/table.js'
@@ -1382,7 +1383,7 @@ export default class MatrixEditorService {
     }
   }
 
-  async setTaxaAccess(taxaIds, userId, groupId) {
+  async setTaxaAccess(taxaIds, groupId) {
     await this.checkCanDo(
       'editTaxon',
       'You are not allowed to modify taxa in this matrix'
@@ -1398,7 +1399,6 @@ export default class MatrixEditorService {
 
     await models.MatrixTaxaOrder.update(
       {
-        user_id: userId,
         group_id: groupId,
       },
       {
@@ -1415,7 +1415,6 @@ export default class MatrixEditorService {
     await transaction.commit()
     return {
       taxa_ids: taxaIds,
-      user_id: userId,
       group_id: groupId,
     }
   }
@@ -2764,13 +2763,9 @@ export default class MatrixEditorService {
         pmxg.membership_id = pxu.link_id
       WHERE
         m.matrix_id = ? AND pxu.user_id = ? AND
-      (mto.group_id = pmxg.group_id OR mto.group_id IS NULL OR mto.user_id IS NULL OR mto.user_id = ?)`,
+      (mto.group_id = pmxg.group_id OR mto.group_id IS NULL)`,
       {
-        replacements: [
-          this.matrix.matrix_id,
-          this.user.user_id,
-          this.user.user_id,
-        ],
+        replacements: [this.matrix.matrix_id, this.user.user_id],
       }
     )
     if (allowedTaxaRows.length == 0) {
@@ -2920,16 +2915,155 @@ export default class MatrixEditorService {
   }
 
   async getCharacterChanges(characterId) {
+    // Validate characterId parameter
+    if (!characterId || isNaN(characterId) || characterId <= 0) {
+      throw new UserError('Invalid character ID')
+    }
+
     const character = await models.Character.findByPk(characterId)
     if (character == null || character.project_id != this.project.project_id) {
       throw new UserError('Character is not associated with this project')
     }
 
+    // Get change log entries for this character and its states
+    const query = `
+      SELECT DISTINCT
+          wcl.log_id, wcl.log_datetime log_datetime, wcl.user_id, wcl.changetype, wcl.logged_table_num, wcl.logged_row_id,
+          wcl.snapshot, wcl.unit_id, wu.email, wu.fname, wu.lname
+      FROM ca_change_log wcl
+      LEFT JOIN ca_change_log_subjects AS wcls ON wcl.log_id = wcls.log_id
+      LEFT JOIN ca_users AS wu ON wcl.user_id = wu.user_id
+      WHERE
+          (
+              (wcl.logged_table_num = 3) AND 
+              (wcl.logged_row_id = ?)
+          )
+      UNION
+      SELECT DISTINCT
+          wcl.log_id, wcl.log_datetime, wcl.user_id, wcl.changetype, wcl.logged_table_num, wcl.logged_row_id,
+          wcl.snapshot, wcl.unit_id, wu.email, wu.fname, wu.lname
+      FROM ca_change_log wcl
+      LEFT JOIN ca_change_log_subjects AS wcls ON wcl.log_id = wcls.log_id
+      LEFT JOIN ca_users AS wu ON wcl.user_id = wu.user_id
+      WHERE
+           (
+              (wcls.subject_table_num = 3) AND 
+              (wcls.subject_row_id = ?)
+          )
+      ORDER BY log_datetime
+    `
+
+    const rawLogs = await sequelizeConn.query(query, {
+      replacements: [characterId, characterId],
+      type: QueryTypes.SELECT,
+    })
+
+    // Process the raw log data into a format suitable for the frontend
+    const processedLogs = await this.processChangeLogData(rawLogs, characterId)
+
+    return { logs: processedLogs }
+  }
+
+  async processChangeLogData(rawLogs, characterId) {
+    const changeTypes = {
+      I: 'Added',
+      U: 'Edited',
+      D: 'Deleted',
+    }
+
     const logs = []
 
-    // TODO: Implement this when the datamodel is completed.
+    for (const logEntry of rawLogs) {
+      const changes = []
+      let snapshot = {}
 
-    return { logs }
+      // Safely parse the snapshot JSON with error handling
+      if (logEntry.snapshot) {
+        snapshot = logEntry.snapshot
+      }
+
+      // Format datetime with timezone
+      const datetime = new Date(logEntry.log_datetime * 1000).toLocaleString(
+        'en-US',
+        {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          timeZoneName: 'short',
+        }
+      )
+
+      // Format user name with email
+      let userName =
+        logEntry.fname && logEntry.lname
+          ? `${logEntry.fname} ${logEntry.lname}`
+          : 'Unknown User'
+
+      if (logEntry.email) {
+        userName += `<br/>(${logEntry.email})`
+      }
+
+      // Character table changes
+      for (const [field, value] of Object.entries(snapshot)) {
+        let description = value || '<BLANK>'
+        let label = field
+
+        switch (field) {
+          case 'name':
+            label = 'Character Name'
+            break
+          case 'description':
+            label = 'Character Description'
+            break
+          case 'ordering':
+            label = 'Character Ordering'
+            description = value === 1 ? 'Ordered' : 'Unordered'
+            break
+          case 'type': {
+            label = 'Character Type'
+            const types = { 0: 'Discrete', 1: 'Continuous', 2: 'Meristic' }
+            description = types[value] || value
+            break
+          }
+          default:
+            // Skip internal fields
+            if (
+              [
+                'character_id',
+                'project_id',
+                'user_id',
+                'created_on',
+                'last_modified_on',
+                'source',
+              ].includes(field)
+            ) {
+              continue
+            }
+        }
+
+        changes.push({
+          label: label,
+          description: String(description),
+        })
+      }
+
+      // Only add log entry if there are changes to display
+      if (changes.length > 0) {
+        logs.push({
+          datetime: datetime,
+          user: userName,
+          changetype: changeTypes[logEntry.changetype] || logEntry.changetype,
+          changes: changes
+            .map((change) => `${change.label}: ${change.description}`)
+            .join('<br/>'),
+        })
+      }
+    }
+
+    return logs
   }
 
   async setCellStates(taxaIds, characterIds, stateIds, options) {
@@ -4668,8 +4802,15 @@ export default class MatrixEditorService {
 
   getOptions() {
     const options = {}
-    for (const key of MATRIX_OPTIONS) {
-      options[key] = parseInt(this.matrix.other_options[key])
+    if (this.matrix.other_options) {
+      for (const key of MATRIX_OPTIONS) {
+        options[key] = parseInt(this.matrix.other_options[key])
+      }
+    } else {
+      // Set default values when other_options is null
+      for (const key of MATRIX_OPTIONS) {
+        options[key] = 0 // Default to 0 for all options
+      }
     }
     return options
   }
@@ -5399,14 +5540,10 @@ export default class MatrixEditorService {
       LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
       WHERE
         ccl.matrix_id = ? AND pxu.user_id = ? AND
-        (mto.group_id = pmxg.group_id OR mto.user_id = ? OR mto.user_id IS NULL OR mto.group_id IS NULL)
+        (mto.group_id = pmxg.group_id OR mto.group_id IS NULL)
       GROUP BY ccl.character_id`,
       {
-        replacements: [
-          this.matrix.matrix_id,
-          this.user.user_id,
-          this.user.user_id,
-        ],
+        replacements: [this.matrix.matrix_id, this.user.user_id],
       }
     )
 
@@ -6157,7 +6294,7 @@ export default class MatrixEditorService {
       WHERE
         (c.state_id IS NULL OR c.is_npa = 1) AND
         pxu.user_id = ? AND cxm.matrix_id = ? AND cxm.set_by_automation = 1 AND
-        (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id IS NULL OR mto.user_id = pxu.user_id) AND
+        (mto.group_id = pmxg.group_id OR mto.group_id IS NULL) AND
         cxm.taxon_id IN (?) AND cxm.character_id IN (?)`,
       {
         replacements: [
@@ -6244,13 +6381,12 @@ export default class MatrixEditorService {
       LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
       WHERE
         cxm.matrix_id = ? AND cxm.set_by_automation = 1 AND
-        (mto.group_id = pmxg.group_id OR mto.user_id IS NULL OR mto.group_id IS NULL OR mto.user_id = ?) AND
+        (mto.group_id = pmxg.group_id OR mto.group_id IS NULL) AND
         cxm.taxon_id IN (?) AND cxm.character_id IN (?)`,
       {
         replacements: [
           this.user.user_id,
           this.matrix.matrix_id,
-          this.user.user_id,
           taxaIds,
           characterIds,
         ],
@@ -6459,14 +6595,9 @@ export default class MatrixEditorService {
       LEFT JOIN project_members_x_groups AS pmxg ON pmxg.membership_id = pxu.link_id
       WHERE
         m.matrix_id = ? AND pxu.user_id = ? AND mto.taxon_id IN (?) AND
-        (mto.group_id = pmxg.group_id OR mto.group_id IS NULL OR mto.user_id IS NULL OR mto.user_id = ?)`,
+        (mto.group_id = pmxg.group_id OR mto.group_id IS NULL)`,
       {
-        replacements: [
-          this.matrix.matrix_id,
-          this.user.user_id,
-          taxaIds,
-          this.user.user_id,
-        ],
+        replacements: [this.matrix.matrix_id, this.user.user_id, taxaIds],
       }
     )
     if (count != taxaIds.length) {

@@ -3,6 +3,7 @@ import http from 'http'
 import process from 'node:process'
 
 import sequelizeConn from './util/db.js'
+import { startScheduler } from './util/scheduler.js'
 
 const normalizePort = (val) => {
   var port = parseInt(val, 10)
@@ -57,6 +58,8 @@ sequelizeConn
   .sync()
   .then(() => {
     server.listen(port)
+    // Start the project stats dump scheduler (controlled by SCHEDULER_ENABLED env var)
+    startScheduler()
   })
   .catch((err) => {
     console.log(err)

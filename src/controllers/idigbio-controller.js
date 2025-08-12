@@ -5,7 +5,7 @@ import * as mediaService from '../services/media-service.js'
 import * as taxaService from '../services/taxa-service.js'
 import * as specimenService from '../services/specimen-service.js'
 import { iDigBioMediaFetcher } from '../lib/idigbio-media-fetcher.js'
-import { MediaUploader } from '../lib/media-uploader.js'
+import { S3MediaUploader } from '../lib/s3-media-uploader.js'
 import { downloadUrl } from '../util/url.js'
 import { time } from '../util/util.js'
 import { normalize } from '../util/string.js'
@@ -20,6 +20,7 @@ export async function fetchMedia(req, res) {
   try {
     const projectId = req.params.projectId
     const taxonIds = req.body.taxon_ids
+    const size = req.body.size ?? 1
     if (!taxonIds || taxonIds.length == 0) {
       res.status(400).json({ message: 'You must defined taxa to fetch' })
       return
@@ -31,7 +32,7 @@ export async function fetchMedia(req, res) {
       return
     }
     const fetcher = new iDigBioMediaFetcher()
-    const mediaInfoPromiseMap = fetcher.fetchTaxa(taxonNames)
+    const mediaInfoPromiseMap = fetcher.fetchTaxa(taxonNames, size)
 
     const uuids = new Set(await mediaService.getUUIDs(projectId))
 
@@ -71,7 +72,7 @@ export async function fetchMedia(req, res) {
             taxonomy: info.idigbio_taxonomy,
             source: info.source,
             link: info.link,
-            copyright_info: info.tmp_media_copyright_info,
+            copyright_info: info.tmp_media_copyright_info ? { name: info.tmp_media_copyright_info } : null,
             copyright_permission: info.tmp_media_copyright_permission,
             copyright_license: info.tmp_media_copyright_license,
           })
@@ -80,7 +81,15 @@ export async function fetchMedia(req, res) {
         taxon.idigbio_no_results_on = null
         taxon.idigbio_pulled_on = time()
       } else {
-        taxon.idigbio_no_results_on = time()
+        result.retry = mediaInfo.retry
+        result.error = mediaInfo.error
+        result.errorType = mediaInfo.errorType
+        
+        // Only mark as "no results" if it's a legitimate no-media situation, not a timeout/network error
+        if (mediaInfo.retry === false && (mediaInfo.errorType === 'no_results' || mediaInfo.errorType === 'no_media')) {
+          taxon.idigbio_no_results_on = time()
+        }
+        // For timeout/network errors (retry=true), don't mark as no_results so user can try again
       }
 
       await taxon.save({
@@ -127,12 +136,12 @@ export async function importMedia(req, res) {
   const specimentInfoPromiseMap =
     fetcher.getSpecimenInfoBySpecimenUUID(specimenUUIDs)
 
-  // Asynchronously download the URLs to the local file system so that we can
-  // incremently add images to the database without waiting for the entire
-  // set of files to download.
+  // Asynchronously download the URLs to temporary files and upload to S3 so that we can
+  // incrementally add images to the database without waiting for the entire
+  // set of files to download and process.
   const files = new Map()
   const transaction = await sequelizeConn.transaction()
-  const mediaUploader = new MediaUploader(transaction, req.user)
+  const mediaUploader = new S3MediaUploader(transaction, req.user)
   try {
     for (const [id, url] of urls) {
       files.set(id, downloadUrl(url))
@@ -168,6 +177,8 @@ export async function importMedia(req, res) {
         ) {
           const specimenItem = specimenInfo.items[0]
           const terms = specimenItem['indexTerms']
+          
+
           const specimen = await models.Specimen.create(
             {
               user_id: userId,
@@ -198,11 +209,11 @@ export async function importMedia(req, res) {
                 genus: terms.genus,
                 specific_epithet: terms.specificepithet,
                 subspecific_epithet: terms.infraspecificepithet ?? '',
-                higher_taxon_kingdom: terms.kingdom,
-                higher_taxon_phylum: terms.phylum,
-                higher_taxon_class: terms.class,
-                higher_taxon_order: terms.order,
-                higher_taxon_family: terms.family,
+                higher_taxon_kingdom: terms.kingdom ?? '',
+                higher_taxon_phylum: terms.phylum ?? '',
+                higher_taxon_class: terms.class ?? '',
+                higher_taxon_order: terms.order ?? '',
+                higher_taxon_family: terms.family ?? '',
               },
               transaction: transaction,
             })
@@ -213,12 +224,12 @@ export async function importMedia(req, res) {
                   project_id: projectId,
                   genus: terms.genus,
                   specific_epithet: terms.specificepithet,
-                  subspecific_epithet: terms.infraspecificepithet,
-                  higher_taxon_kingdom: terms.kingdom,
-                  higher_taxon_phylum: terms.phylum,
-                  higher_taxon_class: terms.class,
-                  higher_taxon_order: terms.order,
-                  higher_taxon_family: terms.family,
+                  subspecific_epithet: terms.infraspecificepithet ?? '',
+                  higher_taxon_kingdom: terms.kingdom ?? '',
+                  higher_taxon_phylum: terms.phylum ?? '',
+                  higher_taxon_class: terms.class ?? '',
+                  higher_taxon_order: terms.order ?? '',
+                  higher_taxon_family: terms.family ?? '',
                   notes: `Imported from iDigBio. specimen uuid: ${specimenUUID}`,
                 },
                 {
@@ -270,8 +281,6 @@ export async function importMedia(req, res) {
             published: 0,
             access: 0,
             cataloguing_status: 1,
-            url: link,
-            url_description: `Automatically pulled from iDigBio.org API. UUID: ${id}`,
             is_copyrighted: 1,
             copyright_permission: item.copyright_permission,
             copyright_license: item.copyright_license,
@@ -317,6 +326,7 @@ export async function importMedia(req, res) {
     }
 
     await transaction.commit()
+    mediaUploader.commit()
     res.status(200).json({ success: true })
   } catch (e) {
     await transaction.rollback()

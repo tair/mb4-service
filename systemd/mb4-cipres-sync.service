@@ -1,0 +1,15 @@
+[Unit]
+Description=MB4 CIPRES Sync Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=mb4
+Group=mb4
+WorkingDirectory=/path/to/mb4-service
+ExecStart=/path/to/mb4-service/sync_mb4_cipres_improved.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target 

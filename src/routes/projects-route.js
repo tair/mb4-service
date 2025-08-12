@@ -8,6 +8,7 @@ import eolRouter from './eol-route.js'
 import foliosRouter from './folios-route.js'
 import iDigBioRouter from './idigbio-route.js'
 import institutionRouter from './institution-route.js'
+import pbdbRouter from './pbdb-route.js'
 import matrixRouter from './matrix-route.js'
 import mediaRouter from './media-route.js'
 import mediaViewsRouter from './media-views-route.js'
@@ -16,13 +17,25 @@ import projectUsersRouter from './project-users-route.js'
 import specimensRouter from './specimens-route.js'
 import taxaRouter from './taxa-route.js'
 import * as controller from '../controllers/project-controller.js'
-import { authenticateToken } from './auth-interceptor.js'
+import {
+  authenticateToken,
+  maybeAuthenticateToken,
+} from './auth-interceptor.js'
 import { authorizeProject } from './project-interceptor.js'
 import { authorizeUser } from './user-interceptor.js'
 
 // Configure multer for handling form data
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, '/tmp/') // Use temp directory
+    },
+    filename: (req, file, cb) => {
+      // Generate unique filename
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9)
+      cb(null, file.fieldname + '-' + uniqueSuffix + '-' + file.originalname)
+    },
+  }),
   limits: {
     fileSize: 9 * 1024 * 1024, // 9MB limit
   },
@@ -44,9 +57,33 @@ projectsRouter.get('/journals', controller.getJournalList)
 // Add a new route for retrieving journal cover
 projectsRouter.get('/journal-cover', controller.getJournalCover)
 
+// Overview endpoint with optional authentication (must be before /:projectId middleware)
+projectsRouter.get(
+  '/:projectId/overview',
+  maybeAuthenticateToken,
+  controller.getOverview
+)
+
 // Project creation and DOI retrieval routes
-projectsRouter.post('/create', upload.single('file'), controller.createProject)
+projectsRouter.post(
+  '/create',
+  upload.fields([
+    { name: 'journal_cover', maxCount: 1 },
+    { name: 'exemplar_media', maxCount: 1 }
+  ]),
+  controller.createProject
+)
 projectsRouter.post('/doi', controller.retrieveDOI)
+
+// Add edit route with file upload support before sub-router
+projectsRouter.post(
+  '/:projectId/edit',
+  upload.fields([
+    { name: 'journal_cover', maxCount: 1 },
+    { name: 'exemplar_media', maxCount: 1 }
+  ]),
+  controller.editProject
+)
 
 // This is a sub-route focused on /projects/<ID>
 const projectRouter = express.Router({ mergeParams: true })
@@ -62,6 +99,7 @@ projectRouter.use('/folios', foliosRouter)
 projectRouter.use('/groups', projectMemberGroupsRouter)
 projectRouter.use('/idigbio', iDigBioRouter)
 projectRouter.use('/institutions', institutionRouter)
+projectRouter.use('/pbdb', pbdbRouter)
 projectRouter.use('/matrices', matrixRouter)
 projectRouter.use('/media', mediaRouter)
 projectRouter.use('/specimens', specimensRouter)
@@ -81,6 +119,7 @@ projectRouter.get(
 )
 
 projectRouter.post('/copyright', controller.setCopyright)
+projectRouter.put('/update', controller.updateProject)
 projectRouter.post('/duplication/request', controller.createDuplicationRequest)
 projectRouter.post(
   '/publish/partition/:partitionId',

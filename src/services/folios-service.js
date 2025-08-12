@@ -62,7 +62,8 @@ export async function getMedia(projectId, folioId) {
     SELECT fm.link_id, fm.folio_id, fm.media_id, fm.position
     FROM folios AS f
     INNER JOIN folios_x_media_files AS fm ON fm.folio_id = f.folio_id
-    WHERE f.project_id = ? AND f.folio_id = ?`,
+    WHERE f.project_id = ? AND f.folio_id = ?
+    ORDER BY fm.position ASC`,
     {
       replacements: [projectId, folioId],
     }
@@ -123,41 +124,46 @@ export async function getMaxPositionForFolioMedia(folioId) {
 export async function reorderMedia(folioId, linkIds, position) {
   const transaction = await sequelizeConn.transaction()
 
-  await sequelizeConn.query(
-    `
-    UPDATE folios_x_media_files
-    SET position = position + ?
-    WHERE folio_id = ? AND position > ?
-    ORDER BY position DESC`,
-    {
-      replacements: [linkIds.length, folioId, position],
-      transaction: transaction,
-    }
-  )
+  try {
+    // Simple approach: get all items, reorder in memory, then update positions
 
-  await sequelizeConn.query(
-    `
-    UPDATE folios_x_media_files
-    SET position=@tmp_position:=@tmp_position+1
-    WHERE (@tmp_position:=?)+1 AND folio_id = ? AND link_id IN (?)
-    ORDER BY position`,
-    {
-      replacements: [position, folioId, linkIds],
-      transaction: transaction,
-    }
-  )
+    // Step 1: Get all media items for this folio ordered by current position
+    const [allItems] = await sequelizeConn.query(
+      `SELECT link_id, position FROM folios_x_media_files 
+       WHERE folio_id = ? ORDER BY position ASC`,
+      { replacements: [folioId], transaction }
+    )
 
-  await sequelizeConn.query(
-    `
-    UPDATE folios_x_media_files
-    SET position=@tmp_position:=@tmp_position+1
-    WHERE folio_id = ? AND (@tmp_position:=0)+1
-    ORDER BY position`,
-    {
-      replacements: [folioId],
-      transaction: transaction,
-    }
-  )
+    // Step 2: Find the items to move and remove them from the array
+    const itemsToMove = allItems.filter((item) =>
+      linkIds.includes(item.link_id)
+    )
+    const remainingItems = allItems.filter(
+      (item) => !linkIds.includes(item.link_id)
+    )
 
-  await transaction.commit()
+    // Step 3: Insert the moved items at the new position (convert from 1-based to 0-based index)
+    const targetIndex = position - 1
+    const newOrder = [
+      ...remainingItems.slice(0, targetIndex),
+      ...itemsToMove,
+      ...remainingItems.slice(targetIndex),
+    ]
+
+    // Step 4: Update all positions in the database
+    for (let i = 0; i < newOrder.length; i++) {
+      await sequelizeConn.query(
+        `UPDATE folios_x_media_files 
+         SET position = ? 
+         WHERE folio_id = ? AND link_id = ?`,
+        { replacements: [i + 1, folioId, newOrder[i].link_id], transaction }
+      )
+    }
+
+    await transaction.commit()
+  } catch (error) {
+    await transaction.rollback()
+    console.error('Reorder failed:', error)
+    throw error
+  }
 }

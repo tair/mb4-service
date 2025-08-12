@@ -4,19 +4,75 @@ import path from 'path'
 import decompress from 'decompress'
 import mime from 'mime'
 
+// Track temporary directories for cleanup
+const tempDirectories = new Set()
+
 export async function unzip(filePath) {
-  const tempPath = path.join(os.tmpdir(), 'mb-downloads')
-  await fs.mkdir(tempPath, { recursive: true })
+  let directory = null
 
-  const directory = await fs.mkdtemp(path.join(tempPath, 'upload-'))
+  try {
+    // Verify the file exists and is readable
+    await fs.access(filePath, fs.constants.R_OK)
 
-  const files = await decompress(filePath, directory)
-  return files.map((file) => {
-    const path = directory + '/' + file.path
-    return {
-      originalname: file.path,
-      path,
-      mimetype: mime.getType(path),
+    const tempPath = path.join(os.tmpdir(), 'mb-downloads')
+    await fs.mkdir(tempPath, { recursive: true })
+
+    directory = await fs.mkdtemp(path.join(tempPath, 'upload-'))
+    tempDirectories.add(directory)
+
+    const files = await decompress(filePath, directory)
+
+    if (files.length === 0) {
+      throw new Error('ZIP file is empty or contains no files')
     }
-  })
+
+    const processedFiles = files.map((file) => {
+      const filePath = path.join(directory, file.path)
+      const mimetype = mime.getType(filePath) || 'application/octet-stream'
+
+      return {
+        originalname: file.path,
+        path: filePath,
+        mimetype: mimetype,
+        size: file.data ? file.data.length : 0,
+      }
+    })
+
+    return processedFiles
+  } catch (error) {
+    console.error('Error during ZIP extraction:', error)
+
+    // Clean up on error
+    if (directory) {
+      await cleanupTempDirectory(directory)
+    }
+
+    if (error.code === 'ENOENT') {
+      throw new Error('ZIP file not found or not accessible')
+    } else if (error.message.includes('Invalid file signature')) {
+      throw new Error('Invalid ZIP file format or corrupted archive')
+    } else if (error.message.includes('ZIP file is empty')) {
+      throw new Error('ZIP file is empty or contains no files')
+    } else {
+      throw new Error(`Failed to extract ZIP file: ${error.message}`)
+    }
+  }
+}
+
+export async function cleanupTempDirectory(directory) {
+  try {
+    if (tempDirectories.has(directory)) {
+      await fs.rm(directory, { recursive: true, force: true })
+      tempDirectories.delete(directory)
+    }
+  } catch (error) {
+    console.error('Error cleaning up temporary directory:', error)
+  }
+}
+
+export async function cleanupAllTempDirectories() {
+  const cleanupPromises = Array.from(tempDirectories).map((dir) =>
+    cleanupTempDirectory(dir)
+  )
+  await Promise.all(cleanupPromises)
 }

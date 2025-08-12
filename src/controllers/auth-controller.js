@@ -11,6 +11,7 @@ import { getRoles } from '../services/user-roles-service.js'
 import UserAuthenticationHandler from '../lib/user-authentication-handler.js'
 import ReviewerAuthenticationHandler from '../lib/reviewer-authentication-handler.js'
 import config from '../config.js'
+import { logUserLogin, logUserLogout } from '../lib/session-middleware.js'
 
 // The types of handlers that are accepted by Morphobank.
 const authenticationHandlers = [
@@ -60,6 +61,18 @@ async function login(req, res, next) {
           expires: new Date(expiry * 1000),
           httpOnly: true,
         })
+
+        // Log user login with session association
+        if (req.sessionInfo && req.sessionInfo.sessionKey) {
+          logUserLogin(
+            req.sessionInfo.sessionKey,
+            userResponse.user_id,
+            req
+          ).catch((error) => {
+            console.error('Failed to log user login:', error)
+          })
+        }
+
         res.status(200).json({
           accessToken: accessToken,
           accessTokenExpiry: expiry,
@@ -78,6 +91,20 @@ async function login(req, res, next) {
 }
 
 function logout(req, res) {
+  // Log user logout with session association
+  if (
+    req.sessionInfo &&
+    req.sessionInfo.sessionKey &&
+    req.credential &&
+    req.credential.user_id
+  ) {
+    logUserLogout(req.sessionInfo.sessionKey, req.credential.user_id).catch(
+      (error) => {
+        console.error('Failed to log user logout:', error)
+      }
+    )
+  }
+
   res.clearCookie('authorization')
   res.status(200).json({ message: 'Log out succeeded!' })
 }
@@ -346,6 +373,18 @@ async function authenticateORCID(req, res) {
           expires: new Date(expiry * 1000),
           httpOnly: true,
         })
+
+        // Log user login with session association for ORCID authentication
+        if (req.sessionInfo && req.sessionInfo.sessionKey) {
+          logUserLogin(
+            req.sessionInfo.sessionKey,
+            userResponse.user_id,
+            req
+          ).catch((error) => {
+            console.error('Failed to log ORCID user login:', error)
+          })
+        }
+
         res.status(200).json({
           accessToken: accessToken,
           accessTokenExpiry: expiry,

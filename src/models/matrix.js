@@ -159,16 +159,27 @@ export default class Matrix extends Model {
             fields: [{ name: 'project_id' }],
           },
         ],
+        hooks: {
+          beforeUpdate: (matrix) => {
+            matrix.last_modified_on = time()
+          },
+        },
       }
     )
   }
 
   getOption(key) {
-    return this.other_options[key]
+    if (this.other_options && this.other_options[key] !== undefined) {
+      return this.other_options[key]
+    }
+    return 0 // Default value when option doesn't exist
   }
 
   setOption(key, value) {
     if (MATRIX_OPTIONS.includes(key)) {
+      if (!this.other_options) {
+        this.other_options = {}
+      }
       this.other_options[key] = value
       this.changed('other_options', true)
     }

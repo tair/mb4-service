@@ -45,22 +45,50 @@ export async function downloadUrl(url, filename = null) {
  * The external service is very brittle and it will return a 502 at times. We will retry
  * three times with an exponential delay to ensure that we get a response.
  */
-export async function fetchWithRetry(options, params, maxRetries = 3) {
+export async function fetchWithRetry(url, options = {}, maxRetries = 3) {
   let retries = 0
   let sendDelay = 1000
+  
+  // Configure axios with proper timeout and headers
+  const axiosConfig = {
+    timeout: 20000, // 20 second timeout - reasonable for external APIs
+    headers: {
+      'User-Agent': 'MorphoBank/4.0 (Scientific Research Application)',
+      ...options.headers
+    },
+    ...options
+  }
+  
   return new Promise((resolve, reject) => {
     const fetch = async () => {
       try {
-        const response = await axios.get(options, params)
+        const response = await axios.get(url, axiosConfig)
         if (response.status >= 500 && ++retries < maxRetries) {
+          console.log(`Request failed with status ${response.status}, retrying in ${sendDelay}ms (attempt ${retries}/${maxRetries})`)
           setTimeout(() => fetch(), sendDelay)
           sendDelay = Math.min(20_000, sendDelay << 1)
         } else {
           resolve(response)
         }
       } catch (err) {
-        console.error('Failed to fetch', err)
-        reject(err)
+        // Handle timeout and network errors with retries
+        const isRetriableError = 
+          err.code === 'ECONNABORTED' || // axios timeout
+          err.code === 'ENOTFOUND' ||   // DNS errors
+          err.code === 'ECONNRESET' ||  // connection reset
+          err.code === 'ETIMEDOUT' ||   // general timeout
+          (err.response && err.response.status >= 500) || // server errors
+          err.message.includes('timeout') ||
+          err.message.includes('Network Error')
+          
+        if (isRetriableError && ++retries < maxRetries) {
+          console.log(`Request failed with error: ${err.message}, retrying in ${sendDelay}ms (attempt ${retries}/${maxRetries})`)
+          setTimeout(() => fetch(), sendDelay)
+          sendDelay = Math.min(20_000, sendDelay << 1)
+        } else {
+          console.error('Failed to fetch after all retries:', err.message)
+          reject(err)
+        }
       }
     }
 
