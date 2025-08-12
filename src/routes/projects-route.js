@@ -129,14 +129,6 @@ projectRouter.post(
 
 // Publishing routes
 projectRouter.get(
-  '/publishing/status',
-  publishingController.getPublishingStatus
-)
-projectRouter.get(
-  '/publishing/info-redirect',
-  publishingController.getProjectInfoRedirect
-)
-projectRouter.get(
   '/publishing/preferences',
   publishingController.getPublishingPreferences
 )
@@ -144,7 +136,14 @@ projectRouter.post(
   '/publishing/preferences',
   publishingController.savePublishingPreferences
 )
-projectRouter.get('/publishing/form', publishingController.getPublishForm)
+projectRouter.get(
+  '/publishing/validate/citation',
+  publishingController.validateCitationInfo
+)
+projectRouter.get(
+  '/publishing/validate/media',
+  publishingController.validateMediaForPublishing
+)
 projectRouter.post('/publishing/publish', publishingController.publishProject)
 
 export default projectsRouter

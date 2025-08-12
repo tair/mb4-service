@@ -5,37 +5,6 @@ import { time } from '../util/util.js'
 import sequelizeConn from '../util/db.js'
 
 /**
- * Project info redirect - checks if citation information is complete
- * Redirects user to project info form if article information is missing
- */
-export async function getProjectInfoRedirect(req, res) {
-  try {
-    const projectId = req.params.projectId
-    const project = await models.Project.findByPk(projectId)
-
-    if (!project) {
-      return res.status(404).json({ message: 'Project not found' })
-    }
-
-    const citationValidation = await publishingService.validateCitationInfo(
-      project
-    )
-
-    if (!citationValidation.isValid) {
-      return res.status(200).json({
-        redirect: true,
-        message: citationValidation.message,
-      })
-    }
-
-    return res.status(200).json({ redirect: false })
-  } catch (error) {
-    console.error('Error in getProjectInfoRedirect:', error)
-    res.status(500).json({ message: 'Internal server error' })
-  }
-}
-
-/**
  * Get publishing preferences form
  * Shows form if citation info is complete, otherwise redirects to project info
  */
@@ -190,10 +159,10 @@ export async function savePublishingPreferences(req, res) {
 }
 
 /**
- * Get publishing form
- * Shows publish form or media warnings if there are issues
+ * Validate media for publishing
+ * Checks if project has media files and validates their copyright information
  */
-export async function getPublishForm(req, res) {
+export async function validateMediaForPublishing(req, res) {
   try {
     const projectId = req.params.projectId
     const project = await models.Project.findByPk(projectId)
@@ -236,7 +205,7 @@ export async function getPublishForm(req, res) {
       message: 'Project is ready for publication',
     })
   } catch (error) {
-    console.error('Error in getPublishForm:', error)
+    console.error('Error in validateMediaForPublishing:', error)
     res.status(500).json({ message: 'Internal server error' })
   }
 }
@@ -378,10 +347,10 @@ export async function publishProject(req, res) {
 }
 
 /**
- * Get project publishing status and basic info
- * Helper endpoint to check if project is published and get related info
+ * Validate citation info
+ * Checks if citation info is complete and returns any warnings
  */
-export async function getPublishingStatus(req, res) {
+export async function validateCitationInfo(req, res) {
   try {
     const projectId = req.params.projectId
     const project = await models.Project.findByPk(projectId, {
@@ -420,7 +389,7 @@ export async function getPublishingStatus(req, res) {
       citation_message: citationValidation.message,
     })
   } catch (error) {
-    console.error('Error in getPublishingStatus:', error)
+    console.error('Error in validateCitationInfo:', error)
     res.status(500).json({ message: 'Internal server error' })
   }
 }

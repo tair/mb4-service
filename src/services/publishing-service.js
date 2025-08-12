@@ -11,11 +11,6 @@ import { QueryTypes } from 'sequelize'
 export async function validateCitationInfo(project) {
   const journalInPress = project.journal_in_press
 
-  // If article is in prep or in review (2), no validation needed
-  if (journalInPress === 2) {
-    return { isValid: true }
-  }
-
   // Check if no article info has been entered
   if (journalInPress === 2) {
     return {
@@ -34,6 +29,7 @@ export async function validateCitationInfo(project) {
     ]
 
     for (const field of requiredFields) {
+      // console.log(field, project[field])
       if (!project[field] || project[field].trim() === '') {
         const status = journalInPress === 0 ? 'published' : 'in-press'
         return {
@@ -52,6 +48,7 @@ export async function validateCitationInfo(project) {
       ]
 
       for (const field of publishedRequiredFields) {
+        // console.log(field, project[field])
         if (!project[field] || project[field].trim() === '') {
           return {
             isValid: false,
@@ -88,6 +85,7 @@ export async function getUnfinishedMedia(
       type: QueryTypes.SELECT,
     })
 
+    console.log('matrixMedia', matrixMedia)
     if (matrixMedia.length > 0) {
       const mediaIds = matrixMedia.map((row) => row.media_id)
       matrixMediaWhere = ` AND media_id IN (${mediaIds.join(', ')})`
@@ -243,11 +241,13 @@ export async function updateMatrixMediaFlags(
  * @param {Object} project - Project object
  * @param {number} userId - User ID creating the reference
  * @param {Object} transaction - Database transaction
+ * @param {Object} user - User object for changelog logging
  */
 export async function createBibliographicReference(
   project,
   userId,
-  transaction
+  transaction,
+  user
 ) {
   if (!project.journal_title && !project.article_title) {
     return
@@ -268,24 +268,36 @@ export async function createBibliographicReference(
     user_id: userId,
     article_title: project.article_title || '',
     journal_title: project.journal_title || '',
+    monograph_title: '', // Required field - empty for journal articles
     authors: project.article_authors || '', // TODO: Extract authors properly
     vol: project.journal_volume || '',
     num: project.journal_number || '',
     pubyear: project.journal_year || '',
+    publisher: '', // Required field - empty for journal articles
     abstract: project.description || '',
+    description: '', // Required field - separate from abstract
     collation: project.article_pp || '',
+    external_identifier: '', // Required field - could be DOI
+    article_secondary_title: '', // Required field - empty for most articles
     urls: project.journal_url || '',
+    worktype: '', // Required field - empty for journal articles
+    edition: '', // Required field - empty for journal articles
+    sect: '', // Required field - empty for journal articles
+    isbn: '', // Required field - empty for journal articles
+    keywords: '', // Required field - empty for now
+    lang: '', // Required field - empty for now
     electronic_resource_num: project.article_doi || '',
+    author_address: '', // Required field - empty for now
+    place_of_publication: '', // Required field - empty for journal articles
     reference_type: 1, // Journal Article
   }
-
   if (bibRef) {
     // Update existing reference
-    await bibRef.update(bibData, { transaction })
+    await bibRef.update(bibData, { transaction, user })
   } else {
     // Create new reference
     bibData.created_on = time()
-    await models.BibliographicReference.create(bibData, { transaction })
+    await models.BibliographicReference.create(bibData, { transaction, user })
   }
 }
 
@@ -406,17 +418,17 @@ export async function publishProject(projectId, userId, isCurator = false) {
       )
     }
 
-    // Create/update bibliographic reference [TODO: Uncomment]
-    await createBibliographicReference(project, userId, transaction)
-
-    // Link member institutions
-    await linkMemberInstitutions(projectId, project, transaction)
-
     // Get user for changelog logging
     const user = await models.User.findByPk(userId, { transaction })
     if (!user) {
       throw new Error('User not found')
     }
+
+    // Create/update bibliographic reference
+    await createBibliographicReference(project, userId, transaction, user)
+
+    // Link member institutions
+    await linkMemberInstitutions(projectId, project, transaction)
 
     // Update project as published
     await project.update(
