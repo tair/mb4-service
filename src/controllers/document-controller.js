@@ -240,6 +240,14 @@ export async function downloadDocument(req, res) {
   }
 
   const json = normalizeJson(document.upload)
+  
+  // Check if this is an S3-stored document
+  if (json.s3_key || json.S3_KEY) {
+    // Use the S3 serving function for downloads
+    return serveDocumentFile(req, res)
+  }
+  
+  // Handle legacy local file structure
   const { volume, hash, magic, filename } = json
   if (!volume || !hash || !magic || !filename) {
     res.status(404).json({ message: 'Document does not exist' })
@@ -401,7 +409,7 @@ function convertDocumentResponse(document) {
     file_name: originalFileName,
     mime_type: mimeType,
     size: filesize,
-    download_url: getDocumentUrl(json),
+    download_url: getDocumentUrl(json, document.project_id, document.document_id),
   }
   return data
 }
