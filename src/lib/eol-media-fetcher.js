@@ -26,7 +26,9 @@ async function fetchEolImagesForTaxonName(taxonName, size = 1) {
       'https://eol.org/api/search/1.0.json',
       {
         params,
-      }
+        timeout: 20000, // 20 second timeout for EOL media loading
+      },
+      0 // No retries for EOL media loading
     )
     if (response.status != 200) {
       return {
@@ -77,14 +79,13 @@ async function fetchEolImagesForTaxonName(taxonName, size = 1) {
       e.message.includes('Network Error') ||
       (e.response && e.response.status >= 500 && e.response.status !== 504) // Server errors but not gateway timeout
     
-    const shouldRetry = isTimeoutError || isNetworkError
     const errorType = isTimeoutError ? 'timeout' : (isNetworkError ? 'network' : 'other')
     
-    console.warn(`EOL API error for taxon search: ${e.message} (retry: ${shouldRetry}, type: ${errorType})`)
+    console.warn(`EOL API error for taxon search: ${e.message} (retry disabled, type: ${errorType})`)
     
     return {
       success: false,
-      retry: shouldRetry,
+      retry: false, // Retry disabled for EOL media loading
       error: isTimeoutError ? 'Request timed out - EOL.org may be slow or overloaded' : e.message,
       errorType: errorType,
     }
@@ -111,12 +112,14 @@ async function getImagesFromLink(id, size) {
     `https://eol.org/api/pages/1.0/${id}.json`,
     {
       params,
-    }
+      timeout: 20000, // 20 second timeout for EOL media loading
+    },
+    0 // No retries for EOL media loading
   )
   if (response.status != 200) {
     return {
       success: false,
-      retry: true,
+      retry: false, // Retry disabled for EOL media loading
       error: `Fetch failed with HTTP status: ${response.status}`,
     }
   }

@@ -44,6 +44,7 @@ export async function downloadUrl(url, filename = null) {
 /**
  * The external service is very brittle and it will return a 502 at times. We will retry
  * three times with an exponential delay to ensure that we get a response.
+ * Note: EOL media loading calls this with maxRetries=0 for improved performance.
  */
 export async function fetchWithRetry(url, options = {}, maxRetries = 3) {
   let retries = 0
