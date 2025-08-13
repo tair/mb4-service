@@ -87,6 +87,7 @@ export async function fetchMedia(req, res) {
           taxon.eol_no_results_on = time()
         }
         // For timeout/network errors (retry=true), don't mark as no_results so user can try again
+        // This ensures taxa remain available for retry after timeouts or network issues
       }
 
       await taxon.save({
@@ -202,6 +203,8 @@ export async function importMedia(req, res) {
             copyright_info: item.copyright_info?.name,
             eol_id: item.id,
             media_type: 'image',
+            url: urls.get(id),
+            url_description: 'Automatically pulled from EOL.org API',
           },
           {
             user: req.user,

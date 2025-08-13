@@ -7,6 +7,7 @@ export class TNTExporter extends Exporter {
   // Specific method for cleaning taxon names in TNT format
   formatTntText(text) {
     return text
+      .replace(/;/g, '_') // replace semicolons with underscores
       .replace(/[\r\n\t\s]+/g, '_') // replace whitespace with underscores
       .trim()
   }
