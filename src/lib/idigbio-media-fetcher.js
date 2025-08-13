@@ -165,32 +165,72 @@ async function fetchiDigBioImagesForTaxonName(taxon, size = 1) {
 }
 
 async function getSpecimenInfo(parameters) {
-  const query = JSON.stringify(parameters)
+  const specimenUUID = parameters.uuid
+  if (!specimenUUID) {
+    return {
+      success: false,
+      retry: false,
+      error: 'No specimen UUID provided',
+    }
+  }
+
   try {
     const response = await fetchWithRetry(
-      'https://search.idigbio.org/v2/search/records/',
+      `https://search.idigbio.org/v2/view/records/${specimenUUID}`,
       {
-        rq: query,
-        limit: 50,
+        // No additional params needed for view endpoint
       }
     )
-    if (response.status != 200) {
+    
+    if (response.status === 404) {
+      return {
+        success: false,
+        retry: false,
+        error: 'Specimen record not found',
+        errorType: 'not_found',
+      }
+    }
+    
+    if (response.status !== 200) {
       return {
         success: false,
         retry: true,
-        error: `Search failed with HTTP status: ${response.status}`,
+        error: `API request failed with HTTP status: ${response.status}`,
       }
     }
+    
+    // The view endpoint returns the record directly, not wrapped in an items array
     return {
       success: true,
-      items: response.data.items,
+      items: [response.data], // Wrap in array to maintain compatibility with existing code
     }
   } catch (e) {
-    console.error('Failed to fech specimen:', e)
+    console.error('Failed to fetch specimen:', e)
+    
+    // Check if this is a 404 error from axios
+    if (e.response?.status === 404) {
+      return {
+        success: false,
+        retry: false,
+        error: 'Specimen record not found',
+        errorType: 'not_found',
+      }
+    }
+    
+    // Distinguish between network/timeout errors (retriable) vs other errors
+    const isNetworkError = 
+      e.code === 'ECONNABORTED' || // axios timeout
+      e.code === 'ENOTFOUND' ||   // DNS errors
+      e.code === 'ECONNRESET' ||  // connection reset
+      e.code === 'ETIMEDOUT' ||   // general timeout
+      e.message.includes('timeout') ||
+      e.message.includes('Network Error')
+    
     return {
       success: false,
-      retry: true,
+      retry: isNetworkError,
       error: e.message,
+      errorType: isNetworkError ? 'network' : 'other',
     }
   }
 }
