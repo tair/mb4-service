@@ -10,6 +10,11 @@ const tempDirectories = new Set()
 export async function unzip(filePath) {
   let directory = null
 
+  // Security limits
+  const MAX_EXTRACTED_SIZE = 500 * 1024 * 1024 // 500MB total extraction limit
+  const MAX_FILES = 1000 // Maximum number of files
+  const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB per file
+
   try {
     // Verify the file exists and is readable
     await fs.access(filePath, fs.constants.R_OK)
@@ -20,7 +25,44 @@ export async function unzip(filePath) {
     directory = await fs.mkdtemp(path.join(tempPath, 'upload-'))
     tempDirectories.add(directory)
 
-    const files = await decompress(filePath, directory)
+    let totalExtractedSize = 0
+    let fileCount = 0
+
+    const files = await decompress(filePath, directory, {
+      filter: (file) => {
+        // Security check: Prevent path traversal attacks
+        const normalizedPath = path.normalize(file.path)
+        if (normalizedPath.includes('..') || path.isAbsolute(normalizedPath)) {
+          throw new Error(`Unsafe file path detected in ZIP archive: ${file.path}`)
+        }
+
+        // Security check: Prevent files with dangerous names
+        const fileName = path.basename(file.path)
+        if (fileName.startsWith('.') && !fileName.match(/^\.(jpg|jpeg|png|gif|tiff?|bmp|webp|dcm|dicom)$/i)) {
+          return false // Skip hidden files except allowed image formats
+        }
+
+        // Security check: Limit number of files
+        fileCount++
+        if (fileCount > MAX_FILES) {
+          throw new Error(`ZIP archive contains too many files (max: ${MAX_FILES})`)
+        }
+
+        // Security check: Limit individual file size
+        const fileSize = file.data ? file.data.length : 0
+        if (fileSize > MAX_FILE_SIZE) {
+          throw new Error(`File ${file.path} is too large (max: ${MAX_FILE_SIZE / 1024 / 1024}MB)`)
+        }
+
+        // Security check: Limit total extracted size (ZIP bomb protection)
+        totalExtractedSize += fileSize
+        if (totalExtractedSize > MAX_EXTRACTED_SIZE) {
+          throw new Error(`ZIP archive extracts to too much data (max: ${MAX_EXTRACTED_SIZE / 1024 / 1024}MB)`)
+        }
+
+        return true
+      }
+    })
 
     if (files.length === 0) {
       throw new Error('ZIP file is empty or contains no files')

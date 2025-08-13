@@ -48,7 +48,7 @@ export async function getDocuments(projectId) {
       title: document.title,
       description: document.description,
       file_name: json['original_filename'],
-      url: getDocumentUrl(json),
+      url: getDocumentUrl(json, projectId, document.document_id),
     }
 
     if (downloadMap[document.document_id]) {
