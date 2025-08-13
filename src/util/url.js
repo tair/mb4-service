@@ -51,7 +51,7 @@ export async function fetchWithRetry(url, options = {}, maxRetries = 3) {
   
   // Configure axios with proper timeout and headers
   const axiosConfig = {
-    timeout: 20000, // 20 second timeout - reasonable for external APIs
+    timeout: 45000, // 45 second timeout - EOL.org can be very slow, especially for multiple taxa
     headers: {
       'User-Agent': 'MorphoBank/4.0 (Scientific Research Application)',
       ...options.headers

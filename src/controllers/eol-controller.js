@@ -87,6 +87,7 @@ export async function fetchMedia(req, res) {
           taxon.eol_no_results_on = time()
         }
         // For timeout/network errors (retry=true), don't mark as no_results so user can try again
+        // This ensures taxa remain available for retry after timeouts or network issues
       }
 
       await taxon.save({
