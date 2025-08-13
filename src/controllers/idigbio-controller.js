@@ -286,6 +286,8 @@ export async function importMedia(req, res) {
             copyright_license: item.copyright_license,
             copyright_info: item.copyright_info?.name,
             uuid: id,
+            url: link,
+            url_description: `Automatically pulled from iDigBio.org API. UUID: ${id}`,
             media_type: 'image',
           },
           {
