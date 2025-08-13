@@ -18,7 +18,7 @@ function getUsers(req, res, next) {
 
 function getProfile(req, res, next) {
   models.User.findByPk(req.credential.user_id, {
-    attributes: ['fname', 'lname', 'email', 'orcid'],
+    attributes: ['fname', 'lname', 'email', 'orcid', 'vars'],
     include: [
       {
         model: models.Institution,
@@ -28,7 +28,12 @@ function getProfile(req, res, next) {
     ],
   })
     .then((profile) => {
-      return res.status(200).json(profile)
+      // Extract is_institution_unaffiliated from vars
+      const responseData = profile.toJSON()
+      responseData.is_institution_unaffiliated = profile.getVar('is_institution_unaffiliated') || false
+      // Remove vars from response as it's internal
+      delete responseData.vars
+      return res.status(200).json(responseData)
     })
     .catch((err) => {
       if (!err.statusCode) {
@@ -65,9 +70,16 @@ async function updateProfile(req, res, next) {
       let passwordHash = await models.User.hashPassword(req.body.newPassword)
       user.password_hash = passwordHash
     }
+    if (req.body.hasOwnProperty('isInstitutionUnaffiliated')) {
+      user.setVar('is_institution_unaffiliated', req.body.isInstitutionUnaffiliated)
+    }
     await user.save({ user: user })
     // save affiliated institutions
-    if (req.body.institutions) {
+    // If user is marked as independent researcher, ensure institutions are cleared
+    if (req.body.isInstitutionUnaffiliated) {
+      req.body.institutions = []
+    }
+    if (req.body.hasOwnProperty('institutions')) {
       const instIds = req.body.institutions.map(
         (institution) => institution.institution_id
       )
@@ -106,7 +118,7 @@ async function updateProfile(req, res, next) {
       }
     }
     const updatedUser = await models.User.findByPk(user.user_id, {
-      attributes: ['fname', 'lname', 'email', 'orcid'],
+      attributes: ['fname', 'lname', 'email', 'orcid', 'vars'],
       include: [
         {
           model: models.Institution,
@@ -115,9 +127,14 @@ async function updateProfile(req, res, next) {
         },
       ],
     })
+    // Extract is_institution_unaffiliated from vars for response
+    const userData = updatedUser.toJSON()
+    userData.is_institution_unaffiliated = updatedUser.getVar('is_institution_unaffiliated') || false
+    // Remove vars from response as it's internal
+    delete userData.vars
     res.status(200).json({
       message: 'User update!',
-      user: updatedUser,
+      user: userData,
     })
   } catch (err) {
     if (!err.statusCode) {
