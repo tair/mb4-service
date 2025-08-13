@@ -9,6 +9,7 @@ searchRouter.use(authorizeUser)
 
 searchRouter.get('/', searchController.searchInstitutions)
 searchRouter.get('/projects', searchController.searchProjects)
+searchRouter.get('/members', searchController.searchProjectMembers)
 searchRouter.get('/media', searchController.searchMedia)
 searchRouter.get('/media-views', searchController.searchMediaViews)
 searchRouter.get('/specimens', searchController.searchSpecimens)
