@@ -70,7 +70,6 @@ async function setJournalCoverUrl(project) {
       // do nothing
     }
   }
-
 }
 
 function getCoverUrlByJournalCover(journalCover) {
@@ -146,7 +145,7 @@ export async function getInstitutionsWithProjects() {
 
 export async function getAuthorsWithProjects() {
   const [rows] = await sequelizeConn.query(`
-    SELECT fname, lname, p.project_id,  p.name
+    SELECT fname, lname, p.project_id,  p.name, p.journal_title, p.journal_year, p.article_authors
     FROM projects_x_users pu, ca_users u, projects p
     WHERE pu.user_id = u.user_id and p.project_id=pu.project_id
     AND p.published=1 and p.deleted=0
@@ -171,6 +170,9 @@ export async function getAuthorsWithProjects() {
     const project = {
       id: row.project_id,
       name: row.name,
+      journal_title: row.journal_title,
+      journal_year: row.journal_year,
+      article_authors: row.article_authors,
     }
 
     if (!authors[author]) {

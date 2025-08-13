@@ -125,11 +125,9 @@ async function searchProjectMembers(req, res) {
     })
     .catch((err) => {
       console.log(err)
-      res
-        .status(500)
-        .json({
-          error: 'An error occurred while searching for project members.',
-        })
+      res.status(500).json({
+        error: 'An error occurred while searching for project members.',
+      })
     })
 }
 
