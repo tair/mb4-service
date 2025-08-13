@@ -1,7 +1,7 @@
 import { models } from '../models/init-models.js'
 import { getRoles } from '../services/user-roles-service.js'
 
-const EMAIL_PATTERN = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/
+const EMAIL_PATTERN = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
 
 /**
  * A class that handles authentication for regular users within the site.

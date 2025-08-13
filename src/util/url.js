@@ -44,6 +44,7 @@ export async function downloadUrl(url, filename = null) {
 /**
  * The external service is very brittle and it will return a 502 at times. We will retry
  * three times with an exponential delay to ensure that we get a response.
+ * Note: EOL media loading calls this with maxRetries=0 for improved performance.
  */
 export async function fetchWithRetry(url, options = {}, maxRetries = 3) {
   let retries = 0
@@ -51,7 +52,7 @@ export async function fetchWithRetry(url, options = {}, maxRetries = 3) {
   
   // Configure axios with proper timeout and headers
   const axiosConfig = {
-    timeout: 20000, // 20 second timeout - reasonable for external APIs
+    timeout: 45000, // 45 second timeout - EOL.org can be very slow, especially for multiple taxa
     headers: {
       'User-Agent': 'MorphoBank/4.0 (Scientific Research Application)',
       ...options.headers

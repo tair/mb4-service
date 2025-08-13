@@ -295,18 +295,24 @@ export async function editProject(req, res, next) {
       description,
       disk_space_usage,
       publication_status,
+      exemplar_media_id,
     } = projectData
 
-    // Validate required fields
-    if (
-      !name ||
-      nsf_funded === undefined ||
-      nsf_funded === null ||
-      nsf_funded === ''
-    ) {
-      return res.status(400).json({
-        message: 'Project name and NSF funding status are required',
-      })
+    // Only validate required fields if this is a full project update (not just exemplar media update)
+    const isOnlyExemplarUpdate = Object.keys(projectData).length === 1 && 'exemplar_media_id' in projectData
+    
+    if (!isOnlyExemplarUpdate) {
+      // Validate required fields for full project updates
+      if (
+        !name ||
+        nsf_funded === undefined ||
+        nsf_funded === null ||
+        nsf_funded === ''
+      ) {
+        return res.status(400).json({
+          message: 'Project name and NSF funding status are required',
+        })
+      }
     }
 
     // Validate journal fields based on publication status
@@ -348,27 +354,59 @@ export async function editProject(req, res, next) {
     let mediaUploader = null
 
     try {
-      // Update basic project fields
-      project.name = name
-      project.nsf_funded = nsf_funded
-      project.allow_reviewer_login = allow_reviewer_login
-      project.reviewer_login_password = reviewer_login_password
-      project.journal_title = journal_title_other || journal_title
-      project.article_authors = article_authors
-      project.article_title = article_title
-      project.article_doi = article_doi
-      project.journal_year = journal_year
-      project.journal_volume = journal_volume
-      project.journal_number = journal_number
-      project.journal_url = journal_url
-      project.article_pp = article_pp
-      project.description = description
-      project.disk_usage_limit = disk_space_usage || project.disk_usage_limit || 5368709120
-      project.journal_in_press = publication_status || 2
+      // Only update basic project fields if this is not just an exemplar update
+      if (!isOnlyExemplarUpdate) {
+        // Update basic project fields
+        project.name = name
+        project.nsf_funded = nsf_funded
+        project.allow_reviewer_login = allow_reviewer_login
+        project.reviewer_login_password = reviewer_login_password
+        project.journal_title = journal_title_other || journal_title
+        project.article_authors = article_authors
+        project.article_title = article_title
+        project.article_doi = article_doi
+        project.journal_year = journal_year
+        project.journal_volume = journal_volume
+        project.journal_number = journal_number
+        project.journal_url = journal_url
+        project.article_pp = article_pp
+        project.description = description
+        project.disk_usage_limit = disk_space_usage || project.disk_usage_limit || 5368709120
+        project.journal_in_press = publication_status || 2
+      }
+
+      // Update exemplar_media_id if provided
+      if (exemplar_media_id !== undefined) {
+        // Validate that the media exists and belongs to this project if setting an ID
+        if (exemplar_media_id) {
+          const media = await models.MediaFile.findOne({
+            where: {
+              media_id: exemplar_media_id,
+              project_id: project.project_id
+            }
+          })
+          if (!media) {
+            await transaction.rollback()
+            return res.status(400).json({ 
+              message: 'Invalid exemplar media ID or media does not belong to this project' 
+            })
+          }
+        }
+        project.exemplar_media_id = exemplar_media_id || null
+      }
 
       // Handle file uploads if provided
       let journalCoverFile = req.files?.journal_cover?.[0]
       let exemplarMediaFile = req.files?.exemplar_media?.[0]
+
+      // Ensure files are valid and not empty placeholders
+      // This prevents bad request errors when user wants to keep existing images
+      if (journalCoverFile && (!journalCoverFile.originalname || journalCoverFile.size === 0)) {
+        journalCoverFile = null
+      }
+      if (exemplarMediaFile && (!exemplarMediaFile.originalname || exemplarMediaFile.size === 0)) {
+        exemplarMediaFile = null
+      }
 
       // Handle journal cover upload
       if (journalCoverFile) {
@@ -782,6 +820,15 @@ export async function createProject(req, res, next) {
       // Handle file uploads if provided
       let journalCoverFile = req.files?.journal_cover?.[0]
       let exemplarMediaFile = req.files?.exemplar_media?.[0]
+
+      // Ensure files are valid and not empty placeholders
+      // This prevents bad request errors when user wants to keep existing images
+      if (journalCoverFile && (!journalCoverFile.originalname || journalCoverFile.size === 0)) {
+        journalCoverFile = null
+      }
+      if (exemplarMediaFile && (!exemplarMediaFile.originalname || exemplarMediaFile.size === 0)) {
+        exemplarMediaFile = null
+      }
 
       // Handle journal cover upload
       if (journalCoverFile) {

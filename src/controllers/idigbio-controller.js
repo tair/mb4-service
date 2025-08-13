@@ -160,6 +160,9 @@ export async function importMedia(req, res) {
     const specimenIdsMap =
       await specimenService.getVoucheredSpecimenIdByTaxaIds(projectId, taxonIds)
 
+    // Track specimen UUIDs to prevent duplicates
+    const specimenUUIDMap = new Map()
+
     for (const i of imports) {
       for (const item of i.media) {
         let taxon = taxaMap.get(i.taxon_id)
@@ -178,66 +181,75 @@ export async function importMedia(req, res) {
           const specimenItem = specimenInfo.items[0]
           const terms = specimenItem['indexTerms']
           
-
-          const specimen = await models.Specimen.create(
-            {
-              user_id: userId,
-              project_id: projectId,
-              reference_source: 0,
-              access: 0,
-              description: `Imported from iDigBio. uuid: ${specimenUUID} Occurrence ID: ${terms['occurrenceid']}; Institution Source: ${item['source']}`,
-              institution_code: terms.institutioncode,
-              collection_code: terms.collectioncode,
-              catalog_number: terms.catalognumber,
-              occurrence_id: terms.occurrenceid,
-              uuid: specimenUUID,
-            },
-            {
-              user: req.user,
-              transaction: transaction,
-            }
-          )
+          let specimen
+          // Check if we already created a specimen for this UUID
+          if (specimenUUIDMap.has(specimenUUID)) {
+            specimen = specimenUUIDMap.get(specimenUUID)
+          } else {
+            // Create new specimen only if we haven't seen this UUID before
+            specimen = await models.Specimen.create(
+              {
+                user_id: userId,
+                project_id: projectId,
+                reference_source: 0,
+                access: 0,
+                description: `Imported from iDigBio. uuid: ${specimenUUID} Occurrence ID: ${terms['occurrenceid']}; Institution Source: ${item['source']}`,
+                institution_code: terms.institutioncode,
+                collection_code: terms.collectioncode,
+                catalog_number: terms.catalognumber,
+                occurrence_id: terms.occurrenceid,
+                uuid: specimenUUID,
+              },
+              {
+                user: req.user,
+                transaction: transaction,
+              }
+            )
+            specimenUUIDMap.set(specimenUUID, specimen)
+          }
 
           // If the iDigBio specimen taxonomy has more information than what is
-          // in the MorphoBank taxon record, let's check whether there is a more
-          // accurate taxon in the project and if not, let's make a new record
-          // so that we don't modify existing records created by the user.
+          // in the MorphoBank taxon record, update the existing taxon with
+          // the additional information instead of creating a new one.
           if (!isTaxonEqualTerms(taxon, terms)) {
-            taxon = await models.Taxon.findOne({
-              where: {
-                project_id: projectId,
-                genus: terms.genus,
-                specific_epithet: terms.specificepithet,
-                subspecific_epithet: terms.infraspecificepithet ?? '',
-                higher_taxon_kingdom: terms.kingdom ?? '',
-                higher_taxon_phylum: terms.phylum ?? '',
-                higher_taxon_class: terms.class ?? '',
-                higher_taxon_order: terms.order ?? '',
-                higher_taxon_family: terms.family ?? '',
-              },
+            // Update existing taxon with additional iDigBio taxonomy information
+            // Only update fields that are empty or less specific
+            if (!taxon.genus && terms.genus) {
+              taxon.genus = terms.genus
+            }
+            if (!taxon.specific_epithet && terms.specificepithet) {
+              taxon.specific_epithet = terms.specificepithet
+            }
+            if (!taxon.subspecific_epithet && terms.infraspecificepithet) {
+              taxon.subspecific_epithet = terms.infraspecificepithet
+            }
+            if (!taxon.higher_taxon_kingdom && terms.kingdom) {
+              taxon.higher_taxon_kingdom = terms.kingdom
+            }
+            if (!taxon.higher_taxon_phylum && terms.phylum) {
+              taxon.higher_taxon_phylum = terms.phylum
+            }
+            if (!taxon.higher_taxon_class && terms.class) {
+              taxon.higher_taxon_class = terms.class
+            }
+            if (!taxon.higher_taxon_order && terms.order) {
+              taxon.higher_taxon_order = terms.order
+            }
+            if (!taxon.higher_taxon_family && terms.family) {
+              taxon.higher_taxon_family = terms.family
+            }
+            
+            // Append to notes if there's additional information
+            const existingNotes = taxon.notes || ''
+            const idigbioNote = `Enhanced with iDigBio data from specimen uuid: ${specimenUUID}`
+            if (!existingNotes.includes(idigbioNote)) {
+              taxon.notes = existingNotes ? `${existingNotes}. ${idigbioNote}` : idigbioNote
+            }
+            
+            await taxon.save({
+              user: req.user,
               transaction: transaction,
             })
-            if (taxon == null) {
-              taxon = await models.Taxon.create(
-                {
-                  user_id: userId,
-                  project_id: projectId,
-                  genus: terms.genus,
-                  specific_epithet: terms.specificepithet,
-                  subspecific_epithet: terms.infraspecificepithet ?? '',
-                  higher_taxon_kingdom: terms.kingdom ?? '',
-                  higher_taxon_phylum: terms.phylum ?? '',
-                  higher_taxon_class: terms.class ?? '',
-                  higher_taxon_order: terms.order ?? '',
-                  higher_taxon_family: terms.family ?? '',
-                  notes: `Imported from iDigBio. specimen uuid: ${specimenUUID}`,
-                },
-                {
-                  user: req.user,
-                  transaction: transaction,
-                }
-              )
-            }
           }
           specimenIdsMap.set(taxon.taxon_id, specimen.specimen_id)
         } else if (!specimenIdsMap.has(taxon.taxon_id)) {
@@ -260,17 +272,29 @@ export async function importMedia(req, res) {
         }
 
         const specimenId = specimenIdsMap.get(taxon.taxon_id)
-        await models.TaxaXSpecimen.create(
-          {
+        
+        // Check if this taxon-specimen relationship already exists to avoid duplicates
+        const existingLink = await models.TaxaXSpecimen.findOne({
+          where: {
             taxon_id: taxon.taxon_id,
             specimen_id: specimenId,
-            user_id: userId,
           },
-          {
-            user: req.user,
-            transaction: transaction,
-          }
-        )
+          transaction: transaction,
+        })
+        
+        if (!existingLink) {
+          await models.TaxaXSpecimen.create(
+            {
+              taxon_id: taxon.taxon_id,
+              specimen_id: specimenId,
+              user_id: userId,
+            },
+            {
+              user: req.user,
+              transaction: transaction,
+            }
+          )
+        }
 
         const media = await models.MediaFile.create(
           {
@@ -286,6 +310,8 @@ export async function importMedia(req, res) {
             copyright_license: item.copyright_license,
             copyright_info: item.copyright_info?.name,
             uuid: id,
+            url: link,
+            url_description: `Automatically pulled from iDigBio.org API. UUID: ${id}`,
             media_type: 'image',
           },
           {
