@@ -15,6 +15,7 @@ import userRouter from './routes/user-route.js'
 import emailRouter from './routes/email-route.js'
 import homePageRouter from './routes/home-page-routes.js'
 import { initializeCache } from './util/stats-cache.js'
+import { initializeTntCache } from './util/tnt-cache.js'
 import searchRouter from './routes/search-route.js'
 import analyticsRouter from './routes/analytics-route.js'
 import schedulerRouter from './routes/scheduler-route.js'
@@ -86,6 +87,9 @@ app.use('/tnt', tntRouter)
 initializeCache().catch((error) => {
   console.error('Failed to initialize stats cache:', error)
 })
+
+// Initialize TNT cache
+initializeTntCache()
 
 // Start unified logging service (handles analytics + sessions)
 loggingService.start()

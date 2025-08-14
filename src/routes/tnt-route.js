@@ -40,6 +40,18 @@ tntRouter.post(
 tntRouter.post('/species', upload.single('file'), tntController.extractSpecies)
 tntRouter.post('/analyze', upload.single('file'), tntController.analyzeTntFile)
 
+// TNT download endpoint - downloads matrix data in TNT format
+tntRouter.get('/matrices/:matrixId/download', tntController.download)
+
+// TNT matrix validation and species extraction endpoint - converts matrix to TNT, validates, and extracts species
+tntRouter.post(
+  '/matrices/:matrixId/validate',
+  tntController.validateMatrixAndExtractSpecies
+)
+
+// TNT analysis endpoint using cached content - analyzes previously validated matrix TNT content
+tntRouter.post('/cached/:cacheKey/analyze', tntController.analyzeMatrixTnt)
+
 // Error handling middleware for multer
 tntRouter.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
