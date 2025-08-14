@@ -6,6 +6,61 @@ import { Datamodel } from '../../lib/datamodel/datamodel.js'
 import s3Service from '../../services/s3-service.js'
 
 /**
+ * Check if deletion should be skipped because files were overwritten at same S3 paths
+ * @param {Object} oldFileJson - Previous file JSON
+ * @param {Object} newFileJson - New file JSON  
+ * @returns {boolean} - True if deletion should be skipped
+ */
+function shouldSkipDeletion(oldFileJson, newFileJson) {
+  if (!oldFileJson || !newFileJson) {
+    return false
+  }
+
+  // For media files, check if main S3 keys are the same
+  const oldS3Keys = []
+  const newS3Keys = []
+  
+  // Collect S3 keys from old file
+  if (oldFileJson.original?.S3_KEY || oldFileJson.original?.s3_key) {
+    oldS3Keys.push(oldFileJson.original.S3_KEY || oldFileJson.original.s3_key)
+  }
+  if (oldFileJson.large?.S3_KEY || oldFileJson.large?.s3_key) {
+    oldS3Keys.push(oldFileJson.large.S3_KEY || oldFileJson.large.s3_key)
+  }
+  if (oldFileJson.thumbnail?.S3_KEY || oldFileJson.thumbnail?.s3_key) {
+    oldS3Keys.push(oldFileJson.thumbnail.S3_KEY || oldFileJson.thumbnail.s3_key)
+  }
+  if (oldFileJson.S3_KEY || oldFileJson.s3_key) {
+    oldS3Keys.push(oldFileJson.S3_KEY || oldFileJson.s3_key)
+  }
+
+  // Collect S3 keys from new file
+  if (newFileJson.original?.S3_KEY || newFileJson.original?.s3_key) {
+    newS3Keys.push(newFileJson.original.S3_KEY || newFileJson.original.s3_key)
+  }
+  if (newFileJson.large?.S3_KEY || newFileJson.large?.s3_key) {
+    newS3Keys.push(newFileJson.large.S3_KEY || newFileJson.large.s3_key)
+  }
+  if (newFileJson.thumbnail?.S3_KEY || newFileJson.thumbnail?.s3_key) {
+    newS3Keys.push(newFileJson.thumbnail.S3_KEY || newFileJson.thumbnail.s3_key)
+  }
+  if (newFileJson.S3_KEY || newFileJson.s3_key) {
+    newS3Keys.push(newFileJson.S3_KEY || newFileJson.s3_key)
+  }
+
+  // If both have S3 keys and any key overlaps, skip deletion (files were overwritten)
+  if (oldS3Keys.length > 0 && newS3Keys.length > 0) {
+    for (const oldKey of oldS3Keys) {
+      if (newS3Keys.includes(oldKey)) {
+        return true // Same S3 path found - skip deletion
+      }
+    }
+  }
+
+  return false
+}
+
+/**
  * This function is run as a sequelize hook such that if the model is changed
  * such that the record contains JSON records which indicate a file has been
  * updated, this will remove the previous file from storage.
@@ -18,8 +73,16 @@ export async function fileChanged(model, options) {
   const { transaction, user } = options
   for (const [field, attributes] of Object.entries(model.rawAttributes)) {
     if ((attributes.file || attributes.media) && model.changed(field)) {
-      const fileJson = normalizeJson(model.previous(field))
-      await unlink(tableName, rowId, fileJson, transaction, user)
+      const oldFileJson = normalizeJson(model.previous(field))
+      const newFileJson = normalizeJson(model.getDataValue(field))
+      
+      // Check if we should skip deletion (when S3 paths are the same, indicating overwrite)
+      if (shouldSkipDeletion(oldFileJson, newFileJson)) {
+        console.log(`Skipping deletion for ${tableName}/${rowId} - files were overwritten at same S3 paths`)
+        continue
+      }
+      
+      await unlink(tableName, rowId, oldFileJson, transaction, user)
     }
   }
 }

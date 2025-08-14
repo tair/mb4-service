@@ -492,15 +492,19 @@ export async function editMediaFile(req, res) {
     values.view_id = null
   }
 
-  for (const column in values) {
-    media.set(column, values[column])
-  }
-
   const transaction = await sequelizeConn.transaction()
   const mediaUploader = new S3MediaUploader(transaction, req.user)
   try {
+    // First upload the new file if present - this sets media field and triggers old file deletion
     if (req.file) {
       await mediaUploader.setMedia(media, 'media', req.file)
+    }
+
+    // Then update all other fields
+    for (const column in values) {
+      if (column !== 'media') {  // Skip media field as it's handled above
+        media.set(column, values[column])
+      }
     }
 
     await media.save({
@@ -513,11 +517,12 @@ export async function editMediaFile(req, res) {
     mediaUploader.commit()
     res.status(200).json({ media: convertMediaResponse(media) })
   } catch (e) {
+    console.error('Error editing media file:', e)
     await transaction.rollback()
     await mediaUploader.rollback()
     res
       .status(500)
-      .json({ message: 'Failed to create media with server error' })
+      .json({ message: 'Failed to edit media with server error: ' + e.message })
   }
 }
 
