@@ -152,6 +152,7 @@ function searchInstitutions(req, res) {
       name: {
         [Sequelize.Op.like]: '%' + searchTerm + '%',
       },
+      active: 1,
     },
   })
     .then((institutions) => {
@@ -276,7 +277,7 @@ async function createInstitution(req, res, next) {
     const institution = await models.Institution.create({
       name: name,
       user_id: req.credential.user_id,
-      active: true,
+      active: false,
     }, { user: await models.User.findByPk(req.credential.user_id) })
 
     res.status(201).json({

@@ -3,7 +3,7 @@ const { Model } = _sequelize
 import crypto from 'crypto'
 import bcrypt from 'bcrypt'
 
-// TODO(kenzley): We store the last_login and last_logout as numbers in the vars
+// TODO: We store the last_login and last_logout as numbers in the vars
 //     column. We should move them in their own column so that they can be easily
 //     searched and updated.
 export default class User extends Model {
