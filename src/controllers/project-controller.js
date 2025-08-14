@@ -49,6 +49,7 @@ export async function getProjects(req, res) {
       last_accessed_on: project.last_accessed_on,
       user_last_accessed_on: project.user_last_accessed_on,
       admin_user_id: project.admin_user_id,
+      exemplar_media_id: project.exemplar_media_id,
       members: [],
       administrator: null,
     })
