@@ -228,4 +228,28 @@ function signup(req, res, next) {
     })
 }
 
-export { getUsers, signup, getProfile, updateProfile, searchInstitutions }
+async function checkProfileConfirmation(req, res, next) {
+  try {
+    const user = await models.User.findByPk(req.credential.user_id)
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' })
+    }
+
+    const hasConfirmed = user.hasConfirmedProfile()
+    
+    res.json({
+      profile_confirmation_required: !hasConfirmed,
+      last_confirmed_profile_on: user.last_confirmed_profile_on,
+      hasConfirmedProfile: hasConfirmed
+    })
+  } catch (error) {
+    console.error('Error checking profile confirmation:', error)
+    return res.status(500).json({ 
+      message: 'Error checking profile confirmation status.',
+      error: error.message 
+    })
+  }
+}
+
+export { getUsers, signup, getProfile, updateProfile, searchInstitutions, checkProfileConfirmation }

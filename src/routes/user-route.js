@@ -16,5 +16,10 @@ userRouter.get(
   authenticateToken,
   userController.searchInstitutions
 )
+userRouter.get(
+  '/check-profile-confirmation',
+  authenticateToken,
+  userController.checkProfileConfirmation
+)
 
 export default userRouter
