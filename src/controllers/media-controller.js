@@ -963,8 +963,11 @@ export async function serveMediaFile(req, res) {
     const result = await s3Service.getObject(bucket, s3Key)
 
     // Set appropriate headers
+    // Use MIMETYPE from database if available, otherwise fall back to S3 content type
+    const contentType = mediaVersion.MIMETYPE || result.contentType || 'application/octet-stream'
+    
     res.set({
-      'Content-Type': result.contentType || 'application/octet-stream',
+      'Content-Type': contentType,
       'Content-Length': result.contentLength,
       'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
       'Last-Modified': result.lastModified,
