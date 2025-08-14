@@ -21,5 +21,10 @@ userRouter.get(
   authenticateToken,
   userController.checkProfileConfirmation
 )
+userRouter.post(
+  '/create-institution',
+  authenticateToken,
+  userController.createInstitution
+)
 
 export default userRouter

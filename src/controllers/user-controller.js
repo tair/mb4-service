@@ -252,4 +252,44 @@ async function checkProfileConfirmation(req, res, next) {
   }
 }
 
-export { getUsers, signup, getProfile, updateProfile, searchInstitutions, checkProfileConfirmation }
+async function createInstitution(req, res, next) {
+  try {
+    const name = req.body.name?.trim()
+    
+    if (!name || name.length === 0) {
+      return res.status(400).json({ message: 'Institution name is required.' })
+    }
+
+    // Check if institution already exists
+    const existingInstitution = await models.Institution.findOne({ 
+      where: { name: name } 
+    })
+    
+    if (existingInstitution) {
+      return res.status(409).json({ 
+        message: 'Institution already exists.',
+        institution: existingInstitution
+      })
+    }
+
+    // Create new institution
+    const institution = await models.Institution.create({
+      name: name,
+      user_id: req.credential.user_id,
+      active: true,
+    }, { user: await models.User.findByPk(req.credential.user_id) })
+
+    res.status(201).json({
+      message: 'Institution created successfully.',
+      institution: institution
+    })
+  } catch (error) {
+    console.error('Error creating institution:', error)
+    return res.status(500).json({ 
+      message: 'Error creating institution.',
+      error: error.message 
+    })
+  }
+}
+
+export { getUsers, signup, getProfile, updateProfile, searchInstitutions, checkProfileConfirmation, createInstitution }
