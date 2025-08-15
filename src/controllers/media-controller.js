@@ -969,7 +969,7 @@ export async function serveMediaFile(req, res) {
     res.set({
       'Content-Type': contentType,
       'Content-Length': result.contentLength,
-      'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Last-Modified': result.lastModified,
     })
 
