@@ -4,6 +4,12 @@ import { getTaxonName } from '../../util/taxa.js'
 const SYMBOLS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 export class TNTExporter extends Exporter {
+  formatTntText(text) {
+    return text
+      .replace(/;/g, '_') // replace semicolons with underscores
+      .replace(/[\r\n\t\s]+/g, '_') // replace whitespace with underscores
+      .trim()
+  }
 
   export({ taxa, characters, cellsTable }) {
     const taxaNameMap = new Map()
@@ -12,7 +18,7 @@ export class TNTExporter extends Exporter {
     let maxTaxonNameLength = 0
     for (const taxon of taxa) {
       const taxonId = parseInt(taxon.taxon_id)
-      const name = this.cleanName(getTaxonName(taxon, null, false, false))
+      const name = this.formatTntText(this.cleanName(getTaxonName(taxon, null, false, false)))
       taxaIndicesMap.set(taxonId, currentTaxaIndex++)
       taxaNameMap.set(taxonId, name)
 
