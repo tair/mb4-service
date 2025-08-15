@@ -12,6 +12,7 @@ import { FileUploader } from '../lib/file-uploader.js'
 import { S3MediaUploader } from '../lib/s3-media-uploader.js'
 import axios from 'axios'
 import { MembershipType } from '../models/projects-x-user.js'
+import { EmailManager } from '../lib/email-manager.js'
 
 export async function getProjects(req, res) {
   const userId = req.user?.user_id
@@ -529,6 +530,18 @@ export async function createDuplicationRequest(req, res) {
   try {
     const transaction = await sequelizeConn.transaction()
     
+    // Get project details for email
+    const project = await models.Project.findByPk(projectId)
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' })
+    }
+
+    // Get user details for email
+    const user = await models.User.findByPk(req.user.user_id)
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+    
     const duplicationRequest = await models.ProjectDuplicationRequest.create(
       {
         project_id: projectId,
@@ -543,6 +556,25 @@ export async function createDuplicationRequest(req, res) {
     )
 
     await transaction.commit()
+
+    // Send email notification to curators
+    try {
+      const emailManager = new EmailManager()
+      const requesterName = `${user.fname || ''} ${user.lname || ''}`.trim() || user.email
+      
+      const emailParams = {
+        requester: requesterName,
+        userEmailAddress: user.email,
+        projectId: projectId,
+        projectName: project.name || `Project ${projectId}`,
+        note: remarks
+      }
+      
+      await emailManager.email('project_duplication_request', emailParams)
+    } catch (emailError) {
+      console.error('Error sending duplication request email:', emailError)
+      // Don't fail the request if email fails, just log the error
+    }
     
     res.status(200).json({ 
       success: true, 

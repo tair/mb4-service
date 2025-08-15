@@ -1,6 +1,7 @@
 There has been a new project duplication request:
 
 Requested by: $requester
+Email: $userEmailAddress
 Project: P$projectId
 Project Title: $projectName
 Duplication Reason: $note
