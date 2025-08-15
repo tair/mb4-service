@@ -85,7 +85,6 @@ export async function getUnfinishedMedia(
       type: QueryTypes.SELECT,
     })
 
-    console.log('matrixMedia', matrixMedia)
     if (matrixMedia.length > 0) {
       const mediaIds = matrixMedia.map((row) => row.media_id)
       matrixMediaWhere = ` AND media_id IN (${mediaIds.join(', ')})`
@@ -115,7 +114,7 @@ export async function getUnfinishedMedia(
       )
   `
 
-  const [results] = await sequelizeConn.query(query, {
+  const results = await sequelizeConn.query(query, {
     replacements: [projectId],
     type: QueryTypes.SELECT,
   })
@@ -351,7 +350,7 @@ export async function getPublishedMediaCount(
     type: QueryTypes.SELECT,
   })
 
-  return results[0]?.count || 0
+  return results?.count || 0
 }
 
 /**
@@ -427,10 +426,10 @@ export async function publishProject(projectId, userId, isCurator = false) {
     // Create/update bibliographic reference
     await createBibliographicReference(project, userId, transaction, user)
 
-    // Link member institutions
+    // // Link member institutions
     await linkMemberInstitutions(projectId, project, transaction)
 
-    // Update project as published
+    // // Update project as published
     await project.update(
       {
         published: 1,

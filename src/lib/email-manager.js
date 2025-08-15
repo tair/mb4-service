@@ -117,4 +117,14 @@ const DEFAULT_EMAIL_OPTIONS = {
     from: 'no-reply@morphobank.org',
     include_logo: true,
   },
+  publication_notification: {
+    subject: 'MorphoBank Publishing Notification',
+    from: 'no-reply@morphobank.org',
+    to: 'swapp19902@gmail.com',
+  },
+  publication_media_notification: {
+    subject: 'MorphoBank Media Publishing Notification',
+    from: 'no-reply@morphobank.org',
+    to: 'swapp19902@gmail.com',
+  },
 }

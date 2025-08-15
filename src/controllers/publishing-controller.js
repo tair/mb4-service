@@ -3,6 +3,7 @@ import { getRoles } from '../services/user-roles-service.js'
 import * as publishingService from '../services/publishing-service.js'
 import { time } from '../util/util.js'
 import sequelizeConn from '../util/db.js'
+import { processTasks } from '../services/task-queue-service.js'
 
 /**
  * Get publishing preferences form
@@ -256,84 +257,105 @@ export async function publishProject(req, res) {
     }
 
     // Schedule asynchronous tasks after successful publication
-    // try {
-    //   // Get the updated project with author info
-    //   const publishedProject = await models.Project.findByPk(projectId)
-    //   const user = await models.User.findByPk(userId)
+    try {
+      //   // Get the updated project with author info
+      const publishedProject = await models.Project.findByPk(projectId)
+      // console.log('publishedProject', publishedProject)
+      const user = await models.User.findByPk(userId)
 
-    //   // Determine authors for DOI creation
-    //   let authors = publishedProject.article_authors?.trim()
-    //   if (!authors) {
-    //     const projectOwner = await models.User.findByPk(
-    //       publishedProject.user_id
-    //     )
-    //     if (projectOwner) {
-    //       authors = `${projectOwner.fname || ''} ${
-    //         projectOwner.lname || ''
-    //       }`.trim()
-    //     }
-    //     if (!authors && user) {
-    //       authors = `${user.fname || ''} ${user.lname || ''}`.trim()
-    //     }
-    //   }
+      //   // Determine authors for DOI creation
+      let authors = publishedProject.article_authors?.trim()
+      if (!authors) {
+        const projectOwner = await models.User.findByPk(
+          publishedProject.user_id
+        )
+        if (projectOwner) {
+          authors = `${projectOwner.fname || ''} ${
+            projectOwner.lname || ''
+          }`.trim()
+        }
+        if (!authors && user) {
+          authors = `${user.fname || ''} ${user.lname || ''}`.trim()
+        }
+      }
 
-    //   // Schedule DOI creation
-    //   await models.TaskQueue.create({
-    //     user_id: userId,
-    //     priority: 300,
-    //     handler: 'DOICreation',
-    //     parameters: {
-    //       project_id: projectId,
-    //       user_id: userId,
-    //       authors: authors,
-    //     },
-    //   })
+      // Schedule DOI creation
+      await models.TaskQueue.create(
+        {
+          user_id: userId,
+          priority: 300,
+          handler: 'DOICreation',
+          parameters: {
+            project_id: projectId,
+            user_id: userId,
+            authors: authors,
+          },
+        },
+        {
+          user: user,
+        }
+      )
 
-    //   // Schedule project overview stats generation
-    //   await models.TaskQueue.create({
-    //     user_id: userId,
-    //     priority: 300,
-    //     handler: 'ProjectOverview',
-    //     parameters: {
-    //       project_ids: [projectId],
-    //     },
-    //   })
+      // Schedule project overview stats generation
+      await models.TaskQueue.create(
+        {
+          user_id: userId,
+          priority: 300,
+          handler: 'ProjectOverview',
+          parameters: {
+            project_ids: [projectId],
+          },
+        },
+        {
+          user: user,
+        }
+      )
 
-    //   // Schedule publication notification email
-    //   const publishedMediaCount =
-    //     await publishingService.getPublishedMediaCount(
-    //       projectId,
-    //       publishedProject.publish_matrix_media_only
-    //     )
+      //   // Schedule publication notification email
+      const publishedMediaCount =
+        await publishingService.getPublishedMediaCount(
+          projectId,
+          publishedProject.publish_matrix_media_only
+        )
 
-    //   await models.TaskQueue.create({
-    //     user_id: userId,
-    //     priority: 500,
-    //     handler: 'Email',
-    //     parameters: {
-    //       template: 'publication_notification',
-    //       project_id: projectId,
-    //       project_admin: `${user.fname} ${user.lname}, ${user.email}`,
-    //       published_media_count: publishedMediaCount,
-    //     },
-    //   })
+      await models.TaskQueue.create(
+        {
+          user_id: userId,
+          priority: 500,
+          handler: 'Email',
+          parameters: {
+            template: 'publication_notification',
+            project_id: projectId,
+            project_admin: `${user.fname} ${user.lname}, ${user.email}`,
+            published_media_count: publishedMediaCount,
+          },
+        },
+        {
+          user: user,
+        }
+      )
 
-    //   // Schedule media screenshot notification if needed (>27 media)
-    //   if (publishedMediaCount > 27) {
-    //     await models.TaskQueue.create({
-    //       user_id: userId,
-    //       priority: 500,
-    //       handler: 'Email',
-    //       parameters: {
-    //         template: 'publication_media_notification',
-    //         project_id: projectId,
-    //       },
-    //     })
-    //   }
-    // } catch (taskError) {
-    //   // Log task scheduling errors but don't fail the publication
-    //   console.error('Error scheduling post-publication tasks:', taskError)
-    // }
+      // Process the email task immediately
+      await processTasks()
+
+      //   // Schedule media screenshot notification if needed (>27 media)
+      //   if (publishedMediaCount > 27) {
+      //     await models.TaskQueue.create({
+      //       user_id: userId,
+      //       priority: 500,
+      //       handler: 'Email',
+      //       parameters: {
+      //         template: 'publication_media_notification',
+      //         project_id: projectId,
+      //       },
+      //     }, {
+      //       user: user,
+      //     })
+      //   }
+    } catch (taskError) {
+      // Log task scheduling errors but don't fail the publication
+      console.error('Error scheduling post-publication tasks:', taskError)
+    }
 
     return res.status(200).json({
       message: 'Project published successfully',
