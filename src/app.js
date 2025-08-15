@@ -15,9 +15,11 @@ import userRouter from './routes/user-route.js'
 import emailRouter from './routes/email-route.js'
 import homePageRouter from './routes/home-page-routes.js'
 import { initializeCache } from './util/stats-cache.js'
+import { initializeTntCache } from './util/tnt-cache.js'
 import searchRouter from './routes/search-route.js'
 import analyticsRouter from './routes/analytics-route.js'
 import schedulerRouter from './routes/scheduler-route.js'
+import tntRouter from './routes/tnt-route.js'
 import schedulerService from './services/scheduler-service.js'
 import s3Router from './routes/s3-route.js'
 import { trackSession } from './lib/session-middleware.js'
@@ -79,11 +81,15 @@ app.use('/search', searchRouter)
 app.use('/analytics', analyticsRouter)
 app.use('/scheduler', schedulerRouter)
 app.use('/s3', s3Router)
+app.use('/tnt', tntRouter)
 
 // Initialize stats cache
 initializeCache().catch((error) => {
   console.error('Failed to initialize stats cache:', error)
 })
+
+// Initialize TNT cache
+initializeTntCache()
 
 // Start unified logging service (handles analytics + sessions)
 loggingService.start()
@@ -117,18 +123,18 @@ app.use((err, req, res, next) => {
 // Graceful shutdown handling for analytics buffer
 const handleShutdown = async (signal) => {
   console.log(`\n[${signal}] Graceful shutdown initiated...`)
-  
+
   try {
     // Stop the scheduler service
     if (schedulerService.isRunning) {
       schedulerService.stop()
       console.log('✓ Scheduler service stopped')
     }
-    
+
     // Stop logging service and flush all buffers
     await gracefulShutdown()
     console.log('✓ Logging service stopped and all buffers flushed')
-    
+
     console.log('Graceful shutdown complete. Exiting...')
     process.exit(0)
   } catch (error) {
