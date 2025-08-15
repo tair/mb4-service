@@ -14,8 +14,17 @@ export class DOICreationHandler extends Handler {
   }
 
   async process(parameters) {
+    console.log(
+      'DOICreationHandler: Starting process with parameters:',
+      parameters
+    )
+
     const projectId = parseInt(parameters.project_id)
     if (!projectId) {
+      console.log(
+        'DOICreationHandler: Invalid project ID:',
+        parameters.project_id
+      )
       return this.createError(
         HandlerErrors.ILLEGAL_PARAMETER,
         'Project ID is not defined'
@@ -24,21 +33,31 @@ export class DOICreationHandler extends Handler {
 
     const userId = parseInt(parameters.user_id)
     if (!userId) {
+      console.log('DOICreationHandler: Invalid user ID:', parameters.user_id)
       return this.createError(
         HandlerErrors.ILLEGAL_PARAMETER,
         'User ID is not defined'
       )
     }
 
+    console.log('DOICreationHandler: Looking up project:', projectId)
     const project = await models.Project.findByPk(parameters.project_id)
     if (project == null) {
+      console.log('DOICreationHandler: Project not found:', projectId)
       return this.createError(
         HandlerErrors.ILLEGAL_PARAMETER,
         'Project ${projectId} does not exist'
       )
     }
 
+    console.log('DOICreationHandler: Found project:', {
+      id: project.project_id,
+      name: project.name,
+      existing_doi: project.project_doi,
+    })
+
     if (!parameters.authors) {
+      console.log('DOICreationHandler: Authors not provided')
       return this.createError(
         HandlerErrors.ILLEGAL_PARAMETER,
         'Authors was not defined'
@@ -48,8 +67,26 @@ export class DOICreationHandler extends Handler {
     const authors = parameters.authors.split(',')
     const projectDoi = `P${projectId}`
     const projectTitle = `${project.name} (project)`
+
+    console.log(
+      'DOICreationHandler: Checking if project DOI exists:',
+      projectDoi
+    )
     const projectDoiExist = await this.doiCreator.exists(projectDoi)
+    console.log(
+      'DOICreationHandler: Project DOI exists check result:',
+      projectDoiExist
+    )
+
     if (project.project_doi == null && !projectDoiExist) {
+      console.log('DOICreationHandler: Creating new project DOI with data:', {
+        id: projectDoi,
+        user_id: userId,
+        authors: authors,
+        title: projectTitle,
+        resource: `${BASE_URL}/ProjectOverview/project_id/${projectId}`,
+      })
+
       const success = await this.doiCreator.create({
         id: projectDoi,
         user_id: userId,
@@ -57,12 +94,22 @@ export class DOICreationHandler extends Handler {
         title: projectTitle,
         resource: `${BASE_URL}/ProjectOverview/project_id/${projectId}`,
       })
+
+      console.log('DOICreationHandler: Project DOI creation result:', success)
       if (!success) {
+        console.log(
+          'DOICreationHandler: Failed to create project DOI:',
+          projectDoi
+        )
         return this.createError(
           HandlerErrors.HTTP_CLIENT_ERROR,
           `Error creating DOI: ${projectDoi}`
         )
       }
+    } else {
+      console.log(
+        'DOICreationHandler: Skipping project DOI creation - already exists or project already has DOI'
+      )
     }
 
     const matrixDois = new Map()

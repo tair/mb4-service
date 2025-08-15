@@ -145,5 +145,6 @@ projectRouter.get(
   publishingController.validateMediaForPublishing
 )
 projectRouter.post('/publishing/publish', publishingController.publishProject)
+projectRouter.post('/publishing/test-doi', publishingController.testDOICreation)
 
 export default projectsRouter

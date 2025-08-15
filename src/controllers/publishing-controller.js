@@ -280,21 +280,21 @@ export async function publishProject(req, res) {
       }
 
       // Schedule DOI creation
-      await models.TaskQueue.create(
-        {
-          user_id: userId,
-          priority: 300,
-          handler: 'DOICreation',
-          parameters: {
-            project_id: projectId,
-            user_id: userId,
-            authors: authors,
-          },
-        },
-        {
-          user: user,
-        }
-      )
+      // await models.TaskQueue.create(
+      //   {
+      //     user_id: userId,
+      //     priority: 300,
+      //     handler: 'DOICreation',
+      //     parameters: {
+      //       project_id: projectId,
+      //       user_id: userId,
+      //       authors: authors,
+      //     },
+      //   },
+      //   {
+      //     user: user,
+      //   }
+      // )
 
       // Schedule project overview stats generation
       await models.TaskQueue.create(
@@ -317,6 +317,8 @@ export async function publishProject(req, res) {
           projectId,
           publishedProject.publish_matrix_media_only
         )
+
+      console.log('publishedMediaCount', publishedMediaCount)
 
       await models.TaskQueue.create(
         {
@@ -361,6 +363,7 @@ export async function publishProject(req, res) {
       message: 'Project published successfully',
       projectId: projectId,
       publishedOn: time(),
+      dumpResult: publishResult.dumpResult,
     })
   } catch (error) {
     console.error('Error in publishProject:', error)
@@ -413,5 +416,107 @@ export async function validateCitationInfo(req, res) {
   } catch (error) {
     console.error('Error in validateCitationInfo:', error)
     res.status(500).json({ message: 'Internal server error' })
+  }
+}
+
+/**
+ * Test route for DOI creation
+ * Directly calls the DOI creation handler and returns what it outputs
+ */
+export async function testDOICreation(req, res) {
+  try {
+    const project_id = req.params.projectId
+    const { user_id, authors } = req.body
+
+    // Validate required parameters
+    if (!project_id) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'project_id is required',
+      })
+    }
+
+    if (!user_id) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'user_id is required',
+      })
+    }
+
+    // Verify project exists
+    const project = await models.Project.findByPk(project_id)
+    if (!project) {
+      return res.status(404).json({
+        status: 'error',
+        message: `Project ${project_id} not found`,
+      })
+    }
+
+    // Verify user exists
+    const user = await models.User.findByPk(user_id)
+    if (!user) {
+      return res.status(404).json({
+        status: 'error',
+        message: `User ${user_id} not found`,
+      })
+    }
+
+    // Use provided authors or fallback to user name
+    let finalAuthors = authors
+    if (!finalAuthors) {
+      finalAuthors = `${user.fname || ''} ${user.lname || ''}`.trim()
+    }
+
+    // Import and directly call the DOI creation handler
+    const { DOICreationHandler } = await import(
+      '../lib/task-handlers/doi-creation-handler.js'
+    )
+    const doiHandler = new DOICreationHandler()
+
+    // Call the handler's process method directly with the same parameters
+    const handlerResult = await doiHandler.process({
+      project_id: project_id,
+      user_id: user_id,
+      authors: finalAuthors,
+    })
+
+    // Get the updated project to see if DOI was created
+    const updatedProject = await models.Project.findByPk(project_id)
+
+    // Get matrices to see if matrix DOIs were created
+    const matrices = await models.Matrix.findAll({
+      where: { project_id: project_id },
+      attributes: ['matrix_id', 'title', 'matrix_doi'],
+    })
+
+    res.status(200).json({
+      status: 'success',
+      message: 'DOI creation handler called directly',
+      handler_result: handlerResult,
+      project: {
+        project_id: updatedProject.project_id,
+        name: updatedProject.name,
+        project_doi: updatedProject.project_doi,
+        doi: updatedProject.doi,
+      },
+      matrices: matrices.map((matrix) => ({
+        matrix_id: matrix.matrix_id,
+        title: matrix.title,
+        matrix_doi: matrix.matrix_doi,
+      })),
+      parameters_used: {
+        project_id: project_id,
+        user_id: user_id,
+        authors: finalAuthors,
+      },
+    })
+  } catch (error) {
+    console.error('Error in testDOICreation:', error)
+    res.status(500).json({
+      status: 'error',
+      message: 'Internal server error',
+      error: error.message,
+      stack: error.stack,
+    })
   }
 }

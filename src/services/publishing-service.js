@@ -2,6 +2,11 @@ import sequelizeConn from '../util/db.js'
 import { models } from '../models/init-models.js'
 import { time } from '../util/util.js'
 import { QueryTypes } from 'sequelize'
+import * as mediaService from './media-service.js'
+import * as projectDetailService from './project-detail-service.js'
+import * as utilService from '../util/util.js'
+import s3Service from './s3-service.js'
+import config from '../config.js'
 
 /**
  * Validates if project citation information is complete based on publication status
@@ -354,6 +359,224 @@ export async function getPublishedMediaCount(
 }
 
 /**
+ * Dumps project details and media files to JSON files for a single project
+ * Also uploads the files to S3 for backup and accessibility
+ * @param {number} projectId - Project ID to dump
+ * @returns {Object} { success: boolean, message?: string, files?: Array, s3Results?: Array }
+ */
+export async function dumpSingleProject(projectId) {
+  try {
+    const start = Date.now()
+    console.log(`Start dumping project ${projectId} data...`)
+
+    const dir = 'data'
+    const mediaDir = 'media_files'
+    const detailDir = 'prj_details'
+
+    // Create directories if they don't exist
+    utilService.createDir(`${dir}`)
+    utilService.createDir(`${dir}/${mediaDir}`)
+    utilService.createDir(`${dir}/${detailDir}`)
+
+    // Get the maps needed for project details
+    const matrixMap = await projectDetailService.getMatrixMap()
+    const folioMap = await projectDetailService.getFolioMap()
+    const documentMap = await projectDetailService.getDocumentMap()
+
+    // Get project details, media files, and stats
+    const media_files = await mediaService.getMediaFileDump(projectId)
+    const project_details = await projectDetailService.getProjectDetails(
+      projectId,
+      matrixMap,
+      folioMap,
+      documentMap
+    )
+
+    // Generate project stats
+    const project_views = await projectDetailService.getProjectViews(
+      projectId,
+      matrixMap,
+      folioMap
+    )
+    const project_downloads = await projectDetailService.getProjectDownloads(
+      projectId,
+      matrixMap,
+      documentMap
+    )
+
+    const projectStats = {
+      project_id: projectId,
+      project_views: project_views,
+      project_downloads: project_downloads,
+      generated_at: new Date().toISOString(),
+    }
+
+    // Prepare file contents
+    const detailsContent = JSON.stringify(project_details, null, 2)
+    const mediaContent = JSON.stringify(media_files, null, 2)
+    const statsContent = JSON.stringify(projectStats, null, 2)
+
+    // Write files locally
+    const detailsFile = `../${dir}/${detailDir}/prj_${projectId}.json`
+    const mediaFile = `../${dir}/${mediaDir}/prj_${projectId}.json`
+    const statsFile = `../${dir}/project_stats/prj_${projectId}.json`
+
+    // Create project_stats directory
+    utilService.createDir(`${dir}/project_stats`)
+
+    await utilService.writeToFile(detailsFile, detailsContent)
+    await utilService.writeToFile(mediaFile, mediaContent)
+    await utilService.writeToFile(statsFile, statsContent)
+
+    // Upload to S3
+    const s3Results = []
+    const bucket = config.aws.defaultBucket || 'mb4-data'
+
+    if (config.aws.accessKeyId && config.aws.secretAccessKey) {
+      try {
+        // Upload project details to S3
+        // S3 key pattern: prj_details/prj_{projectId}.json (matches expected access pattern)
+        const detailsS3Key = `prj_details/prj_${projectId}.json`
+        const detailsS3Result = await s3Service.putObject(
+          bucket,
+          detailsS3Key,
+          Buffer.from(detailsContent, 'utf8'),
+          'application/json'
+        )
+
+        s3Results.push({
+          type: 'details',
+          success: true,
+          key: detailsS3Result.key,
+          etag: detailsS3Result.etag,
+          bucket: bucket,
+          url: `https://${bucket}.s3.amazonaws.com/${detailsS3Result.key}`,
+        })
+
+        console.log(
+          `Project ${projectId} details uploaded to S3: ${detailsS3Key}`
+        )
+      } catch (s3Error) {
+        console.error(
+          `Failed to upload project ${projectId} details to S3:`,
+          s3Error.message
+        )
+        s3Results.push({
+          type: 'details',
+          success: false,
+          error: s3Error.message,
+        })
+      }
+
+      try {
+        // Upload media files to S3
+        // S3 key pattern: media_files/prj_{projectId}.json (matches expected access pattern)
+        const mediaS3Key = `media_files/prj_${projectId}.json`
+        const mediaS3Result = await s3Service.putObject(
+          bucket,
+          mediaS3Key,
+          Buffer.from(mediaContent, 'utf8'),
+          'application/json'
+        )
+
+        s3Results.push({
+          type: 'media',
+          success: true,
+          key: mediaS3Result.key,
+          etag: mediaS3Result.etag,
+          bucket: bucket,
+          url: `https://${bucket}.s3.amazonaws.com/${mediaS3Result.key}`,
+        })
+
+        console.log(
+          `Project ${projectId} media files uploaded to S3: ${mediaS3Key}`
+        )
+      } catch (s3Error) {
+        console.error(
+          `Failed to upload project ${projectId} media files to S3:`,
+          s3Error.message
+        )
+        s3Results.push({
+          type: 'media',
+          success: false,
+          error: s3Error.message,
+        })
+      }
+
+      try {
+        // Upload project stats to S3
+        // S3 key pattern: prj_stats/prj_{projectId}.json (matches expected access pattern)
+        const statsS3Key = `prj_stats/prj_${projectId}.json`
+        const statsS3Result = await s3Service.putObject(
+          bucket,
+          statsS3Key,
+          Buffer.from(statsContent, 'utf8'),
+          'application/json'
+        )
+
+        s3Results.push({
+          type: 'stats',
+          success: true,
+          key: statsS3Result.key,
+          etag: statsS3Result.etag,
+          bucket: bucket,
+          url: `https://${bucket}.s3.amazonaws.com/${statsS3Result.key}`,
+        })
+
+        console.log(`Project ${projectId} stats uploaded to S3: ${statsS3Key}`)
+      } catch (s3Error) {
+        console.error(
+          `Failed to upload project ${projectId} stats to S3:`,
+          s3Error.message
+        )
+        s3Results.push({
+          type: 'stats',
+          success: false,
+          error: s3Error.message,
+        })
+      }
+    } else {
+      console.warn('AWS S3 credentials not configured - skipping S3 upload')
+      s3Results.push({
+        type: 'config',
+        success: false,
+        error: 'AWS S3 credentials not configured',
+      })
+    }
+
+    const end = Date.now()
+    const timeElapsed = (end - start) / 1000
+
+    const s3SuccessCount = s3Results.filter((r) => r.success).length
+    const s3FailureCount = s3Results.filter((r) => !r.success).length
+
+    console.log(
+      `Project ${projectId} dump completed in ${timeElapsed} seconds!`
+    )
+    console.log(
+      `S3 uploads: ${s3SuccessCount} successful, ${s3FailureCount} failed`
+    )
+
+    // Extract S3 paths from successful uploads
+    const s3Paths = s3Results.filter((r) => r.success).map((r) => r.key)
+
+    return {
+      success: true,
+      message: `Project ${projectId} dumped successfully`,
+      files: [detailsFile, mediaFile, statsFile],
+      timeElapsed: timeElapsed,
+      s3Paths: s3Paths,
+    }
+  } catch (error) {
+    console.error(`Error dumping project ${projectId}:`, error)
+    return {
+      success: false,
+      message: `Error dumping project ${projectId}: ${error.message}`,
+    }
+  }
+}
+
+/**
  * Main function to publish a project
  * @param {number} projectId - Project ID
  * @param {number} userId - User ID publishing the project
@@ -440,7 +663,18 @@ export async function publishProject(projectId, userId, isCurator = false) {
 
     await transaction.commit()
 
-    return { success: true }
+    // Dump project data after successful publication
+    const dumpResult = await dumpSingleProject(projectId)
+    if (!dumpResult.success) {
+      console.warn(
+        `Warning: Failed to dump project ${projectId} data:`,
+        dumpResult.message
+      )
+    } else {
+      console.log(`Project ${projectId} data dumped successfully`)
+    }
+
+    return { success: true, dumpResult }
   } catch (error) {
     await transaction.rollback()
     throw error
