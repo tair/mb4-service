@@ -22,10 +22,7 @@ export class DataCiteDOICreator {
   }
 
   async create(parameter) {
-    console.log('DataCiteDOICreator: Creating DOI with parameter:', parameter)
-
     const content = this.generateJSON(parameter)
-    console.log('DataCiteDOICreator: Generated JSON content:', content)
 
     const options = {
       host: this.hostname,
@@ -36,22 +33,10 @@ export class DataCiteDOICreator {
         'Content-type': 'application/vnd.api+json',
       },
     }
-    console.log('DataCiteDOICreator: Request options:', {
-      host: options.host,
-      path: options.path,
-      method: options.method,
-      headers: { ...options.headers, Authorization: '[REDACTED]' },
-    })
 
     try {
       const response = await performRequest(options, content)
-      console.log('DataCiteDOICreator: Response received:', {
-        status: response.status,
-        data: response.data,
-      })
-
       const success = response.status < 300
-      console.log('DataCiteDOICreator: Creation success:', success)
       return success
     } catch (error) {
       console.error('DataCiteDOICreator: Request failed with error:', error)
@@ -60,8 +45,6 @@ export class DataCiteDOICreator {
   }
 
   async exists(doi) {
-    console.log('DataCiteDOICreator: Checking if DOI exists:', doi)
-
     const options = {
       host: this.hostname,
       path: `${this.urlPath}/${this.shoulder}/${doi}`,
@@ -70,18 +53,9 @@ export class DataCiteDOICreator {
         Authorization: this.authorizationToken,
       },
     }
-    console.log('DataCiteDOICreator: Exists check options:', {
-      host: options.host,
-      path: options.path,
-      method: options.method,
-    })
 
     try {
       const response = await performRequest(options)
-      console.log('DataCiteDOICreator: Exists check response:', {
-        status: response.status,
-        exists: response.status < 300,
-      })
       return response.status < 300
     } catch (error) {
       console.error(
@@ -150,17 +124,7 @@ function verifyDataciteConfiguration() {
 
 function performRequest(options, content = undefined) {
   return new Promise((resolve, reject) => {
-    console.log(
-      'DataCiteDOICreator: Making HTTP request to:',
-      `https://${options.host}${options.path}`
-    )
-
     const request = https.request(options, (res) => {
-      console.log(
-        'DataCiteDOICreator: Received response with status:',
-        res.statusCode
-      )
-
       const data = []
       res.on('data', (chunk) => {
         data.push(chunk)
@@ -168,7 +132,6 @@ function performRequest(options, content = undefined) {
 
       res.on('close', () => {
         const responseBody = data.join('')
-        console.log('DataCiteDOICreator: Response body:', responseBody)
 
         try {
           const parsedData = responseBody ? JSON.parse(responseBody) : {}
@@ -191,7 +154,6 @@ function performRequest(options, content = undefined) {
     })
 
     if (content) {
-      console.log('DataCiteDOICreator: Sending request body:', content)
       request.write(content)
     }
 

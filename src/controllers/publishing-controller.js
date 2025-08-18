@@ -280,21 +280,21 @@ export async function publishProject(req, res) {
       }
 
       // Schedule DOI creation
-      // await models.TaskQueue.create(
-      //   {
-      //     user_id: userId,
-      //     priority: 300,
-      //     handler: 'DOICreation',
-      //     parameters: {
-      //       project_id: projectId,
-      //       user_id: userId,
-      //       authors: authors,
-      //     },
-      //   },
-      //   {
-      //     user: user,
-      //   }
-      // )
+      await models.TaskQueue.create(
+        {
+          user_id: userId,
+          priority: 300,
+          handler: 'DOICreation',
+          parameters: {
+            project_id: projectId,
+            user_id: userId,
+            authors: authors,
+          },
+        },
+        {
+          user: user,
+        }
+      )
 
       // Schedule project overview stats generation
       await models.TaskQueue.create(
