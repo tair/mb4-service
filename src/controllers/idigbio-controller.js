@@ -144,7 +144,10 @@ export async function importMedia(req, res) {
   const mediaUploader = new S3MediaUploader(transaction, req.user)
   try {
     for (const [id, url] of urls) {
-      files.set(id, downloadUrl(url))
+      files.set(id, downloadUrl(url).catch(error => {
+        console.error(`Failed to download media from URL ${url}:`, error)
+        return { error: `Failed to download media: ${error}`, failed: true }
+      }))
     }
     const taxa = await models.Taxon.findAll({
       where: {
@@ -321,7 +324,21 @@ export async function importMedia(req, res) {
         )
 
         const file = await files.get(id)
-        await mediaUploader.setMedia(media, 'media', file)
+        if (file.failed) {
+          console.error(`Skipping failed media file ${id} from ${link}: ${file.error}`)
+          // Delete the media record since we can't process the file
+          await media.destroy({ transaction, user: req.user })
+          continue
+        }
+        
+        try {
+          await mediaUploader.setMedia(media, 'media', file)
+        } catch (uploadError) {
+          console.error(`Failed to upload media file ${id} from ${link}:`, uploadError.message)
+          // Delete the media record since upload failed
+          await media.destroy({ transaction, user: req.user })
+          continue
+        }
         await media.save({
           transaction,
           user: req.user,
@@ -360,8 +377,18 @@ export async function importMedia(req, res) {
     console.error('Failed to import media', e)
     res.status(200).json({ success: false, message: e.message })
   } finally {
-    for await (const file of files.values()) {
-      fs.unlink(file.path)
+    for await (const filePromise of files.values()) {
+      try {
+        const file = await filePromise
+        if (file.failed) {
+          // Skip cleanup for files that failed to download
+          continue
+        }
+        await fs.unlink(file.path)
+      } catch (error) {
+        // Skip cleanup for files that failed to download or delete
+        console.warn('Skipping cleanup for failed file:', error.message)
+      }
     }
   }
 }
