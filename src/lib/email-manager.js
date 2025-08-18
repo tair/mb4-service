@@ -120,11 +120,11 @@ const DEFAULT_EMAIL_OPTIONS = {
   publication_notification: {
     subject: 'MorphoBank Publishing Notification',
     from: 'no-reply@morphobank.org',
-    to: 'swapp19902@gmail.com',
+    to: 'publishing_notifications@mb.org',
   },
   publication_media_notification: {
     subject: 'MorphoBank Media Publishing Notification',
     from: 'no-reply@morphobank.org',
-    to: 'swapp19902@gmail.com',
+    to: 'publishing_notifications@mb.org',
   },
 }
