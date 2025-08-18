@@ -12,7 +12,7 @@ export async function unzip(filePath) {
 
   // Security limits
   const MAX_EXTRACTED_SIZE = 500 * 1024 * 1024 // 500MB total extraction limit
-  const MAX_FILES = 1000 // Maximum number of files
+  const MAX_FILES = 5000 // Maximum number of files
   const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB per file
 
   try {
