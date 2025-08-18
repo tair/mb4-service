@@ -1,5 +1,6 @@
 import sequelizeConn from '../util/db.js'
 import { getMedia } from '../util/media.js'
+import { time } from '../util/util.js'
 import { models } from '../models/init-models.js'
 import { getRoles } from '../services/user-roles-service.js'
 import * as institutionService from '../services/institution-service.js'
@@ -422,7 +423,7 @@ export async function editProject(req, res, next) {
             notes: 'Journal cover image',
             published: 0,
             access: 0,
-            cataloguing_status: 1,
+            cataloguing_status: 0, // Journal covers should NOT go to curation
             media_type: 'image',
           },
           {
@@ -725,6 +726,63 @@ export async function getJournalCover(req, res, next) {
 }
 
 // Create a new project with optional journal cover upload
+// Delete a project (soft delete by setting deleted = 1)
+export async function deleteProject(req, res, next) {
+  try {
+    const projectId = req.params.projectId
+    const project = await models.Project.findByPk(projectId)
+    
+    if (project == null) {
+      res.status(404).json({ message: 'Project is not found' })
+      return
+    }
+
+    // Check if user has permission to delete this project
+    // Only project owner or admin can delete
+    if (project.user_id !== req.user.user_id && !req.user.is_admin) {
+      res.status(403).json({ message: 'Not authorized to delete this project' })
+      return
+    }
+
+    // Check if project is already deleted
+    if (project.deleted) {
+      res.status(400).json({ message: 'Project is already deleted' })
+      return
+    }
+
+    const transaction = await sequelizeConn.transaction()
+    try {
+      // Soft delete by setting deleted = 1
+      await project.update(
+        { 
+          deleted: 1,
+          last_accessed_on: time() 
+        },
+        { 
+          transaction,
+          user: req.user 
+        }
+      )
+      
+      await transaction.commit()
+      
+      res.status(200).json({ 
+        message: 'Project deleted successfully',
+        project_id: projectId 
+      })
+    } catch (error) {
+      await transaction.rollback()
+      throw error
+    }
+  } catch (error) {
+    console.error('Error deleting project:', error)
+    res.status(500).json({ 
+      message: 'Failed to delete project',
+      error: error.message 
+    })
+  }
+}
+
 export async function createProject(req, res, next) {
   try {
     // Extract data from request body - handle both JSON and FormData
@@ -875,7 +933,7 @@ export async function createProject(req, res, next) {
             notes: 'Journal cover image',
             published: 0,
             access: 0,
-            cataloguing_status: 1,
+            cataloguing_status: 0, // Journal covers should NOT go to curation
             media_type: 'image',
           },
           {
