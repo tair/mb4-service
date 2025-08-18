@@ -84,6 +84,7 @@ projectsRouter.post(
   ]),
   controller.editProject
 )
+projectsRouter.delete('/:projectId', controller.deleteProject)
 
 // This is a sub-route focused on /projects/<ID>
 const projectRouter = express.Router({ mergeParams: true })
