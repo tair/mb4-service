@@ -4,7 +4,7 @@ import { Handler, HandlerErrors } from './handler.js'
 import { QueryTypes } from 'sequelize'
 import { models } from '../../models/init-models.js'
 
-const BASE_URL = `https://${process.env.DOMAIN}/project`
+const BASE_URL = `${process.env.FRONTEND_URL}/project`
 
 /** A handler to creating DOIs for Projects and Matrices. */
 export class DOICreationHandler extends Handler {
