@@ -2,6 +2,7 @@ import cron from 'node-cron'
 import axios from 'axios'
 import config from '../config.js'
 import CipresRequestService from './cipres-request-service.js'
+import { processTasks } from './task-queue-service.js'
 
 class SchedulerService {
   constructor() {
@@ -35,6 +36,21 @@ class SchedulerService {
 
     this.jobs.set('cipres-sync', cipresJob)
     console.log('✓ CIPRES sync scheduled to run every 5 minutes')
+
+    // Schedule task queue processing every minute
+    const taskQueueJob = cron.schedule(
+      '* * * * *',
+      async () => {
+        await this.processTaskQueue()
+      },
+      {
+        scheduled: true,
+        timezone: 'UTC',
+      }
+    )
+
+    this.jobs.set('task-queue', taskQueueJob)
+    console.log('✓ Task queue processing scheduled to run every minute')
 
     // Optional: Add more scheduled tasks here
     // Example: Daily cleanup task
@@ -95,6 +111,20 @@ class SchedulerService {
   }
 
   /**
+   * Process task queue - called by the scheduler
+   */
+  async processTaskQueue() {
+    try {
+      await processTasks()
+    } catch (error) {
+      // Don't spam logs for empty task queue
+      if (!error.message.includes('No tasks')) {
+        console.error(`[${new Date().toISOString()}] Task queue processing failed:`, error.message)
+      }
+    }
+  }
+
+  /**
    * Sync CIPRES jobs - called by the scheduler
    */
   async syncCipresJobs() {
@@ -132,6 +162,9 @@ class SchedulerService {
     switch (jobName) {
       case 'cipres-sync':
         await this.syncCipresJobs()
+        break
+      case 'task-queue':
+        await this.processTaskQueue()
         break
       case 'daily-cleanup':
         await this.dailyCleanup()

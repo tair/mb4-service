@@ -3,6 +3,8 @@ import {
   GetObjectCommand,
   PutObjectCommand,
   DeleteObjectCommand,
+  CopyObjectCommand,
+  ListObjectsV2Command,
 } from '@aws-sdk/client-s3'
 import config from '../config.js'
 
@@ -126,6 +128,58 @@ class S3Service {
     } catch (error) {
       console.error('S3 Service Error:', error)
       throw new Error(`Failed to delete object from S3: ${error.message}`)
+    }
+  }
+
+  /**
+   * Copy object from one S3 location to another
+   * @param {string} sourceBucketName - The source S3 bucket name
+   * @param {string} sourceKey - The source object key/path
+   * @param {string} destinationBucketName - The destination S3 bucket name
+   * @param {string} destinationKey - The destination object key/path
+   * @returns {Promise<{key: string, etag: string}>}
+   */
+  async copyObject(sourceBucketName, sourceKey, destinationBucketName, destinationKey) {
+    try {
+      const copySource = `${sourceBucketName}/${sourceKey}`
+      
+      const command = new CopyObjectCommand({
+        CopySource: copySource,
+        Bucket: destinationBucketName,
+        Key: destinationKey,
+      })
+
+      const response = await this.s3Client.send(command)
+
+      return {
+        key: destinationKey,
+        etag: response.ETag,
+        versionId: response.VersionId,
+      }
+    } catch (error) {
+      console.error('S3 Service Error:', error)
+      throw new Error(`Failed to copy object in S3: ${error.message}`)
+    }
+  }
+
+  /**
+   * List objects in S3 bucket with optional prefix
+   * @param {string} bucketName - The S3 bucket name
+   * @param {string} prefix - The prefix to filter objects (optional)
+   * @returns {Promise<Array<{Key: string, Size: number, LastModified: Date}>>}
+   */
+  async listObjects(bucketName, prefix = '') {
+    try {
+      const command = new ListObjectsV2Command({
+        Bucket: bucketName,
+        Prefix: prefix,
+      })
+
+      const response = await this.s3Client.send(command)
+      return response.Contents || []
+    } catch (error) {
+      console.error('S3 Service Error:', error)
+      throw new Error(`Failed to list objects in S3: ${error.message}`)
     }
   }
 }

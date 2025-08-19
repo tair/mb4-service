@@ -541,17 +541,20 @@ export class ProjectOverviewGenerator {
       { replacements: [projectId], transaction }
     )
 
-    await sequelizeConn.query(
-      `
-      INSERT INTO stats_taxa_overview (
-        project_id, matrix_id, taxon_id, taxon_number, taxon_name,
-        unscored_cells, scored_cells, npa_cells, not_cells, cell_warnings,
-        cell_images, cell_image_labels,
-        cells_scored_no_npa_cnotes_cmedia_ccitations, last_modified_on,
-        generated_on)
-      VALUES ?`,
-      { replacements: [entries], transaction }
-    )
+    // Only insert if there are entries to insert
+    if (entries.length > 0) {
+      await sequelizeConn.query(
+        `
+        INSERT INTO stats_taxa_overview (
+          project_id, matrix_id, taxon_id, taxon_number, taxon_name,
+          unscored_cells, scored_cells, npa_cells, not_cells, cell_warnings,
+          cell_images, cell_image_labels,
+          cells_scored_no_npa_cnotes_cmedia_ccitations, last_modified_on,
+          generated_on)
+        VALUES ?`,
+        { replacements: [entries], transaction }
+      )
+    }
 
     await transaction.commit()
     return entries
