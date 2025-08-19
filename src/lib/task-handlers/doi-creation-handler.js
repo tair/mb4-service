@@ -4,7 +4,7 @@ import { Handler, HandlerErrors } from './handler.js'
 import { QueryTypes } from 'sequelize'
 import { models } from '../../models/init-models.js'
 
-const BASE_URL = 'https://beta.morphobank.org/project'
+const BASE_URL = process.env.FRONTEND_URL
 
 /** A handler to creating DOIs for Projects and Matrices. */
 export class DOICreationHandler extends Handler {
