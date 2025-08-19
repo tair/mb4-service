@@ -649,10 +649,10 @@ export async function publishProject(projectId, userId, isCurator = false) {
     // Create/update bibliographic reference
     await createBibliographicReference(project, userId, transaction, user)
 
-    // // Link member institutions
+    // Link member institutions
     await linkMemberInstitutions(projectId, project, transaction)
 
-    // // Update project as published
+    // Update project as published
     await project.update(
       {
         published: 1,

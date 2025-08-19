@@ -541,7 +541,7 @@ export class ProjectOverviewGenerator {
       { replacements: [projectId], transaction }
     )
 
-    // Only insert if there are entries to insert
+    // Only insert if there are entries to avoid SQL syntax error
     if (entries.length > 0) {
       await sequelizeConn.query(
         `
@@ -999,19 +999,22 @@ export class ProjectOverviewGenerator {
       { replacements: [projectId], transaction }
     )
 
-    await sequelizeConn.query(
-      `
-      INSERT INTO stats_members_overview (
-        project_id, user_id, lname, fname, administrator, membership_status,
-        member_email, member_role, last_access, taxa, specimens, media,
-        media_notes, characters, character_comments, character_notes,
-        character_media, character_media_labels, cell_scorings,
-        cell_scorings_scored, cell_scorings_npa, cell_scorings_not,
-        cell_comments, cell_media, cell_notes, cell_media_labels, rules,
-        warnings)
-      VALUES ?`,
-      { replacements: [entries], transaction }
-    )
+    // Only insert if there are entries to avoid SQL syntax error
+    if (entries.length > 0) {
+      await sequelizeConn.query(
+        `
+        INSERT INTO stats_members_overview (
+          project_id, user_id, lname, fname, administrator, membership_status,
+          member_email, member_role, last_access, taxa, specimens, media,
+          media_notes, characters, character_comments, character_notes,
+          character_media, character_media_labels, cell_scorings,
+          cell_scorings_scored, cell_scorings_npa, cell_scorings_not,
+          cell_comments, cell_media, cell_notes, cell_media_labels, rules,
+          warnings)
+        VALUES ?`,
+        { replacements: [entries], transaction }
+      )
+    }
 
     await transaction.commit()
     return entries
