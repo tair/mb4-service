@@ -1228,12 +1228,12 @@ export async function createBulkMediaViews(req, res) {
 }
 
 /**
- * Download project as SDD (Structured Descriptive Data) XML
+ * Download project as SDD (Structured Descriptive Data) XML or ZIP with media
  */
 export async function downloadProjectSDD(req, res) {
   try {
     const { projectId } = req.params
-    const { partitionId } = req.query
+    const { partitionId, format = 'xml' } = req.query
 
     // Validate project exists
     const project = await models.Project.findByPk(projectId)
@@ -1276,29 +1276,57 @@ export async function downloadProjectSDD(req, res) {
     console.log(
       `Starting SDD export for project ${projectId}${
         partitionId ? ` with partition ${partitionId}` : ''
-      }`
+      } in ${format} format`
     )
 
-    // Create SDD exporter and generate XML
+    // Create SDD exporter
     const exporter = new SDDExporter(projectId, partitionId)
-    const sddXml = await exporter.export()
+    const projectName = project.name.replace(/[^a-zA-Z0-9]/g, '_')
 
-    // Set response headers for file download
-    const filename = `${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_sdd.xml`
-    res.setHeader('Content-Type', 'application/xml')
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
-    res.setHeader('Cache-Control', 'no-cache')
+    if (format === 'zip') {
+      // Generate ZIP archive with SDD XML and media files
+      const filename = `${projectName}_morphobank.zip`
 
-    console.log(`SDD export completed for project ${projectId}`)
+      // Set headers for ZIP download
+      res.setHeader('Content-Type', 'application/zip')
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+      res.setHeader('Pragma', 'no-cache')
+      res.setHeader('Expires', '0')
 
-    // Send the XML content
-    res.send(sddXml)
+      // Set timeout for large downloads
+      req.setTimeout(1800000) // 30 minutes
+      res.setTimeout(1800000)
+
+      // Stream ZIP directly to response
+      await exporter.exportAsZip(res)
+
+      console.log(`SDD ZIP export completed for project ${projectId}`)
+    } else {
+      // Generate XML only
+      const sddXml = await exporter.export()
+      const filename = `${projectName}_sdd.xml`
+
+      // Set headers for XML download
+      res.setHeader('Content-Type', 'application/xml')
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+      res.setHeader('Cache-Control', 'no-cache')
+
+      console.log(`SDD XML export completed for project ${projectId}`)
+
+      // Send the XML content
+      res.send(sddXml)
+    }
   } catch (error) {
     console.error('Error generating SDD export:', error)
-    return res.status(500).json({
-      status: 'error',
-      message: 'Failed to generate SDD export',
-      error: error.message,
-    })
+
+    // If response hasn't been sent yet, send error
+    if (!res.headersSent) {
+      return res.status(500).json({
+        status: 'error',
+        message: 'Failed to generate SDD export',
+        error: error.message,
+      })
+    }
   }
 }
