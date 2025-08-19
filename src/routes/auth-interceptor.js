@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 import { Buffer } from 'node:buffer'
 import config from '../config.js'
+import { models } from '../models/init-models.js'
 
 export function authenticateToken(req, res, next) {
   // Return 401 when token is not present or in a invalid format in the header.
@@ -61,6 +62,40 @@ export function maybeAuthenticateToken(req, res, next) {
     }
     next()
   })
+}
+
+/**
+ * Middleware that checks if the authenticated user has confirmed their profile within the last year.
+ * Should be used after authenticateToken middleware.
+ * Returns 449 status code with profile_confirmation_required flag if user needs to confirm profile.
+ */
+export async function requireProfileConfirmation(req, res, next) {
+  // Skip check if user is not authenticated (credential not set)
+  if (!req.credential || !req.credential.user_id) {
+    return next()
+  }
+
+  try {
+    const user = await models.User.findByPk(req.credential.user_id)
+    
+    if (!user) {
+      return res.status(401).json({ message: 'User not found.' })
+    }
+
+    // Check if user has confirmed their profile within the last year
+    if (!user.hasConfirmedProfile()) {
+      return res.status(449).json({ 
+        message: 'Profile confirmation required. Please update your profile to continue.',
+        profile_confirmation_required: true,
+        redirect_to_profile: true
+      })
+    }
+
+    next()
+  } catch (error) {
+    console.error('Profile confirmation check failed:', error)
+    return res.status(500).json({ message: 'Profile confirmation check failed.' })
+  }
 }
 
 function isTokenExpired(token) {

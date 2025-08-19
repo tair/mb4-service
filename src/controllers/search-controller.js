@@ -32,7 +32,7 @@ async function searchProjects(req, res) {
   const searchTerm = req.query.searchTerm
 
   let query =
-    'SELECT project_id, name, article_authors, journal_year, article_title, journal_title, journal_volume article_pp, published FROM projects WHERE (name LIKE :searchTerm OR description LIKE :searchTerm OR journal_title LIKE :searchTerm OR article_title LIKE :searchTerm) AND deleted = 0'
+    'SELECT project_id, name, article_authors, journal_year, article_title, journal_title, journal_volume article_pp, published FROM projects WHERE (name LIKE :searchTerm OR description LIKE :searchTerm OR journal_title LIKE :searchTerm OR article_title LIKE :searchTerm OR article_authors LIKE :searchTerm) AND deleted = 0'
 
   if (!canAccessUnpublished) {
     query += ' AND published = 1'
@@ -55,6 +55,79 @@ async function searchProjects(req, res) {
       res
         .status(500)
         .json({ error: 'An error occurred while searching for projects.' })
+    })
+}
+
+async function searchProjectMembers(req, res) {
+  const { canAccessUnpublished } = await getUserAccessInfo(req.user)
+  const searchTerm = req.query.searchTerm
+
+  let query = `SELECT DISTINCT 
+    u.user_id, u.fname, u.lname, u.email,
+    p.project_id, p.name as project_name, p.published,
+    p.article_authors, p.journal_year, p.article_title, 
+    p.journal_title, p.journal_volume, p.article_pp,
+    pxu.membership_type, pxu.color
+    FROM ca_users u
+    INNER JOIN projects_x_users pxu ON u.user_id = pxu.user_id
+    INNER JOIN projects p ON pxu.project_id = p.project_id
+    WHERE (u.fname LIKE :searchTerm OR u.lname LIKE :searchTerm OR u.email LIKE :searchTerm) 
+    AND u.active = 1 
+    AND p.deleted = 0`
+
+  if (!canAccessUnpublished) {
+    query += ' AND p.published = 1'
+  }
+
+  query += ' ORDER BY u.lname, u.fname, p.name'
+
+  sequelizeConn
+    .query(query, {
+      replacements: { searchTerm: `%${searchTerm}%` },
+      type: Sequelize.QueryTypes.SELECT,
+    })
+    .then((members) => {
+      // Group results by user for better structure
+      const groupedMembers = members.reduce((acc, member) => {
+        const userId = member.user_id
+
+        if (!acc[userId]) {
+          acc[userId] = {
+            user_id: member.user_id,
+            fname: member.fname,
+            lname: member.lname,
+            email: member.email,
+            projects: [],
+          }
+        }
+
+        acc[userId].projects.push({
+          project_id: member.project_id,
+          project_name: member.project_name,
+          published: member.published,
+          article_authors: member.article_authors,
+          journal_year: member.journal_year,
+          article_title: member.article_title,
+          journal_title: member.journal_title,
+          journal_volume: member.journal_volume,
+          article_pp: member.article_pp,
+          membership_type: member.membership_type,
+          color: member.color,
+        })
+
+        return acc
+      }, {})
+
+      return res.status(200).json({
+        members: Object.values(groupedMembers),
+        total_count: Object.keys(groupedMembers).length,
+      })
+    })
+    .catch((err) => {
+      console.log(err)
+      res.status(500).json({
+        error: 'An error occurred while searching for project members.',
+      })
     })
 }
 
@@ -298,7 +371,8 @@ async function searchReferences(req, res) {
       b.publisher LIKE :searchTerm OR
       b.abstract LIKE :searchTerm OR
       b.description LIKE :searchTerm OR
-      b.keywords LIKE :searchTerm) AND
+      b.keywords LIKE :searchTerm OR
+      b.authors LIKE :searchTerm) AND
       p.deleted = 0`
 
   if (!canAccessUnpublished) {
@@ -326,6 +400,7 @@ async function searchReferences(req, res) {
 export {
   searchInstitutions,
   searchProjects,
+  searchProjectMembers,
   searchMedia,
   searchMediaViews,
   searchSpecimens,

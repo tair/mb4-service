@@ -3,7 +3,7 @@ const { Model } = _sequelize
 import crypto from 'crypto'
 import bcrypt from 'bcrypt'
 
-// TODO(kenzley): We store the last_login and last_logout as numbers in the vars
+// TODO: We store the last_login and last_logout as numbers in the vars
 //     column. We should move them in their own column so that they can be easily
 //     searched and updated.
 export default class User extends Model {
@@ -226,5 +226,20 @@ export default class User extends Model {
     // Concatenate userId and passwordHash with '/'
     const resetKey = `${this.user_id}/${this.password_hash || ''}`
     return User.md5HashPassword(resetKey)
+  }
+
+  /**
+   * Check if user has confirmed their profile within the last year
+   * @returns {boolean} true if profile was confirmed within 31,557,600 seconds (1 year)
+   */
+  hasConfirmedProfile() {
+    if (!this.last_confirmed_profile_on) {
+      return false
+    }
+    
+    const currentTime = Math.floor(Date.now() / 1000) // Current time in seconds
+    const oneYearInSeconds = 31557600 // 365.25 days * 24 hours * 60 minutes * 60 seconds
+    
+    return (currentTime - this.last_confirmed_profile_on) <= oneYearInSeconds
   }
 }

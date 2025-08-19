@@ -1,5 +1,6 @@
 import sequelizeConn from '../util/db.js'
 import { getMedia } from '../util/media.js'
+import { time } from '../util/util.js'
 import { models } from '../models/init-models.js'
 import { getRoles } from '../services/user-roles-service.js'
 import * as institutionService from '../services/institution-service.js'
@@ -12,6 +13,7 @@ import { FileUploader } from '../lib/file-uploader.js'
 import { S3MediaUploader } from '../lib/s3-media-uploader.js'
 import axios from 'axios'
 import { MembershipType } from '../models/projects-x-user.js'
+import { EmailManager } from '../lib/email-manager.js'
 
 export async function getProjects(req, res) {
   const userId = req.user?.user_id
@@ -49,6 +51,7 @@ export async function getProjects(req, res) {
       last_accessed_on: project.last_accessed_on,
       user_last_accessed_on: project.user_last_accessed_on,
       admin_user_id: project.admin_user_id,
+      exemplar_media_id: project.exemplar_media_id,
       members: [],
       administrator: null,
     })
@@ -420,7 +423,7 @@ export async function editProject(req, res, next) {
             notes: 'Journal cover image',
             published: 0,
             access: 0,
-            cataloguing_status: 1,
+            cataloguing_status: 0, // Journal covers should NOT go to curation
             media_type: 'image',
           },
           {
@@ -528,6 +531,18 @@ export async function createDuplicationRequest(req, res) {
   try {
     const transaction = await sequelizeConn.transaction()
     
+    // Get project details for email
+    const project = await models.Project.findByPk(projectId)
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' })
+    }
+
+    // Get user details for email
+    const user = await models.User.findByPk(req.user.user_id)
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+    
     const duplicationRequest = await models.ProjectDuplicationRequest.create(
       {
         project_id: projectId,
@@ -542,6 +557,25 @@ export async function createDuplicationRequest(req, res) {
     )
 
     await transaction.commit()
+
+    // Send email notification to curators
+    try {
+      const emailManager = new EmailManager()
+      const requesterName = `${user.fname || ''} ${user.lname || ''}`.trim() || user.email
+      
+      const emailParams = {
+        requester: requesterName,
+        userEmailAddress: user.email,
+        projectId: projectId,
+        projectName: project.name || `Project ${projectId}`,
+        note: remarks
+      }
+      
+      await emailManager.email('project_duplication_request', emailParams)
+    } catch (emailError) {
+      console.error('Error sending duplication request email:', emailError)
+      // Don't fail the request if email fails, just log the error
+    }
     
     res.status(200).json({ 
       success: true, 
@@ -692,6 +726,63 @@ export async function getJournalCover(req, res, next) {
 }
 
 // Create a new project with optional journal cover upload
+// Delete a project (soft delete by setting deleted = 1)
+export async function deleteProject(req, res, next) {
+  try {
+    const projectId = req.params.projectId
+    const project = await models.Project.findByPk(projectId)
+    
+    if (project == null) {
+      res.status(404).json({ message: 'Project is not found' })
+      return
+    }
+
+    // Check if user has permission to delete this project
+    // Only project owner or admin can delete
+    if (project.user_id !== req.user.user_id && !req.user.is_admin) {
+      res.status(403).json({ message: 'Not authorized to delete this project' })
+      return
+    }
+
+    // Check if project is already deleted
+    if (project.deleted) {
+      res.status(400).json({ message: 'Project is already deleted' })
+      return
+    }
+
+    const transaction = await sequelizeConn.transaction()
+    try {
+      // Soft delete by setting deleted = 1
+      await project.update(
+        { 
+          deleted: 1,
+          last_accessed_on: time() 
+        },
+        { 
+          transaction,
+          user: req.user 
+        }
+      )
+      
+      await transaction.commit()
+      
+      res.status(200).json({ 
+        message: 'Project deleted successfully',
+        project_id: projectId 
+      })
+    } catch (error) {
+      await transaction.rollback()
+      throw error
+    }
+  } catch (error) {
+    console.error('Error deleting project:', error)
+    res.status(500).json({ 
+      message: 'Failed to delete project',
+      error: error.message 
+    })
+  }
+}
+
 export async function createProject(req, res, next) {
   try {
     // Extract data from request body - handle both JSON and FormData
@@ -842,7 +933,7 @@ export async function createProject(req, res, next) {
             notes: 'Journal cover image',
             published: 0,
             access: 0,
-            cataloguing_status: 1,
+            cataloguing_status: 0, // Journal covers should NOT go to curation
             media_type: 'image',
           },
           {
