@@ -609,12 +609,20 @@ function initModels(sequelizeConn) {
     foreignKey: 'project_id',
   })
   ProjectDuplicationRequest.belongsTo(Project, {
-    as: 'projects',
+    as: 'Project',
     foreignKey: 'project_id',
   })
   Project.hasMany(ProjectDuplicationRequest, {
     as: 'project_duplication_requests',
     foreignKey: 'project_id',
+  })
+  ProjectDuplicationRequest.belongsTo(User, {
+    as: 'User',
+    foreignKey: 'user_id',
+  })
+  User.hasMany(ProjectDuplicationRequest, {
+    as: 'project_duplication_requests',
+    foreignKey: 'user_id',
   })
   ProjectMemberGroup.belongsTo(Project, {
     as: 'projects',
@@ -632,6 +640,8 @@ function initModels(sequelizeConn) {
     as: 'projects_x_users',
     foreignKey: 'project_id',
   })
+  Project.belongsTo(User, { as: 'User', foreignKey: 'user_id' })
+  User.hasMany(Project, { as: 'projects', foreignKey: 'user_id' })
   Specimen.belongsTo(Project, { as: 'projects', foreignKey: 'project_id' })
   Project.hasMany(Specimen, { as: 'specimens', foreignKey: 'project_id' })
   Taxon.belongsTo(Project, { as: 'projects', foreignKey: 'project_id' })
