@@ -11,6 +11,7 @@ import * as projectUserService from '../services/project-user-service.js'
 import * as mediaService from '../services/media-service.js'
 import { FileUploader } from '../lib/file-uploader.js'
 import { S3MediaUploader } from '../lib/s3-media-uploader.js'
+import { SDDExporter } from '../lib/project-export/sdd-exporter.js'
 import axios from 'axios'
 import { MembershipType } from '../models/projects-x-user.js'
 import { EmailManager } from '../lib/email-manager.js'
@@ -259,7 +260,7 @@ export async function updateProject(req, res) {
 export async function editProject(req, res, next) {
   try {
     const projectId = req.params.projectId
-    
+
     // Extract data from request body - handle both JSON and FormData
     let projectData = req.body
 
@@ -302,8 +303,10 @@ export async function editProject(req, res, next) {
     } = projectData
 
     // Only validate required fields if this is a full project update (not just exemplar media update)
-    const isOnlyExemplarUpdate = Object.keys(projectData).length === 1 && 'exemplar_media_id' in projectData
-    
+    const isOnlyExemplarUpdate =
+      Object.keys(projectData).length === 1 &&
+      'exemplar_media_id' in projectData
+
     if (!isOnlyExemplarUpdate) {
       // Validate required fields for full project updates
       if (
@@ -321,11 +324,17 @@ export async function editProject(req, res, next) {
     // Validate journal fields based on publication status
     if (publication_status === '0' || publication_status === '1') {
       // Published or In press - require basic journal fields
-      const requiredFields = ['description', 'article_authors', 'article_title', 'journal_year']
-      
+      const requiredFields = [
+        'description',
+        'article_authors',
+        'article_title',
+        'journal_year',
+      ]
+
       if (!journal_title && !journal_title_other) {
         return res.status(400).json({
-          message: 'Journal title is required for published or in-press articles',
+          message:
+            'Journal title is required for published or in-press articles',
         })
       }
 
@@ -333,20 +342,30 @@ export async function editProject(req, res, next) {
         const value = projectData[field]
         if (!value || (typeof value === 'string' && value.trim() === '')) {
           return res.status(400).json({
-            message: `${field.replace(/_/g, ' ')} is required for published or in-press articles`,
+            message: `${field.replace(
+              /_/g,
+              ' '
+            )} is required for published or in-press articles`,
           })
         }
       }
 
       // Additional fields required only for Published status
       if (publication_status === '0') {
-        const publishedRequiredFields = ['journal_url', 'journal_volume', 'article_pp']
-        
+        const publishedRequiredFields = [
+          'journal_url',
+          'journal_volume',
+          'article_pp',
+        ]
+
         for (const field of publishedRequiredFields) {
           const value = projectData[field]
           if (!value || (typeof value === 'string' && value.trim() === '')) {
             return res.status(400).json({
-              message: `${field.replace(/_/g, ' ')} is required for published articles`,
+              message: `${field.replace(
+                /_/g,
+                ' '
+              )} is required for published articles`,
             })
           }
         }
@@ -374,7 +393,8 @@ export async function editProject(req, res, next) {
         project.journal_url = journal_url
         project.article_pp = article_pp
         project.description = description
-        project.disk_usage_limit = disk_space_usage || project.disk_usage_limit || 5368709120
+        project.disk_usage_limit =
+          disk_space_usage || project.disk_usage_limit || 5368709120
         project.journal_in_press = publication_status || 2
       }
 
@@ -385,13 +405,14 @@ export async function editProject(req, res, next) {
           const media = await models.MediaFile.findOne({
             where: {
               media_id: exemplar_media_id,
-              project_id: project.project_id
-            }
+              project_id: project.project_id,
+            },
           })
           if (!media) {
             await transaction.rollback()
-            return res.status(400).json({ 
-              message: 'Invalid exemplar media ID or media does not belong to this project' 
+            return res.status(400).json({
+              message:
+                'Invalid exemplar media ID or media does not belong to this project',
             })
           }
         }
@@ -404,10 +425,16 @@ export async function editProject(req, res, next) {
 
       // Ensure files are valid and not empty placeholders
       // This prevents bad request errors when user wants to keep existing images
-      if (journalCoverFile && (!journalCoverFile.originalname || journalCoverFile.size === 0)) {
+      if (
+        journalCoverFile &&
+        (!journalCoverFile.originalname || journalCoverFile.size === 0)
+      ) {
         journalCoverFile = null
       }
-      if (exemplarMediaFile && (!exemplarMediaFile.originalname || exemplarMediaFile.size === 0)) {
+      if (
+        exemplarMediaFile &&
+        (!exemplarMediaFile.originalname || exemplarMediaFile.size === 0)
+      ) {
         exemplarMediaFile = null
       }
 
@@ -433,7 +460,11 @@ export async function editProject(req, res, next) {
         )
 
         // Process and upload the journal cover image
-        await mediaUploader.setMedia(journalCoverMedia, 'media', journalCoverFile)
+        await mediaUploader.setMedia(
+          journalCoverMedia,
+          'media',
+          journalCoverFile
+        )
 
         await journalCoverMedia.save({
           transaction,
@@ -508,7 +539,9 @@ export async function editProject(req, res, next) {
         response.exemplar_media_id = project.exemplar_media_id
       }
 
-      res.status(200).json({ message: 'Project updated successfully', project: response })
+      res
+        .status(200)
+        .json({ message: 'Project updated successfully', project: response })
     } catch (error) {
       await transaction.rollback()
       if (mediaUploader) {
@@ -530,7 +563,7 @@ export async function createDuplicationRequest(req, res) {
 
   try {
     const transaction = await sequelizeConn.transaction()
-    
+
     // Get project details for email
     const project = await models.Project.findByPk(projectId)
     if (!project) {
@@ -542,7 +575,7 @@ export async function createDuplicationRequest(req, res) {
     if (!user) {
       return res.status(404).json({ message: 'User not found' })
     }
-    
+
     const duplicationRequest = await models.ProjectDuplicationRequest.create(
       {
         project_id: projectId,
@@ -561,26 +594,27 @@ export async function createDuplicationRequest(req, res) {
     // Send email notification to curators
     try {
       const emailManager = new EmailManager()
-      const requesterName = `${user.fname || ''} ${user.lname || ''}`.trim() || user.email
-      
+      const requesterName =
+        `${user.fname || ''} ${user.lname || ''}`.trim() || user.email
+
       const emailParams = {
         requester: requesterName,
         userEmailAddress: user.email,
         projectId: projectId,
         projectName: project.name || `Project ${projectId}`,
-        note: remarks
+        note: remarks,
       }
-      
+
       await emailManager.email('project_duplication_request', emailParams)
     } catch (emailError) {
       console.error('Error sending duplication request email:', emailError)
       // Don't fail the request if email fails, just log the error
     }
-    
-    res.status(200).json({ 
-      success: true, 
+
+    res.status(200).json({
+      success: true,
       message: 'Duplication request submitted successfully',
-      requestId: duplicationRequest.request_id
+      requestId: duplicationRequest.request_id,
     })
   } catch (e) {
     console.error('Error making duplication request', e)
@@ -731,7 +765,7 @@ export async function deleteProject(req, res, next) {
   try {
     const projectId = req.params.projectId
     const project = await models.Project.findByPk(projectId)
-    
+
     if (project == null) {
       res.status(404).json({ message: 'Project is not found' })
       return
@@ -754,21 +788,21 @@ export async function deleteProject(req, res, next) {
     try {
       // Soft delete by setting deleted = 1
       await project.update(
-        { 
+        {
           deleted: 1,
-          last_accessed_on: time() 
+          last_accessed_on: time(),
         },
-        { 
+        {
           transaction,
-          user: req.user 
+          user: req.user,
         }
       )
-      
+
       await transaction.commit()
-      
-      res.status(200).json({ 
+
+      res.status(200).json({
         message: 'Project deleted successfully',
-        project_id: projectId 
+        project_id: projectId,
       })
     } catch (error) {
       await transaction.rollback()
@@ -776,9 +810,9 @@ export async function deleteProject(req, res, next) {
     }
   } catch (error) {
     console.error('Error deleting project:', error)
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Failed to delete project',
-      error: error.message 
+      error: error.message,
     })
   }
 }
@@ -834,11 +868,17 @@ export async function createProject(req, res, next) {
     // Validate journal fields based on publication status
     if (publication_status === '0' || publication_status === '1') {
       // Published or In press - require basic journal fields
-      const requiredFields = ['description', 'article_authors', 'article_title', 'journal_year']
-      
+      const requiredFields = [
+        'description',
+        'article_authors',
+        'article_title',
+        'journal_year',
+      ]
+
       if (!journal_title && !journal_title_other) {
         return res.status(400).json({
-          message: 'Journal title is required for published or in-press articles',
+          message:
+            'Journal title is required for published or in-press articles',
         })
       }
 
@@ -846,20 +886,30 @@ export async function createProject(req, res, next) {
         const value = projectData[field]
         if (!value || (typeof value === 'string' && value.trim() === '')) {
           return res.status(400).json({
-            message: `${field.replace(/_/g, ' ')} is required for published or in-press articles`,
+            message: `${field.replace(
+              /_/g,
+              ' '
+            )} is required for published or in-press articles`,
           })
         }
       }
 
       // Additional fields required only for Published status
       if (publication_status === '0') {
-        const publishedRequiredFields = ['journal_url', 'journal_volume', 'article_pp']
-        
+        const publishedRequiredFields = [
+          'journal_url',
+          'journal_volume',
+          'article_pp',
+        ]
+
         for (const field of publishedRequiredFields) {
           const value = projectData[field]
           if (!value || (typeof value === 'string' && value.trim() === '')) {
             return res.status(400).json({
-              message: `${field.replace(/_/g, ' ')} is required for published articles`,
+              message: `${field.replace(
+                /_/g,
+                ' '
+              )} is required for published articles`,
             })
           }
         }
@@ -872,31 +922,31 @@ export async function createProject(req, res, next) {
     let mediaUploader = null
 
     try {
-          // Create the project first
-    const project = await models.Project.create(
-      {
-        name,
-        nsf_funded,
-        allow_reviewer_login,
-        reviewer_login_password,
-        journal_title: journal_title_other || journal_title,
-        article_authors,
-        article_title,
-        article_doi,
-        journal_year,
-        journal_volume,
-        journal_number,
-        journal_url,
-        article_pp,
-        description,
-        disk_usage_limit: disk_space_usage || 5368709120, // Default 5GB in bytes
-        journal_in_press: publication_status || 2, // Default to "Article in prep or in review"
-        user_id: req.user.user_id,
-        published: 0,
-        last_accessed_on: currentTime,
-      },
-      { transaction, user: req.user }
-    )
+      // Create the project first
+      const project = await models.Project.create(
+        {
+          name,
+          nsf_funded,
+          allow_reviewer_login,
+          reviewer_login_password,
+          journal_title: journal_title_other || journal_title,
+          article_authors,
+          article_title,
+          article_doi,
+          journal_year,
+          journal_volume,
+          journal_number,
+          journal_url,
+          article_pp,
+          description,
+          disk_usage_limit: disk_space_usage || 5368709120, // Default 5GB in bytes
+          journal_in_press: publication_status || 2, // Default to "Article in prep or in review"
+          user_id: req.user.user_id,
+          published: 0,
+          last_accessed_on: currentTime,
+        },
+        { transaction, user: req.user }
+      )
 
       await models.ProjectsXUser.create(
         {
@@ -914,10 +964,16 @@ export async function createProject(req, res, next) {
 
       // Ensure files are valid and not empty placeholders
       // This prevents bad request errors when user wants to keep existing images
-      if (journalCoverFile && (!journalCoverFile.originalname || journalCoverFile.size === 0)) {
+      if (
+        journalCoverFile &&
+        (!journalCoverFile.originalname || journalCoverFile.size === 0)
+      ) {
         journalCoverFile = null
       }
-      if (exemplarMediaFile && (!exemplarMediaFile.originalname || exemplarMediaFile.size === 0)) {
+      if (
+        exemplarMediaFile &&
+        (!exemplarMediaFile.originalname || exemplarMediaFile.size === 0)
+      ) {
         exemplarMediaFile = null
       }
 
@@ -943,7 +999,11 @@ export async function createProject(req, res, next) {
         )
 
         // Process and upload the journal cover image
-        await mediaUploader.setMedia(journalCoverMedia, 'media', journalCoverFile)
+        await mediaUploader.setMedia(
+          journalCoverMedia,
+          'media',
+          journalCoverFile
+        )
 
         await journalCoverMedia.save({
           transaction,
@@ -1163,6 +1223,82 @@ export async function createBulkMediaViews(req, res) {
     return res.status(500).json({
       status: 'error',
       message: 'Failed to create media views',
+    })
+  }
+}
+
+/**
+ * Download project as SDD (Structured Descriptive Data) XML
+ */
+export async function downloadProjectSDD(req, res) {
+  try {
+    const { projectId } = req.params
+    const { partitionId } = req.query
+
+    // Validate project exists
+    const project = await models.Project.findByPk(projectId)
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' })
+    }
+
+    // Check if project is published or user has access
+    const userId = req.user?.user_id
+    let hasAccess = project.published === 1
+
+    if (!hasAccess && userId) {
+      // Check if user has access to the project
+      const projectUser = await models.ProjectsXUser.findOne({
+        where: {
+          project_id: projectId,
+          user_id: userId,
+        },
+      })
+      hasAccess = !!projectUser
+    }
+
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied' })
+    }
+
+    // Validate partition if specified
+    if (partitionId) {
+      const partition = await models.Partition.findOne({
+        where: {
+          partition_id: partitionId,
+          project_id: projectId,
+        },
+      })
+      if (!partition) {
+        return res.status(404).json({ message: 'Partition not found' })
+      }
+    }
+
+    console.log(
+      `Starting SDD export for project ${projectId}${
+        partitionId ? ` with partition ${partitionId}` : ''
+      }`
+    )
+
+    // Create SDD exporter and generate XML
+    const exporter = new SDDExporter(projectId, partitionId)
+    const sddXml = await exporter.export()
+
+    // Set response headers for file download
+    const filename = `${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_sdd.xml`
+    res.setHeader('Content-Type', 'application/xml')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.setHeader('Cache-Control', 'no-cache')
+
+    console.log(`SDD export completed for project ${projectId}`)
+
+    // Send the XML content
+    res.send(sddXml)
+  } catch (error) {
+    console.error('Error generating SDD export:', error)
+    return res.status(500).json({
+      status: 'error',
+      message: 'Failed to generate SDD export',
+      error: error.message,
     })
   }
 }
