@@ -70,11 +70,17 @@ export class TNTExporter extends Exporter {
       }
     }
 
-    const maxStateLength = characters
-      .map((c) => c.states?.length || 0)
-      .reduce((a, b) => Math.max(a, b))
-
-    this.writeLine(`nstates num ${maxStateLength};`)
+    // Check if there are any continuous characters
+    const hasContinuousCharacters = characters.some(c => parseInt(c.type) !== 0)
+    
+    if (hasContinuousCharacters) {
+      this.writeLine('nstates cont;')
+    } else {
+      const maxStateLength = characters
+        .map((c) => c.states?.length || 0)
+        .reduce((a, b) => Math.max(a, b))
+      this.writeLine(`nstates num ${maxStateLength};`)
+    }
     this.writeLine('xread')
     this.writeLine(`'${this.getOutputMessage()}'`)
     this.writeLine(`${characters.length} ${taxa.length}`)
