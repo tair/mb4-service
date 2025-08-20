@@ -59,25 +59,30 @@ export class ProjectDuplicationHandler extends Handler {
       },
       transaction: transaction,
     })
+    // Prepare update data
+    const updateData = {
+      created_on: time(),
+      last_accessed_on: time(),
+      user_id: userId,
+      group_id: null,
+      partition_published_on: null,
+      partitioned_from_project_id: null,
+      published: 0,
+      published_on: null,
+    }
+
+    // Update exemplar media ID if it exists
     if (clonedProject.exemplar_media_id) {
       const newExemplarMediaId = projectDuplicator.getDuplicateRecordId(
         models.MediaFile,
         clonedProject.exemplar_media_id
       )
-      clonedProject.exemplar_media_id = newExemplarMediaId
+      updateData.exemplar_media_id = newExemplarMediaId
+      console.log(`Updated exemplar media ID: ${clonedProject.exemplar_media_id} -> ${newExemplarMediaId}`)
     }
 
     await clonedProject.update(
-      {
-        created_on: time(),
-        last_accessed_on: time(),
-        user_id: userId,
-        group_id: null,
-        partition_published_on: null,
-        partitioned_from_project_id: null,
-        published: 0,
-        published_on: null,
-      },
+      updateData,
       {
         transaction,
         shouldSkipLogChange: true,
@@ -180,6 +185,7 @@ const DUPLICATED_TABLES = [
   models.MediaView,
   models.MediaFile,
   models.Matrix,
+  models.MatrixImage,
   models.CharacterOrdering,
   models.Character,
   models.Taxon,

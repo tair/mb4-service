@@ -583,7 +583,7 @@ export async function createDuplicationRequest(req, res) {
         status: 1,
         user_id: req.user.user_id,
         onetime_use_action: onetimeAction,
-        notes: remarks,
+        notes: '', // Empty string for curator notes
         new_project_number: '0', // Placeholder - will be updated when duplication is completed
       },
       { transaction, user: req.user }

@@ -280,21 +280,21 @@ export async function publishProject(req, res) {
       }
 
       // Schedule DOI creation
-      // await models.TaskQueue.create(
-      //   {
-      //     user_id: userId,
-      //     priority: 300,
-      //     handler: 'DOICreation',
-      //     parameters: {
-      //       project_id: projectId,
-      //       user_id: userId,
-      //       authors: authors,
-      //     },
-      //   },
-      //   {
-      //     user: user,
-      //   }
-      // )
+      await models.TaskQueue.create(
+        {
+          user_id: userId,
+          priority: 300,
+          handler: 'DOICreation',
+          parameters: {
+            project_id: projectId,
+            user_id: userId,
+            authors: authors,
+          },
+        },
+        {
+          user: user,
+        }
+      )
 
       // Schedule project overview stats generation
       await models.TaskQueue.create(
@@ -318,8 +318,6 @@ export async function publishProject(req, res) {
           publishedProject.publish_matrix_media_only
         )
 
-      console.log('publishedMediaCount', publishedMediaCount)
-
       await models.TaskQueue.create(
         {
           user_id: userId,
@@ -340,20 +338,23 @@ export async function publishProject(req, res) {
       // Process the email task immediately
       await processTasks()
 
-      //   // Schedule media screenshot notification if needed (>27 media)
-      //   if (publishedMediaCount > 27) {
-      //     await models.TaskQueue.create({
-      //       user_id: userId,
-      //       priority: 500,
-      //       handler: 'Email',
-      //       parameters: {
-      //         template: 'publication_media_notification',
-      //         project_id: projectId,
-      //       },
-      //     }, {
-      //       user: user,
-      //     })
-      //   }
+      // Schedule media screenshot notification if needed (>27 media)
+      if (publishedMediaCount > 27) {
+        await models.TaskQueue.create(
+          {
+            user_id: userId,
+            priority: 500,
+            handler: 'Email',
+            parameters: {
+              template: 'publication_media_notification',
+              project_id: projectId,
+            },
+          },
+          {
+            user: user,
+          }
+        )
+      }
     } catch (taskError) {
       // Log task scheduling errors but don't fail the publication
       console.error('Error scheduling post-publication tasks:', taskError)

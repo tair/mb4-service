@@ -4,7 +4,7 @@ import { Handler, HandlerErrors } from './handler.js'
 import { QueryTypes } from 'sequelize'
 import { models } from '../../models/init-models.js'
 
-const BASE_URL = 'https://morphobank.org/index.php/projects'
+const BASE_URL = `${process.env.FRONTEND_URL}/project`
 
 /** A handler to creating DOIs for Projects and Matrices. */
 export class DOICreationHandler extends Handler {
@@ -40,7 +40,6 @@ export class DOICreationHandler extends Handler {
       )
     }
 
-    console.log('DOICreationHandler: Looking up project:', projectId)
     const project = await models.Project.findByPk(parameters.project_id)
     if (project == null) {
       console.log('DOICreationHandler: Project not found:', projectId)
@@ -50,14 +49,7 @@ export class DOICreationHandler extends Handler {
       )
     }
 
-    console.log('DOICreationHandler: Found project:', {
-      id: project.project_id,
-      name: project.name,
-      existing_doi: project.project_doi,
-    })
-
     if (!parameters.authors) {
-      console.log('DOICreationHandler: Authors not provided')
       return this.createError(
         HandlerErrors.ILLEGAL_PARAMETER,
         'Authors was not defined'
@@ -68,34 +60,18 @@ export class DOICreationHandler extends Handler {
     const projectDoi = `P${projectId}`
     const projectTitle = `${project.name} (project)`
 
-    console.log(
-      'DOICreationHandler: Checking if project DOI exists:',
-      projectDoi
-    )
     const projectDoiExist = await this.doiCreator.exists(projectDoi)
-    console.log(
-      'DOICreationHandler: Project DOI exists check result:',
-      projectDoiExist
-    )
 
     if (project.project_doi == null && !projectDoiExist) {
-      console.log('DOICreationHandler: Creating new project DOI with data:', {
-        id: projectDoi,
-        user_id: userId,
-        authors: authors,
-        title: projectTitle,
-        resource: `${BASE_URL}/ProjectOverview/project_id/${projectId}`,
-      })
+      const projectResource = `${BASE_URL}/${projectId}/overview`
 
       const success = await this.doiCreator.create({
         id: projectDoi,
         user_id: userId,
         authors: authors,
         title: projectTitle,
-        resource: `${BASE_URL}/ProjectOverview/project_id/${projectId}`,
+        resource: projectResource,
       })
-
-      console.log('DOICreationHandler: Project DOI creation result:', success)
       if (!success) {
         console.log(
           'DOICreationHandler: Failed to create project DOI:',
@@ -119,6 +95,7 @@ export class DOICreationHandler extends Handler {
         matrix_doi: null,
       },
     })
+
     for (const matrix of matrices) {
       const matrixId = parseInt(matrix.matrix_id)
       if (!matrixId) {
@@ -137,7 +114,7 @@ export class DOICreationHandler extends Handler {
           user_id: userId,
           authors: authors,
           title: `${projectTitle} [X${matrixId}] ${matrixTitle}`,
-          resource: `${BASE_URL}/viewMatrix/matrix_id/${matrixId}/project_id/${projectId}`,
+          resource: `${BASE_URL}/${projectId}/matrices/${matrixId}/view`,
         })
         if (!success) {
           return this.createError(
@@ -166,8 +143,8 @@ export class DOICreationHandler extends Handler {
     for (const [matrixId, matrixDoi] of matrixDois.entries()) {
       await sequelizeConn.query(
         `
-        UPDATE matrices 
-        SET matrix_doi = ? 
+        UPDATE matrices
+        SET matrix_doi = ?
         WHERE matrix_id = ? AND matrix_doi IS NULL`,
         {
           replacements: [matrixDoi, matrixId],
