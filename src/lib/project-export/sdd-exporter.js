@@ -897,9 +897,40 @@ export class SDDExporter {
       // Extract filename and mimetype from media JSON if available
       if (media.media) {
         try {
-          const mediaInfo = JSON.parse(media.media)
-          media.filename = mediaInfo.ORIGINAL_FILENAME || `M${media.media_id}`
-          media.mimetype = mediaInfo.MIMETYPE || 'application/octet-stream'
+          let mediaInfo = media.media
+          // If it's a string, parse it; if it's already an object, use it directly
+          if (typeof mediaInfo === 'string') {
+            mediaInfo = JSON.parse(mediaInfo)
+          }
+
+          // Try to get filename and mimetype from any file size
+          const fileSizes = ['original', 'large', 'thumbnail']
+          let foundFilename = null
+          let foundMimetype = null
+
+          for (const fileSize of fileSizes) {
+            if (mediaInfo[fileSize]) {
+              const mediaVersion = mediaInfo[fileSize]
+              if (!foundFilename && mediaVersion.ORIGINAL_FILENAME) {
+                foundFilename = mediaVersion.ORIGINAL_FILENAME
+              }
+              if (!foundMimetype && mediaVersion.MIMETYPE) {
+                foundMimetype = mediaVersion.MIMETYPE
+              }
+              if (foundFilename && foundMimetype) break
+            }
+          }
+
+          // Fallback to top-level fields (legacy)
+          if (!foundFilename && mediaInfo.ORIGINAL_FILENAME) {
+            foundFilename = mediaInfo.ORIGINAL_FILENAME
+          }
+          if (!foundMimetype && mediaInfo.MIMETYPE) {
+            foundMimetype = mediaInfo.MIMETYPE
+          }
+
+          media.filename = foundFilename || `M${media.media_id}`
+          media.mimetype = foundMimetype || 'application/octet-stream'
         } catch (e) {
           media.filename = `M${media.media_id}`
           media.mimetype = 'application/octet-stream'
@@ -1088,12 +1119,40 @@ export class SDDExporter {
    */
   async downloadMediaFromS3(s3Client, mediaItem) {
     try {
-      // Parse media JSON to get S3 key
+      // Get media info (could be JSON string or already parsed object)
       let s3Key = null
       if (mediaItem.media) {
         try {
-          const mediaInfo = JSON.parse(mediaItem.media)
-          s3Key = mediaInfo.s3_key || mediaInfo.S3_KEY
+          let mediaInfo = mediaItem.media
+          // If it's a string, parse it; if it's already an object, use it directly
+          if (typeof mediaInfo === 'string') {
+            mediaInfo = JSON.parse(mediaInfo)
+          }
+          // Media data structure: { original: {S3_KEY: "..."}, large: {S3_KEY: "..."}, thumbnail: {S3_KEY: "..."} }
+          // Try different file sizes in order of preference
+          const fileSizes = ['original', 'large', 'thumbnail']
+          for (const fileSize of fileSizes) {
+            if (mediaInfo[fileSize]) {
+              const mediaVersion = mediaInfo[fileSize]
+              if (mediaVersion.S3_KEY) {
+                s3Key = mediaVersion.S3_KEY
+                console.log(
+                  `Found S3 key for M${mediaItem.media_id} (${fileSize}): ${s3Key}`
+                )
+                break
+              } else if (mediaVersion.FILENAME) {
+                // Legacy system - construct S3 key
+                const fileExtension =
+                  mediaVersion.FILENAME.split('.').pop() || 'jpg'
+                const fileName = `${mediaItem.project_id}_${mediaItem.media_id}_${fileSize}.${fileExtension}`
+                s3Key = `media_files/images/${mediaItem.project_id}/${mediaItem.media_id}/${fileName}`
+                console.log(
+                  `Constructed S3 key for M${mediaItem.media_id} (${fileSize}): ${s3Key}`
+                )
+                break
+              }
+            }
+          }
         } catch (e) {
           console.error(
             `Error parsing media JSON for M${mediaItem.media_id}:`,
@@ -1103,12 +1162,34 @@ export class SDDExporter {
       }
 
       if (!s3Key) {
+        // Try to extract from URL if available
+        if (mediaItem.media && (mediaItem.media.url || mediaItem.media.URL)) {
+          const url = mediaItem.media.url || mediaItem.media.URL
+          // Extract S3 key from URL like: https://bucket.s3.amazonaws.com/path/to/file
+          const urlMatch =
+            url.match(/\.s3\.amazonaws\.com\/(.+)$/) ||
+            url.match(/s3\.amazonaws\.com\/[^\/]+\/(.+)$/)
+          if (urlMatch) {
+            s3Key = urlMatch[1]
+            console.log(
+              `Extracted S3 key from URL for M${mediaItem.media_id}: ${s3Key}`
+            )
+          }
+        }
+      }
+
+      if (!s3Key) {
         console.log(`No S3 key found for media M${mediaItem.media_id}`)
+        console.log(
+          `Media info for M${mediaItem.media_id}:`,
+          JSON.stringify(mediaItem.media, null, 2)
+        )
+        console.log(`Available fields:`, Object.keys(mediaItem.media || {}))
         return null
       }
 
       const command = new GetObjectCommand({
-        Bucket: config.aws.defaultBucket,
+        Bucket: config.aws.defaultBucket || config.aws.bucketName,
         Key: s3Key,
       })
 
@@ -1128,12 +1209,27 @@ export class SDDExporter {
    */
   async downloadDocumentFromS3(s3Client, document) {
     try {
-      // Parse document JSON to get S3 key
+      // Get document upload info (could be JSON string or already parsed object)
       let s3Key = null
       if (document.upload) {
         try {
-          const uploadInfo = JSON.parse(document.upload)
+          let uploadInfo = document.upload
+          // If it's a string, parse it; if it's already an object, use it directly
+          if (typeof uploadInfo === 'string') {
+            uploadInfo = JSON.parse(uploadInfo)
+          }
           s3Key = uploadInfo.s3_key || uploadInfo.S3_KEY
+
+          // If no S3 key found, construct it based on the document structure
+          if (!s3Key && uploadInfo.ORIGINAL_FILENAME) {
+            const fileExtension =
+              uploadInfo.ORIGINAL_FILENAME.split('.').pop() || 'bin'
+            const fileName = `${document.project_id}_${document.document_id}_original.${fileExtension}`
+            s3Key = `documents/${document.project_id}/${document.document_id}/${fileName}`
+            console.log(
+              `Constructed S3 key for document ${document.document_id}: ${s3Key}`
+            )
+          }
         } catch (e) {
           console.error(
             `Error parsing document JSON for ${document.document_id}:`,
@@ -1144,11 +1240,16 @@ export class SDDExporter {
 
       if (!s3Key) {
         console.log(`No S3 key found for document ${document.document_id}`)
+        console.log(
+          `Document upload info for ${document.document_id}:`,
+          JSON.stringify(document.upload, null, 2)
+        )
+        console.log(`Available fields:`, Object.keys(document.upload || {}))
         return null
       }
 
       const command = new GetObjectCommand({
-        Bucket: config.aws.defaultBucket,
+        Bucket: config.aws.defaultBucket || config.aws.bucketName,
         Key: s3Key,
       })
 
@@ -1171,16 +1272,41 @@ export class SDDExporter {
 
     if (mediaItem.media) {
       try {
-        const mediaInfo = JSON.parse(mediaItem.media)
-        const originalFilename = mediaInfo.ORIGINAL_FILENAME
-        if (originalFilename) {
-          const ext = path.extname(originalFilename)
+        let mediaInfo = mediaItem.media
+        // If it's a string, parse it; if it's already an object, use it directly
+        if (typeof mediaInfo === 'string') {
+          mediaInfo = JSON.parse(mediaInfo)
+        }
+
+        // Try to get original filename from any file size
+        const fileSizes = ['original', 'large', 'thumbnail']
+        for (const fileSize of fileSizes) {
+          if (mediaInfo[fileSize]) {
+            const mediaVersion = mediaInfo[fileSize]
+            if (mediaVersion.ORIGINAL_FILENAME) {
+              const ext = path.extname(mediaVersion.ORIGINAL_FILENAME)
+              filename = `M${mediaItem.media_id}_${path.basename(
+                mediaVersion.ORIGINAL_FILENAME,
+                ext
+              )}${ext}`
+              break
+            } else if (mediaVersion.FILENAME) {
+              filename = `M${mediaItem.media_id}_${mediaVersion.FILENAME}`
+              break
+            }
+          }
+        }
+
+        // Fallback: check for top-level ORIGINAL_FILENAME (legacy)
+        if (
+          filename === `M${mediaItem.media_id}` &&
+          mediaInfo.ORIGINAL_FILENAME
+        ) {
+          const ext = path.extname(mediaInfo.ORIGINAL_FILENAME)
           filename = `M${mediaItem.media_id}_${path.basename(
-            originalFilename,
+            mediaInfo.ORIGINAL_FILENAME,
             ext
           )}${ext}`
-        } else if (mediaInfo.EXTENSION) {
-          filename = `M${mediaItem.media_id}.${mediaInfo.EXTENSION}`
         }
       } catch (e) {
         // Use default filename
@@ -1198,7 +1324,12 @@ export class SDDExporter {
 
     if (document.upload) {
       try {
-        const uploadInfo = JSON.parse(document.upload)
+        let uploadInfo = document.upload
+        // If it's a string, parse it; if it's already an object, use it directly
+        if (typeof uploadInfo === 'string') {
+          uploadInfo = JSON.parse(uploadInfo)
+        }
+
         const originalFilename = uploadInfo.ORIGINAL_FILENAME
         if (originalFilename) {
           filename = path.basename(originalFilename)
@@ -1215,27 +1346,17 @@ export class SDDExporter {
    * Get media files for download (with copyright filtering)
    */
   async getMediaForDownload() {
-    let whereClause = `mf.project_id = ${this.projectId}`
+    let whereClause = `project_id = ${this.projectId} AND published = 0`
 
-    if (this.project.published) {
-      whereClause += ` AND mf.published = 0`
-
-      if (this.project.publish_matrix_media_only) {
-        whereClause += ` AND mf.in_use_in_matrix = 1`
-      }
+    if (this.project.publish_matrix_media_only) {
+      whereClause += ` AND in_use_in_matrix = 1`
     }
 
     const [results] = await sequelizeConn.query(`
-      SELECT 
-        mf.media_id, 
-        mf.media, 
-        mf.is_copyrighted, 
-        mf.copyright_license,
-        s.name as specimen_name
-      FROM media_files mf
-      LEFT JOIN specimens s ON mf.specimen_id = s.specimen_id
+      SELECT media_id, project_id, media, is_copyrighted, copyright_license
+      FROM media_files 
       WHERE ${whereClause}
-      ORDER BY mf.media_id
+      ORDER BY media_id
     `)
 
     return results
@@ -1247,7 +1368,7 @@ export class SDDExporter {
   async getProjectDocuments() {
     const [results] = await sequelizeConn.query(
       `
-      SELECT document_id, title, upload
+      SELECT document_id, project_id, title, upload
       FROM project_documents
       WHERE project_id = ? AND published = 0
       ORDER BY document_id
@@ -1350,7 +1471,7 @@ export class SDDExporter {
     // Get matrix file uploads
     const [uploads] = await sequelizeConn.query(
       `
-      SELECT file_path, upload_info
+      SELECT upload_id, upload
       FROM matrix_file_uploads
       WHERE matrix_id = ?
     `,
@@ -1363,13 +1484,18 @@ export class SDDExporter {
 
     for (const upload of uploads) {
       try {
-        if (upload.upload_info) {
-          const uploadInfo = JSON.parse(upload.upload_info)
+        if (upload.upload) {
+          let uploadInfo = upload.upload
+          // If it's a string, parse it; if it's already an object, use it directly
+          if (typeof uploadInfo === 'string') {
+            uploadInfo = JSON.parse(uploadInfo)
+          }
+
           const s3Key = uploadInfo.s3_key || uploadInfo.S3_KEY
 
           if (s3Key) {
             const command = new GetObjectCommand({
-              Bucket: config.aws.defaultBucket,
+              Bucket: config.aws.defaultBucket || config.aws.bucketName,
               Key: s3Key,
             })
 
