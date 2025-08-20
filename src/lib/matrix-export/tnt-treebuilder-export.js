@@ -4,6 +4,33 @@ import { getTaxonName } from '../../util/taxa.js'
 const SYMBOLS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 export class TNTTreeBuilderExporter extends Exporter {
+  /**
+   * Format a continuous value to have at least 1 decimal place but no trailing zeros
+   * @param {number|string} value - The value to format
+   * @returns {string} - The formatted value
+   */
+  formatContinuousValue(value) {
+    if (value === null || value === undefined) {
+      return '?'
+    }
+    
+    const num = parseFloat(value)
+    if (isNaN(num)) {
+      return '?'
+    }
+    
+    // Convert to string with enough precision, then remove trailing zeros
+    let formatted = num.toFixed(10)
+    formatted = formatted.replace(/\.?0+$/, '')
+    
+    // Ensure at least one decimal place
+    if (!formatted.includes('.')) {
+      formatted += '.0'
+    }
+    
+    return formatted
+  }
+
   // Specific method for cleaning taxon names in TNT format
   formatTntText(text) {
     return text
@@ -71,10 +98,10 @@ export class TNTTreeBuilderExporter extends Exporter {
           ) {
             this.write(' ?')
           } else {
-            const startValue = parseFloat(cells[0].start_value)
-            const endValue = parseFloat(cells[0].end_value)
+            const startValue = this.formatContinuousValue(cells[0].start_value)
+            const endValue = this.formatContinuousValue(cells[0].end_value)
             this.write(
-              startValue == endValue || !endValue
+              startValue == endValue || !endValue || endValue === '?'
                 ? ` ${startValue}`
                 : ` ${startValue}-${endValue}`
             )
