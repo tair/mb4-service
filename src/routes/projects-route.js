@@ -65,6 +65,13 @@ projectsRouter.get(
   controller.getOverview
 )
 
+// SDD download endpoint with optional authentication (must be before /:projectId middleware)
+projectsRouter.get(
+  '/:projectId/download/sdd',
+  maybeAuthenticateToken,
+  controller.downloadProjectSDD
+)
+
 // Project creation and DOI retrieval routes
 projectsRouter.post(
   '/create',
