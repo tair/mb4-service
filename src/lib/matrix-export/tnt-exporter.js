@@ -70,8 +70,8 @@ export class TNTExporter extends Exporter {
           ) {
             this.write(' ?')
           } else {
-            const startValue = parseFloat(cells[0].start_value)
-            const endValue = parseFloat(cells[0].end_value)
+            const startValue = cells[0].start_value
+            const endValue = cells[0].end_value
             this.write(
               startValue == endValue || !endValue
                 ? ` ${startValue}`

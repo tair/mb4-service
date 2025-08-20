@@ -428,10 +428,17 @@ async function importIntoMatrix(
           continue
         }
         for (let i = 0; i < values.length; ++i) {
-          values[i] = isNaN(values[i]) ? null : parseFloat(values[i])
+          const trimmedValue = values[i].trim()
+          // Handle empty strings, missing data markers, and invalid values
+          if (trimmedValue === '' || trimmedValue === '?' || trimmedValue === '-') {
+            values[i] = null
+          } else {
+            const parsedValue = parseFloat(trimmedValue)
+            values[i] = isNaN(parsedValue) ? null : parsedValue
+          }
         }
 
-        if (values[0] == undefined) {
+        if (values[0] == undefined || values[0] == null) {
           continue
         }
 
