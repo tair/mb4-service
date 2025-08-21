@@ -23,18 +23,30 @@ export class S3Duplicator {
    * @returns {Object} Updated media JSON with new S3 keys
    */
   async duplicateMediaFiles(mediaType, oldProjectId, newProjectId, oldMediaId, newMediaId, mediaJson) {
+
     const updatedJson = { ...mediaJson }
     
     try {
       // Step 1: Try to copy actual files from OLD to NEW locations (use original mediaJson)
+
       await this.copyMediaFilesIfExist(mediaType, oldProjectId, newProjectId, oldMediaId, newMediaId, mediaJson)
       
       // Step 2: Update all S3 keys in JSON to point to new paths (always do this)
+
       this.updateMediaJsonS3Keys(updatedJson, oldProjectId, newProjectId, oldMediaId, newMediaId)
+      
 
       return updatedJson
     } catch (error) {
-      console.error('Error duplicating media files in S3:', error)
+      console.error(`[S3_DUPLICATOR] ERROR duplicating media files in S3:`, {
+        error: error.message,
+        stack: error.stack,
+        mediaType,
+        oldProjectId,
+        newProjectId,
+        oldMediaId,
+        newMediaId
+      })
       throw error
     }
   }
@@ -49,30 +61,37 @@ export class S3Duplicator {
    * @returns {Object} Updated document JSON with new S3 keys
    */
   async duplicateDocumentFiles(oldProjectId, newProjectId, oldDocumentId, newDocumentId, documentJson) {
+
     const updatedJson = { ...documentJson }
     
     try {
       // Documents folder structure: documents/{projectId}/{documentId}/
       const sourceFolderPrefix = `documents/${oldProjectId}/${oldDocumentId}/`
+
       
       // List ALL files in the source folder
       const sourceObjects = await s3Service.listObjects(this.bucket, sourceFolderPrefix)
+
       
       if (sourceObjects.length === 0) {
-        console.warn(`No S3 objects found in document folder: ${sourceFolderPrefix}`)
+        console.warn(`[S3_DUPLICATOR] No S3 objects found in document folder: ${sourceFolderPrefix}`)
         return updatedJson
       }
 
       // Copy ALL files from source to destination folder
-      for (const obj of sourceObjects) {
+
+      for (let i = 0; i < sourceObjects.length; i++) {
+        const obj = sourceObjects[i]
         const sourceKey = obj.Key
         const newKey = this.transformDocumentS3Key(sourceKey, oldProjectId, newProjectId, oldDocumentId, newDocumentId)
         
+
         await this.copyS3Object(sourceKey, newKey)
         this.createdKeys.push(newKey)
         
-        console.log(`S3 document file copied: ${sourceKey} -> ${newKey}`)
+
       }
+
 
       // Update the JSON with new S3 keys
       if (documentJson.S3_KEY) {
@@ -87,9 +106,17 @@ export class S3Duplicator {
         updatedJson.s3_key = newS3Key
       }
 
+
       return updatedJson
     } catch (error) {
-      console.error('Error duplicating document files in S3:', error)
+      console.error(`[S3_DUPLICATOR] ERROR duplicating document files in S3:`, {
+        error: error.message,
+        stack: error.stack,
+        oldProjectId,
+        newProjectId,
+        oldDocumentId,
+        newDocumentId
+      })
       throw error
     }
   }
@@ -146,7 +173,7 @@ export class S3Duplicator {
     }
     
     if (updatedCount > 0) {
-      console.log(`Updated ${updatedCount} S3 keys for media ${oldMediaId} -> ${newMediaId}`)
+
     }
   }
 
@@ -181,34 +208,54 @@ export class S3Duplicator {
         oldKey: mediaJson.S3_KEY || mediaJson.s3_key
       })
     }
+    
+    // If no S3 keys found but we're trying anyway, log this
+    if (s3KeysToTry.length === 0) {
+
+      return
+    }
 
     let copiedCount = 0
     let skippedCount = 0
 
     // Try to copy each file from OLD location to NEW location
-    for (const {variant, oldKey} of s3KeysToTry) {
+
+    for (let i = 0; i < s3KeysToTry.length; i++) {
+      const {variant, oldKey} = s3KeysToTry[i]
       try {
         const newKey = this.transformMediaS3Key(oldKey, oldProjectId, newProjectId, oldMediaId, newMediaId)
         
+
         // Check if source file exists at OLD location and copy it to NEW location
         const exists = await s3Service.objectExists(this.bucket, oldKey)
         if (exists) {
+
           await this.copyS3Object(oldKey, newKey)
           this.createdKeys.push(newKey)
           copiedCount++
+
         } else {
-          console.warn(`Source S3 file not found: ${oldKey} (${variant})`)
+          console.warn(`[S3_DUPLICATOR] Source S3 file not found: ${oldKey} (${variant})`)
           skippedCount++
         }
       } catch (error) {
-        console.error(`Failed to copy S3 media file for ${variant}:`, error.message)
+        // Be more specific about S3 errors
+        if (error.message.includes('NoSuchKey') || error.message.includes('does not exist')) {
+          console.warn(`[S3_DUPLICATOR] S3 file not found for ${variant}: ${oldKey} (this may be normal for legacy records)`)
+        } else {
+          console.error(`[S3_DUPLICATOR] Failed to copy S3 media file for ${variant}:`, {
+            error: error.message,
+            oldKey,
+            variant
+          })
+        }
         skippedCount++
         // Continue with other files even if one fails
       }
     }
     
     if (copiedCount > 0 || skippedCount > 0) {
-      console.log(`S3 media duplication: ${copiedCount} files copied, ${skippedCount} skipped for media ${oldMediaId} -> ${newMediaId}`)
+
     }
   }
 
@@ -295,14 +342,22 @@ export class S3Duplicator {
    */
   async copyS3Object(sourceKey, destinationKey) {
     try {
+
       await s3Service.copyObject(
         this.bucket,
         sourceKey,
         this.bucket,
         destinationKey
       )
+
     } catch (error) {
-      console.error(`Failed to copy S3 object ${sourceKey} to ${destinationKey}:`, error)
+      console.error(`[S3_DUPLICATOR] Failed to copy S3 object ${sourceKey} to ${destinationKey}:`, {
+        error: error.message,
+        stack: error.stack,
+        sourceKey,
+        destinationKey,
+        bucket: this.bucket
+      })
       throw error
     }
   }
@@ -311,18 +366,25 @@ export class S3Duplicator {
    * Clean up created S3 objects in case of error during duplication
    */
   async cleanup() {
-    console.log(`Cleaning up ${this.createdKeys.length} created S3 objects...`)
+
     
-    for (const key of this.createdKeys) {
+    for (let i = 0; i < this.createdKeys.length; i++) {
+      const key = this.createdKeys[i]
       try {
+
         await s3Service.deleteObject(this.bucket, key)
-        console.log(`Cleaned up S3 object: ${key}`)
+
       } catch (error) {
-        console.error(`Failed to clean up S3 object ${key}:`, error.message)
+        console.error(`[S3_DUPLICATOR] Failed to clean up S3 object ${key}:`, {
+          error: error.message,
+          stack: error.stack,
+          key
+        })
         // Continue cleanup even if individual deletions fail
       }
     }
     
+
     this.createdKeys = []
   }
 

@@ -17,35 +17,77 @@ export class BaseModelDuplicator extends BaseModelScanner {
     this.overrideFieldName = new Map()
     this.createdFiles = []
     this.s3Duplicator = new S3Duplicator()
+    
+    // Copyright handling for one-time use media
+    this.onetimeUseAction = null // 1 = keep in original, 100 = move to duplicate
+    this.onetimeMediaToDelete = [] // Track media to delete from original project
   }
 
   setOverriddenFieldNames(overrideFieldName) {
     this.overrideFieldName = overrideFieldName
   }
+  
+  /**
+   * Set one-time use media action for copyright compliance
+   * @param {number} action - 1 = keep in original, 100 = move to duplicate
+   */
+  setOnetimeUseAction(action) {
+    this.onetimeUseAction = action
+
+  }
 
   async duplicate() {
+
     try {
       const tables = this.getTopologicalDependentTables()
-      for (const table of tables) {
+
+      
+      for (let i = 0; i < tables.length; i++) {
+        const table = tables[i]
+
+        
         const rows = await this.getRowsForTable(table)
-        await this.duplicateRows(table, rows)
+
+        
+        if (rows.length > 0) {
+          await this.duplicateRows(table, rows)
+
+        }
       }
-      return this.getDuplicateRecordId(this.mainModel, this.mainModelId)
+      
+      const duplicatedId = this.getDuplicateRecordId(this.mainModel, this.mainModelId)
+
+      
+      // Handle one-time use media deletion from original project if needed (only on success)
+      if (this.onetimeUseAction === 100 && this.onetimeMediaToDelete.length > 0) {
+        await this.deleteOnetimeMediaFromOriginalProject()
+      }
+      
+      return duplicatedId
     } catch (e) {
+      console.error(`[BASE_DUPLICATOR] ERROR during duplication of ${this.mainModel.tableName} ID ${this.mainModelId}:`, {
+        error: e.message,
+        stack: e.stack
+      })
+      
       // Clean up local files
+
       for (const file of this.createdFiles) {
         try {
           await fs.unlink(file)
+
         } catch (unlinkError) {
-          console.error(`Failed to clean up local file ${file}:`, unlinkError)
+          console.error(`[BASE_DUPLICATOR] Failed to clean up local file ${file}:`, unlinkError)
         }
       }
       
       // Clean up S3 files
       try {
+
         await this.s3Duplicator.cleanup()
+
       } catch (s3Error) {
-        console.error('Failed to clean up S3 files:', s3Error)
+        console.error(`[BASE_DUPLICATOR] Failed to clean up S3 files:`, s3Error)
       }
       
       throw e
@@ -57,8 +99,20 @@ export class BaseModelDuplicator extends BaseModelScanner {
     const primaryKey = this.datamodel.getPrimaryKey(table)
     const linkingFieldName = this.numberedTables.get(table)
     const transaction = this.getTransaction()
+    
+    // Handle one-time use media copyright restrictions for media_files table
+    if (tableName === 'media_files' && this.onetimeUseAction !== null) {
+      rows = await this.filterOnetimeUseMedia(rows, primaryKey)
+    }
+    
     for (const row of rows) {
       const rowId = row[primaryKey]
+      
+      // Check if this record should be skipped due to filtered media references
+      if (this.shouldSkipRecordDueToFilteredMedia(table, row)) {
+        continue
+      }
+      
       delete row[primaryKey]
 
       const files = new Map()
@@ -119,10 +173,14 @@ export class BaseModelDuplicator extends BaseModelScanner {
       this.clonedIds.set(table, rowId, cloneRowId)
 
       if (files.size) {
+
         await this.duplicateFiles(table, primaryKey, cloneRowId, rowId, files)
+
       }
       if (media.size) {
+
         await this.duplicateMedia(table, primaryKey, cloneRowId, rowId, media)
+
       }
     }
   }
@@ -131,7 +189,62 @@ export class BaseModelDuplicator extends BaseModelScanner {
     if (this.clonedIds.has(table, rowId)) {
       return this.clonedIds.get(table, rowId)
     }
+    
     throw new Error(`The ${rowId} for ${table.getTableName()} was not cloned`)
+  }
+  
+  /**
+   * Check if a record ID was cloned (exists in the clonedIds mapping)
+   * @param {Object} table - The table to check
+   * @param {number} rowId - The original row ID
+   * @returns {boolean} True if the record was cloned
+   */
+  wasRecordCloned(table, rowId) {
+    return this.clonedIds.has(table, rowId)
+  }
+  
+  /**
+   * Check if a record should be skipped because it references filtered media files
+   * @param {Object} table - The table being processed
+   * @param {Object} row - The row data
+   * @returns {boolean} True if the record should be skipped
+   */
+  shouldSkipRecordDueToFilteredMedia(table, row) {
+    // Only apply this check if we're filtering one-time use media (keeping in original)
+    if (this.onetimeUseAction !== 1) {
+      return false
+    }
+    
+    const tableName = table.getTableName()
+    
+    // Don't apply this logic to the media_files table itself
+    if (tableName === 'media_files') {
+      return false
+    }
+    
+    // Check if this record has a direct media_id reference
+    if (row.media_id) {
+      const mediaTable = this.datamodel.getTableByName('media_files')
+      if (!this.clonedIds.has(mediaTable, row.media_id)) {
+        console.warn(`[BASE_DUPLICATOR] Skipping ${tableName} record that references filtered media file ${row.media_id}`)
+        return true
+      }
+    }
+    
+    // Check foreign key references to media_files
+    for (const [field, attributes] of Object.entries(table.rawAttributes)) {
+      if (attributes.references && 
+          attributes.references.model === 'media_files' && 
+          row[field]) {
+        const mediaTable = this.datamodel.getTableByName('media_files')
+        if (!this.clonedIds.has(mediaTable, row[field])) {
+          console.warn(`[BASE_DUPLICATOR] Skipping ${tableName} record that references filtered media file ${row[field]} via ${field}`)
+          return true
+        }
+      }
+    }
+    
+    return false
   }
 
   async duplicateFiles(table, primaryKey, rowId, previousRowId, fields) {
@@ -149,6 +262,8 @@ export class BaseModelDuplicator extends BaseModelScanner {
         try {
           const oldProjectId = this.getProjectIdFromContext()
           const newProjectId = this.getNewProjectId()
+          
+
 
           updatedFile = await this.s3Duplicator.duplicateDocumentFiles(
             oldProjectId,
@@ -157,8 +272,16 @@ export class BaseModelDuplicator extends BaseModelScanner {
             rowId,         // new document ID
             file
           )
+          
+
         } catch (error) {
-          console.error(`Error duplicating S3 document for ${tableName} ${rowId}:`, error)
+          console.error(`[BASE_DUPLICATOR] ERROR duplicating S3 document for ${tableName} ${rowId}:`, {
+            error: error.message,
+            stack: error.stack,
+            oldProjectId: this.getProjectIdFromContext(),
+            newProjectId: this.getNewProjectId(),
+            documentId: rowId
+          })
           throw error
         }
       } else if (file.filename) {
@@ -222,18 +345,23 @@ export class BaseModelDuplicator extends BaseModelScanner {
 
       let updatedMedia = { ...versionMedia }
 
-      // Check if this is S3-based media (has S3_KEY) or legacy local file system
+      // ALWAYS prefer S3 over legacy filesystem since all files are in S3
       const hasS3Keys = this.hasS3Keys(versionMedia)
+      let s3DuplicationSucceeded = false
       
+      // Step 1: Try S3 duplication first (preferred method)
       if (hasS3Keys) {
-        // Handle S3-based media files
         try {
+
+          
           // Determine media type from the media data or default to image
           let mediaType = this.detectMediaType(versionMedia, tableName)
-
+          
           // Get old and new project IDs from the main model IDs
           const oldProjectId = this.getProjectIdFromContext() 
           const newProjectId = this.getNewProjectId()
+          
+
 
           updatedMedia = await this.s3Duplicator.duplicateMediaFiles(
             mediaType,
@@ -243,14 +371,60 @@ export class BaseModelDuplicator extends BaseModelScanner {
             rowId,         // new media ID
             versionMedia
           )
+          
+          s3DuplicationSucceeded = true
+
         } catch (error) {
-          console.error(`Error duplicating S3 media for ${tableName} ${rowId}:`, error)
-          throw error
+          console.error(`[BASE_DUPLICATOR] S3 duplication failed for ${tableName} ${rowId}, will try legacy filesystem:`, {
+            error: error.message,
+            mediaType: this.detectMediaType(versionMedia, tableName),
+            oldProjectId: this.getProjectIdFromContext(),
+            newProjectId: this.getNewProjectId(),
+            mediaId: rowId
+          })
+          // Don't throw here, try legacy filesystem as backup
         }
       } else {
-        // Handle legacy local file system media (keep original logic)
+
+        
+        // Try to use S3 anyway by constructing S3 keys based on project/media IDs
+        try {
+          const mediaType = this.detectMediaType(versionMedia, tableName)
+          const oldProjectId = this.getProjectIdFromContext()
+          const newProjectId = this.getNewProjectId()
+          
+          // Create minimal S3 structure for duplication (will attempt to find files in S3)
+          const constructedMediaJson = this.constructS3MediaJson(versionMedia, mediaType, oldProjectId, previousRowId)
+          
+          if (constructedMediaJson) {
+
+            
+            updatedMedia = await this.s3Duplicator.duplicateMediaFiles(
+              mediaType,
+              oldProjectId,
+              newProjectId,
+              previousRowId,
+              rowId,
+              constructedMediaJson
+            )
+            
+            s3DuplicationSucceeded = true
+
+          }
+        } catch (error) {
+
+          // Continue to legacy filesystem
+        }
+      }
+      
+      // Step 2: Only use legacy filesystem as last resort, and make it resilient
+      if (!s3DuplicationSucceeded) {
+
+        
         const basePath = `${config.media.directory}/${config.app.name}`
         const userInfo = os.userInfo()
+        let legacyFilesProcessed = 0
+        let legacyFilesSkipped = 0
         
         for (const [version, media] of Object.entries(versionMedia)) {
           // These versions do not have corresponding files.
@@ -268,16 +442,37 @@ export class BaseModelDuplicator extends BaseModelScanner {
             const volumePath = `${basePath}/${media.volume}`
             const oldPath = `${volumePath}/${media.hash}/${media.magic}_${filename}`
 
-            const newFileName = filename.replace(previousRowId, rowId)
-            media.filename = newFileName
-            media.hash = await getDirectoryHash(basePath, rowId)
-            media.magic = getMagicNumber()
-            const newPath = `${volumePath}/${media.hash}/${media.magic}_${newFileName}`
-            await fs.copyFile(oldPath, newPath)
-            this.createdFiles.push(newPath)
-            fs.chown(newPath, userInfo.uid, userInfo.gid)
-            fs.chmod(newPath, 0o775)
+            // CHECK if source file exists before trying to copy
+            try {
+              await fs.access(oldPath)
+              
+              const newFileName = filename.replace(previousRowId, rowId)
+              media.filename = newFileName
+              media.hash = await getDirectoryHash(basePath, rowId)
+              media.magic = getMagicNumber()
+              const newPath = `${volumePath}/${media.hash}/${media.magic}_${newFileName}`
+              
+              await fs.copyFile(oldPath, newPath)
+              this.createdFiles.push(newPath)
+              await fs.chown(newPath, userInfo.uid, userInfo.gid)
+              await fs.chmod(newPath, 0o775)
+              
+              legacyFilesProcessed++
+
+            } catch (fileError) {
+              console.warn(`[BASE_DUPLICATOR] Legacy file not found or copy failed (skipping): ${oldPath}. Error: ${fileError.message}`)
+              legacyFilesSkipped++
+              // Don't fail the entire duplication - this file might have been migrated to S3
+              // Just continue without this file
+            }
           }
+        }
+        
+
+        
+        // If no legacy files were found, that's OK - they might all be in S3
+        if (legacyFilesProcessed === 0 && legacyFilesSkipped > 0) {
+
         }
       }
 
@@ -306,14 +501,16 @@ export class BaseModelDuplicator extends BaseModelScanner {
     
     // Check for S3_KEY in root level
     if (mediaJson.S3_KEY || mediaJson.s3_key) {
+
       return true
     }
     
-    // Check for S3_KEY in variants (original, large, thumbnail, etc.)
+    // Check for S3_KEY in variants (focus on actual variants: original, large, thumbnail)
     // Note: Database uses lowercase 's3_key' not 'S3_KEY'
-    const variants = ['original', 'large', 'thumbnail', 'medium', 'small']
-    for (const variant of variants) {
+    const actualVariants = ['original', 'large', 'thumbnail']
+    for (const variant of actualVariants) {
       if (mediaJson[variant] && (mediaJson[variant].S3_KEY || mediaJson[variant].s3_key)) {
+
         return true
       }
     }
@@ -322,16 +519,19 @@ export class BaseModelDuplicator extends BaseModelScanner {
     for (const [key, value] of Object.entries(mediaJson)) {
       if (value && typeof value === 'object') {
         if (value.S3_KEY || value.s3_key || value.S3Key || value.s3Key) {
+
           return true
         }
       }
       
-      // Direct string check for S3 key patterns
-      if (typeof value === 'string' && value.includes('media_files/')) {
+      // Direct string check for S3 key patterns (look for proper media_files paths)
+      if (typeof value === 'string' && (value.includes('media_files/images/') || value.includes('media_files/videos/') || value.includes('media_files/model_3ds/'))) {
+
         return true
       }
     }
     
+
     return false
   }
 
@@ -358,6 +558,54 @@ export class BaseModelDuplicator extends BaseModelScanner {
       return this.getDuplicateRecordId(this.mainModel, this.mainModelId)
     }
     throw new Error('Cannot determine new project ID for S3 duplication')
+  }
+
+  /**
+   * Construct S3 media JSON for files that might be in S3 but don't have S3 keys in DB
+   * @param {Object} originalMedia - Original media JSON
+   * @param {string} mediaType - Media type (image, video, model_3d)
+   * @param {number} projectId - Project ID
+   * @param {number} mediaId - Media ID
+   * @returns {Object|null} Constructed media JSON with potential S3 keys
+   */
+  constructS3MediaJson(originalMedia, mediaType, projectId, mediaId) {
+    // Only attempt this if we have some original media data
+    if (!originalMedia || typeof originalMedia !== 'object') {
+      return null
+    }
+    
+    const constructedMedia = { ...originalMedia }
+    
+    // Use the CORRECT S3 naming pattern: {projectId}_{mediaId}_{variant}.jpg
+    // Only look for variants that actually exist: original, large, thumbnail
+    const actualVariants = ['original', 'large', 'thumbnail']
+    const mediaTypeFolder = mediaType === 'video' ? 'videos' : mediaType === 'model_3d' ? 'model_3ds' : 'images'
+    
+
+    
+    for (const variant of actualVariants) {
+      // Construct the correct filename pattern
+      const correctFilename = `${projectId}_${mediaId}_${variant}.jpg`
+      
+      // Construct the full S3 key
+      const correctS3Key = `media_files/${mediaTypeFolder}/${projectId}/${mediaId}/${correctFilename}`
+      
+      // Add the constructed S3 key to the media data
+      if (!constructedMedia[variant]) {
+        constructedMedia[variant] = {}
+      }
+      constructedMedia[variant].s3_key = correctS3Key
+      
+
+    }
+    
+    // Also construct a root-level S3 key for the original file
+    const rootFilename = `${projectId}_${mediaId}_original.jpg`
+    const rootS3Key = `media_files/${mediaTypeFolder}/${projectId}/${mediaId}/${rootFilename}`
+    constructedMedia.s3_key = rootS3Key
+
+    
+    return constructedMedia
   }
 
   /**
@@ -430,5 +678,111 @@ export class BaseModelDuplicator extends BaseModelScanner {
     // Default to image if no clear indicators
     console.warn(`Could not determine media type for ${tableName}, defaulting to image`)
     return 'image'
+  }
+  
+  /**
+   * Filter one-time use media based on copyright restrictions
+   * @param {Array} rows - Media file rows to process
+   * @param {string} primaryKey - Primary key field name
+   * @returns {Array} Filtered rows
+   */
+  async filterOnetimeUseMedia(rows, primaryKey) {
+    const filteredRows = []
+    let skippedCount = 0
+    let movedCount = 0
+    
+
+    
+    for (const row of rows) {
+      const mediaId = row[primaryKey]
+      const copyrightLicense = row.copyright_license
+      
+      // Check if this is one-time use media (copyright_license = 8)
+      if (copyrightLicense === 8) {
+        if (this.onetimeUseAction === 1) {
+          // Action 1: Keep in original project - skip duplication
+
+          skippedCount++
+          continue
+        } else if (this.onetimeUseAction === 100) {
+          // Action 100: Move to duplicate project - duplicate and mark for deletion
+
+          this.onetimeMediaToDelete.push(mediaId)
+          filteredRows.push(row)
+          movedCount++
+        } else {
+          console.warn(`[BASE_DUPLICATOR] Unknown onetime_use_action: ${this.onetimeUseAction}, duplicating media ${mediaId} normally`)
+          filteredRows.push(row)
+        }
+      } else {
+        // Regular media - duplicate normally
+        filteredRows.push(row)
+      }
+    }
+    
+
+    return filteredRows
+  }
+  
+  /**
+   * Delete one-time use media from the original project (for move action)
+   */
+  async deleteOnetimeMediaFromOriginalProject() {
+    if (this.onetimeMediaToDelete.length === 0) {
+      return
+    }
+    
+
+    
+    const transaction = this.getTransaction()
+    
+    try {
+      // Delete media files from original project
+      for (const mediaId of this.onetimeMediaToDelete) {
+
+        
+        await sequelizeConn.query(
+          'DELETE FROM media_files WHERE media_id = ? AND project_id = ?',
+          {
+            replacements: [mediaId, this.mainModelId],
+            transaction,
+            type: QueryTypes.DELETE,
+          }
+        )
+        
+        // Also delete related records that reference this media
+        const relatedTables = [
+          'media_views',
+          'cells_x_media',
+          'characters_x_media',
+          'folios_x_media_files',
+          'media_files_x_bibliographic_references',
+          'taxa_x_media',
+          'media_files_x_documents',
+          'media_labels'
+        ]
+        
+        for (const relatedTable of relatedTables) {
+          try {
+            await sequelizeConn.query(
+              `DELETE FROM ${relatedTable} WHERE media_id = ?`,
+              {
+                replacements: [mediaId],
+                transaction,
+                type: QueryTypes.DELETE,
+              }
+            )
+          } catch (error) {
+            // Some tables might not exist or have different field names - that's OK
+
+          }
+        }
+      }
+      
+
+    } catch (error) {
+      console.error(`[BASE_DUPLICATOR] Error deleting one-time use media from original project:`, error)
+      throw error
+    }
   }
 }
