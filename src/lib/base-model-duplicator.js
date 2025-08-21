@@ -676,7 +676,6 @@ export class BaseModelDuplicator extends BaseModelScanner {
     }
 
     // Default to image if no clear indicators
-    console.warn(`Could not determine media type for ${tableName}, defaulting to image`)
     return 'image'
   }
   
