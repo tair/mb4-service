@@ -746,8 +746,16 @@ function contains(text1, text2) {
 function parseSymbols(symbols) {
   const map = {}
   if (symbols) {
-    for (const key in symbols.split('')) {
-      map[symbols[key]] = parseInt(key)
+    const symbolArray = symbols.split('')
+    for (let i = 0; i < symbolArray.length; i++) {
+      const symbol = symbolArray[i]
+      // Map each symbol to its numeric value, not its position in the string
+      if (symbol >= '0' && symbol <= '9') {
+        map[symbol] = parseInt(symbol)
+      } else {
+        // For non-numeric symbols, map to their position
+        map[symbol] = i
+      }
     }
   }
   return map
