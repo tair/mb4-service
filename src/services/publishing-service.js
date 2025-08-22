@@ -71,7 +71,7 @@ export async function validateCitationInfo(project) {
  * Gets media files with incomplete copyright information that would prevent publishing
  * @param {number} projectId - Project ID
  * @param {boolean} publishMatrixMediaOnly - Whether to only check matrix media
- * @returns {Array} Array of media objects with incomplete copyright info
+ * @returns {Array} Array of media objects with incomplete copyright info and reason codes
  */
 export async function getUnfinishedMedia(
   projectId,
@@ -124,7 +124,44 @@ export async function getUnfinishedMedia(
     type: QueryTypes.SELECT,
   })
 
-  return results
+  // Add detailed reason codes for each incomplete media item
+  return results.map((media) => {
+    const reasons = []
+
+    if (media.specimen_id === null) {
+      reasons.push('missing_specimen')
+    }
+
+    if (media.view_id === null) {
+      reasons.push('missing_view')
+    }
+
+    if (media.is_copyrighted === null) {
+      reasons.push('missing_copyright_status')
+    } else if (media.is_copyrighted === 1) {
+      // Media is copyrighted, check permission and license
+      if (media.copyright_permission === 0) {
+        reasons.push('copyright_permission_not_requested')
+      } else if (media.copyright_permission === 3) {
+        reasons.push('copyright_permission_pending')
+      } else if (media.copyright_permission === 5) {
+        reasons.push('copyright_permission_denied')
+      } else if (
+        media.copyright_permission !== 4 &&
+        media.copyright_license === 0
+      ) {
+        reasons.push('missing_copyright_license')
+      } else if (media.copyright_license === 20) {
+        reasons.push('unknown_copyright_license')
+      }
+    }
+
+    return {
+      ...media,
+      reasons: reasons,
+      reason_count: reasons.length,
+    }
+  })
 }
 
 /**
@@ -599,6 +636,30 @@ export async function publishProject(projectId, userId, isCurator = false) {
       return { success: false, message: 'Project is already published' }
     }
 
+    // Check if project has exemplar media set
+    if (!project.exemplar_media_id) {
+      await transaction.rollback()
+      return {
+        success: false,
+        message:
+          'An exemplar media file must be selected for the project before publishing.',
+      }
+    }
+
+    // Verify exemplar media exists and is valid
+    const exemplarMedia = await models.MediaFile.findByPk(
+      project.exemplar_media_id,
+      { transaction }
+    )
+    if (!exemplarMedia || exemplarMedia.project_id !== projectId) {
+      await transaction.rollback()
+      return {
+        success: false,
+        message:
+          'The selected exemplar media file is invalid or does not exist.',
+      }
+    }
+
     // Check for media with incomplete copyright info (unless curator)
     if (!isCurator) {
       const unfinishedMedia = await getUnfinishedMedia(
@@ -609,12 +670,41 @@ export async function publishProject(projectId, userId, isCurator = false) {
       if (unfinishedMedia.length > 0) {
         await transaction.rollback()
         const mediaNumbers = unfinishedMedia.map((m) => `M${m.media_id}`)
+
+        // Group media by reason types for better messaging
+        const copyrightIssues = unfinishedMedia.filter((m) =>
+          m.reasons.some((r) => r.includes('copyright'))
+        )
+        const missingInfoIssues = unfinishedMedia.filter((m) =>
+          m.reasons.some(
+            (r) => r.includes('missing_specimen') || r.includes('missing_view')
+          )
+        )
+
+        let detailedMessage = `The following media files need their information completed before publishing: ${mediaNumbers.join(
+          ', '
+        )}`
+
+        if (copyrightIssues.length > 0) {
+          detailedMessage += `. ${copyrightIssues.length} media file(s) have incomplete copyright information`
+        }
+
+        if (missingInfoIssues.length > 0) {
+          detailedMessage += `. ${missingInfoIssues.length} media file(s) are missing specimen or view information`
+        }
+
+        detailedMessage +=
+          '. Please complete the required information for these files before publishing your project.'
+
         return {
           success: false,
-          message: `The following media files have no license selected or have their Copyright Permission set to 'Copyright permission not yet requested' or 'Permission pending' or Media reuse license set to 'Unknown - Will set before project publication': ${mediaNumbers.join(
-            ', '
-          )}. Please select the appropriate copyright permission and license for these files before publishing your project.`,
+          message: detailedMessage,
           mediaErrors: unfinishedMedia,
+          mediaStats: {
+            total: unfinishedMedia.length,
+            copyrightIssues: copyrightIssues.length,
+            missingInfoIssues: missingInfoIssues.length,
+          },
         }
       }
     }

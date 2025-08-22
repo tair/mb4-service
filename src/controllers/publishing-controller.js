@@ -178,7 +178,29 @@ export async function validateMediaForPublishing(req, res) {
       return res.status(200).json({
         canPublish: false,
         warning: 'no_media',
-        message: 'This project has no media files to publish.',
+        message: 'At least 1 media file is required to publish a project.',
+      })
+    }
+
+    // Check if project has exemplar media set
+    if (!project.exemplar_media_id) {
+      return res.status(200).json({
+        canPublish: false,
+        warning: 'no_exemplar_media',
+        message: 'An exemplar media file must be selected for the project.',
+      })
+    }
+
+    // Verify exemplar media exists and is valid
+    const exemplarMedia = await models.MediaFile.findByPk(
+      project.exemplar_media_id
+    )
+    if (!exemplarMedia || exemplarMedia.project_id != projectId) {
+      return res.status(200).json({
+        canPublish: false,
+        warning: 'invalid_exemplar_media',
+        message:
+          'The selected exemplar media file is invalid or does not exist.',
       })
     }
 
@@ -190,13 +212,39 @@ export async function validateMediaForPublishing(req, res) {
 
     if (unfinishedMedia.length > 0) {
       const mediaNumbers = unfinishedMedia.map((m) => `M${m.media_id}`)
+
+      // Group media by reason types for better messaging
+      const copyrightIssues = unfinishedMedia.filter((m) =>
+        m.reasons.some((r) => r.includes('copyright'))
+      )
+      const missingInfoIssues = unfinishedMedia.filter((m) =>
+        m.reasons.some(
+          (r) => r.includes('missing_specimen') || r.includes('missing_view')
+        )
+      )
+
+      let detailedMessage = `The following media files need their information completed: ${mediaNumbers.join(
+        ', '
+      )}`
+
+      if (copyrightIssues.length > 0) {
+        detailedMessage += `. ${copyrightIssues.length} media file(s) have incomplete copyright information`
+      }
+
+      if (missingInfoIssues.length > 0) {
+        detailedMessage += `. ${missingInfoIssues.length} media file(s) are missing specimen or view information`
+      }
+
       return res.status(200).json({
         canPublish: false,
         warning: 'media_warnings',
-        message: `The following media files need their copyright information completed: ${mediaNumbers.join(
-          ', '
-        )}`,
+        message: detailedMessage,
         unfinishedMedia,
+        mediaStats: {
+          total: unfinishedMedia.length,
+          copyrightIssues: copyrightIssues.length,
+          missingInfoIssues: missingInfoIssues.length,
+        },
       })
     }
 
