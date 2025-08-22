@@ -258,8 +258,8 @@ export async function updateDuplicationRequest(req, res) {
           // Don't fail the request update if email fails
         }
       } else if (newStatus === 50 && oldStatus !== 50) {
-        // Status changed to Approved - queue duplication task
-        await models.TaskQueue.create({
+        // Status changed to Approved - queue duplication task        
+        const taskQueueEntry = await models.TaskQueue.create({
           user_id: request.user_id,
           priority: 500,
           entity_key: null,
@@ -269,6 +269,17 @@ export async function updateDuplicationRequest(req, res) {
             request_id: requestId
           }
         }, { transaction, user: req.user })
+        
+        // Double-check by querying the database directly
+        const verifyTask = await sequelizeConn.query(
+          'SELECT * FROM ca_task_queue WHERE task_id = ?',
+          { 
+            replacements: [taskQueueEntry.task_id], 
+            type: sequelizeConn.QueryTypes.SELECT,
+            transaction 
+          }
+        )
+
       }
     }
 
@@ -292,7 +303,14 @@ export async function updateDuplicationRequest(req, res) {
 
   } catch (error) {
     await transaction.rollback()
-    console.error('Error updating duplication request:', error)
+    console.error(`[DUPLICATION] Error updating duplication request ${requestId}:`, {
+      error: error.message,
+      stack: error.stack,
+      requestId,
+      oldStatus,
+      newStatus,
+      userId: req.user?.user_id
+    })
     res.status(500).json({
       error: 'Internal server error',
       message: 'Failed to update duplication request'
