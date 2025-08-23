@@ -69,6 +69,7 @@ export class Exporter {
     const orderingMap = new Map()
     for (const character of characters) {
       const ordering = parseInt(character.ordering)
+
       if (!orderingMap.has(ordering)) {
         orderingMap.set(ordering, [])
       }
@@ -77,10 +78,10 @@ export class Exporter {
       orderingMap.get(ordering).push(characterIndex)
     }
 
-    // If there is only one ordering then we don't need to specify it.
-    if (orderingMap.size <= 1) {
-      return null
-    }
+    // // If there is only one ordering then we don't need to specify it.
+    // if (orderingMap.size <= 1) {
+    //   return null
+    // }
 
     const consolidatedOrderings = []
     for (const [order, positions] of orderingMap.entries()) {
