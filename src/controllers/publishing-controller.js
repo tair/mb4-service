@@ -469,6 +469,94 @@ export async function validateCitationInfo(req, res) {
 }
 
 /**
+ * Get unpublished items for a project
+ * Returns documents, folios, matrices, and media that would be published when project is published
+ */
+export async function getUnpublishedItems(req, res) {
+  try {
+    const projectId = req.params.projectId
+    const project = await models.Project.findByPk(projectId)
+
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' })
+    }
+
+    // Query for unpublished items (published = 0 means "publish when project is published")
+    const [documents, folios, matrices, media] = await Promise.all([
+      // Documents
+      models.ProjectDocument.findAll({
+        where: {
+          project_id: projectId,
+          published: 1, // Will be published when project is published
+        },
+        attributes: ['document_id', 'title', 'description', 'uploaded_on'],
+        order: [['uploaded_on', 'DESC']],
+      }),
+
+      // Folios
+      models.Folio.findAll({
+        where: {
+          project_id: projectId,
+          published: 1, // Will be published when project is published
+        },
+        attributes: ['folio_id', 'name', 'description', 'created_on'],
+        order: [['created_on', 'DESC']],
+      }),
+
+      // Matrices
+      models.Matrix.findAll({
+        where: {
+          project_id: projectId,
+          published: 1, // Will be published when project is published
+          deleted: 0, // Exclude deleted matrices
+        },
+        attributes: ['matrix_id', 'title', 'notes', 'created_on'],
+        order: [['created_on', 'DESC']],
+      }),
+
+      // Media files
+      models.MediaFile.findAll({
+        where: {
+          project_id: projectId,
+          published: 1, // Will be published when project is published
+        },
+        attributes: ['media_id', 'notes', 'created_on'],
+        order: [['created_on', 'DESC']],
+      }),
+    ])
+
+    return res.status(200).json({
+      documents: documents.map((doc) => ({
+        document_id: doc.document_id,
+        title: doc.title,
+        description: doc.description,
+        uploaded_on: doc.uploaded_on,
+      })),
+      folios: folios.map((folio) => ({
+        folio_id: folio.folio_id,
+        name: folio.name,
+        description: folio.description,
+        created_on: folio.created_on,
+      })),
+      matrices: matrices.map((matrix) => ({
+        matrix_id: matrix.matrix_id,
+        title: matrix.title,
+        notes: matrix.notes,
+        created_on: matrix.created_on,
+      })),
+      media: media.map((mediaFile) => ({
+        media_id: mediaFile.media_id,
+        notes: mediaFile.notes,
+        created_on: mediaFile.created_on,
+      })),
+    })
+  } catch (error) {
+    console.error('Error in getUnpublishedItems:', error)
+    res.status(500).json({ message: 'Internal server error' })
+  }
+}
+
+/**
  * Test route for DOI creation
  * Directly calls the DOI creation handler and returns what it outputs
  */
