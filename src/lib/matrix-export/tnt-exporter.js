@@ -4,6 +4,32 @@ import { getTaxonName } from '../../util/taxa.js'
 const SYMBOLS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 export class TNTExporter extends Exporter {
+  /**
+   * Format a continuous value to have at least 1 decimal place but no trailing zeros
+   * @param {number|string} value - The value to format
+   * @returns {string} - The formatted value
+   */
+  formatContinuousValue(value) {
+    if (value === null || value === undefined) {
+      return '?'
+    }
+    
+    const num = parseFloat(value)
+    if (isNaN(num)) {
+      return '?'
+    }
+    
+    // Convert to string with enough precision, then remove trailing zeros
+    let formatted = num.toFixed(10)
+    formatted = formatted.replace(/\.?0+$/, '')
+    
+    // Ensure at least one decimal place
+    if (!formatted.includes('.')) {
+      formatted += '.0'
+    }
+    
+    return formatted
+  }
   formatTntText(text) {
     return text
       .replace(/;/g, '_') // replace semicolons with underscores
@@ -44,11 +70,17 @@ export class TNTExporter extends Exporter {
       }
     }
 
-    const maxStateLength = characters
-      .map((c) => c.states?.length || 0)
-      .reduce((a, b) => Math.max(a, b))
-
-    this.writeLine(`nstates num ${maxStateLength};`)
+    // Check if there are any continuous characters
+    const hasContinuousCharacters = characters.some(c => parseInt(c.type) !== 0)
+    
+    if (hasContinuousCharacters) {
+      this.writeLine('nstates cont;')
+    } else {
+      const maxStateLength = characters
+        .map((c) => c.states?.length || 0)
+        .reduce((a, b) => Math.max(a, b))
+      this.writeLine(`nstates num ${maxStateLength};`)
+    }
     this.writeLine('xread')
     this.writeLine(`'${this.getOutputMessage()}'`)
     this.writeLine(`${characters.length} ${taxa.length}`)
@@ -70,10 +102,10 @@ export class TNTExporter extends Exporter {
           ) {
             this.write(' ?')
           } else {
-            const startValue = parseFloat(cells[0].start_value)
-            const endValue = parseFloat(cells[0].end_value)
+            const startValue = this.formatContinuousValue(cells[0].start_value)
+            const endValue = this.formatContinuousValue(cells[0].end_value)
             this.write(
-              startValue == endValue || !endValue
+              startValue == endValue || !endValue || endValue === '?'
                 ? ` ${startValue}`
                 : ` ${startValue}-${endValue}`
             )
