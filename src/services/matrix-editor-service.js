@@ -1725,6 +1725,27 @@ export default class MatrixEditorService {
       referencedCharacterIds
     )
     if (unusedCharacterIds.length) {
+      // Delete annotations for character states of these characters
+      await sequelizeConn.query(
+        `DELETE FROM annotations 
+         WHERE table_num = ? AND row_id IN (
+           SELECT state_id FROM character_states WHERE character_id IN (?)
+         )`,
+        {
+          replacements: [TABLE_NUMBERS.character_states, unusedCharacterIds],
+          transaction: transaction,
+        }
+      )
+
+      // Delete annotations for the characters themselves
+      await sequelizeConn.query(
+        `DELETE FROM annotations WHERE table_num = ? AND row_id IN (?)`,
+        {
+          replacements: [TABLE_NUMBERS.characters, unusedCharacterIds],
+          transaction: transaction,
+        }
+      )
+
       await models.Character.destroy({
         where: {
           character_id: characterIds,
@@ -1879,6 +1900,16 @@ export default class MatrixEditorService {
             transaction: transaction,
           }
         )
+
+        // Delete annotations for character states
+        await sequelizeConn.query(
+          `DELETE FROM annotations WHERE table_num = ? AND row_id IN (?)`,
+          {
+            replacements: [TABLE_NUMBERS.character_states, deletedStateIds],
+            transaction: transaction,
+          }
+        )
+
         await models.CharacterState.destroy({
           where: {
             state_id: deletedStateIds,

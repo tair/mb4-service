@@ -97,7 +97,7 @@ function getCoverUrlByJournalTitle(journalTitle) {
 
 export async function getProjectTitles() {
   const [rows] = await sequelizeConn.query(`
-    SELECT project_id, name
+    SELECT project_id, name, article_authors, journal_year, journal_title, article_title
     FROM projects 
     WHERE published = 1 AND deleted = 0
     ORDER BY name ASC`)
@@ -106,7 +106,8 @@ export async function getProjectTitles() {
 
 export async function getInstitutionsWithProjects() {
   const [rows] = await sequelizeConn.query(`
-    SELECT i.name as iname, p.project_id, p.name AS pname
+    SELECT i.name as iname, p.project_id, p.name AS pname,
+           p.article_authors, p.journal_year, p.journal_title, p.article_title
     FROM institutions_x_projects ip, projects p, institutions i 
     WHERE
       ip.project_id = p.project_id AND
@@ -121,6 +122,10 @@ export async function getInstitutionsWithProjects() {
     const project = {
       id: rows[i].project_id,
       name: rows[i].pname,
+      article_authors: rows[i].article_authors,
+      journal_year: rows[i].journal_year,
+      journal_title: rows[i].journal_title,
+      article_title: rows[i].article_title,
     }
 
     if (!institutionsDict[iname]) {
@@ -145,7 +150,7 @@ export async function getInstitutionsWithProjects() {
 
 export async function getAuthorsWithProjects() {
   const [rows] = await sequelizeConn.query(`
-    SELECT fname, lname, p.project_id,  p.name, p.journal_title, p.journal_year, p.article_authors
+    SELECT fname, lname, p.project_id,  p.name, p.journal_title, p.journal_year, p.article_authors, p.article_title
     FROM projects_x_users pu, ca_users u, projects p
     WHERE pu.user_id = u.user_id and p.project_id=pu.project_id
     AND p.published=1 and p.deleted=0
@@ -173,6 +178,7 @@ export async function getAuthorsWithProjects() {
       journal_title: row.journal_title,
       journal_year: row.journal_year,
       article_authors: row.article_authors,
+      article_title: row.article_title,
     }
 
     if (!authors[author]) {
@@ -192,7 +198,7 @@ export async function getJournalsWithProjects() {
   const [rows] = await sequelizeConn.query(`
     SELECT
       DISTINCT p.project_id, p.name, TRIM(p.journal_title) as journal,
-      UPPER(TRIM(p.journal_title))
+      p.article_authors, p.journal_year, p.article_title, UPPER(TRIM(p.journal_title))
     FROM projects AS p
     WHERE p.published = 1 AND p.deleted = 0
     ORDER BY UPPER(TRIM(p.journal_title)), p.project_id;`)
@@ -215,6 +221,10 @@ export async function getJournalsWithProjects() {
     const project = {
       id: row.project_id,
       name: row.name,
+      article_authors: row.article_authors,
+      journal_year: row.journal_year,
+      journal_title: row.journal,
+      article_title: row.article_title,
     }
 
     if (!journals[journal]) {

@@ -1,6 +1,7 @@
 import sequelizeConn from '../util/db.js'
 import { Table } from '../lib/table.js'
 import { models } from '../models/init-models.js'
+import { TABLE_NUMBERS } from '../lib/table-number.js'
 
 export async function getMatrix(matrixId) {
   return models.Matrix.findByPk(matrixId)
@@ -573,6 +574,21 @@ export async function deleteMatrixWithCleanup(matrixId, user) {
     // Delete characters that are only in this matrix
     if (charactersToDelete.length > 0) {
       const characterIds = charactersToDelete.map((c) => c.character_id)
+
+      // Delete annotations for character states of these characters
+      await sequelizeConn.query(
+        `DELETE FROM annotations 
+         WHERE table_num = ? AND row_id IN (
+           SELECT state_id FROM character_states WHERE character_id IN (?)
+         )`,
+        { replacements: [TABLE_NUMBERS.character_states, characterIds], transaction }
+      )
+
+      // Delete annotations for the characters themselves
+      await sequelizeConn.query(
+        `DELETE FROM annotations WHERE table_num = ? AND row_id IN (?)`,
+        { replacements: [TABLE_NUMBERS.characters, characterIds], transaction }
+      )
 
       // Delete character states first (due to foreign key constraints)
       await sequelizeConn.query(
