@@ -7,6 +7,9 @@ import fs from 'fs'
 import path from 'path'
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { Readable } from 'stream'
+import { NexusExporter } from '../matrix-export/nexus-exporter.js'
+import { ExportOptions } from '../matrix-export/exporter.js'
+import * as matrixService from '../../services/matrix-service.js'
 
 /**
  * SDD (Structured Descriptive Data) Exporter for MorphoBank projects
@@ -73,27 +76,22 @@ export class SDDExporter {
     // Pipe archive to output stream
     archive.pipe(outputStream)
 
-    // Generate and add SDD XML
-    console.log('Generating SDD XML...')
+    // Step 1: Generate and add SDD XML
     const sddXml = await this.generateXML()
     const projectName = this.project.name.replace(/[^a-zA-Z0-9]/g, '_')
     archive.append(sddXml, { name: `${projectName}_sdd.xml` })
 
-    // Add media files
-    console.log('Adding media files to archive...')
+    // Step 2: Add media files
     await this.addMediaFilesToArchive(archive)
 
-    // Add matrix files (if any)
-    console.log('Adding matrix files to archive...')
+    // Step 3: Add matrix files (if any)
     await this.addMatrixFilesToArchive(archive)
 
-    // Add project documents
-    console.log('Adding project documents to archive...')
+    // Step 4: Add project documents
     await this.addProjectDocumentsToArchive(archive)
 
     // Finalize the archive
     await archive.finalize()
-    console.log('ZIP archive created successfully')
   }
 
   /**
@@ -997,30 +995,33 @@ export class SDDExporter {
     const media = await this.getMediaForDownload()
 
     if (!media || media.length === 0) {
-      console.log('No media files to add')
       return
     }
 
     const s3Client = this.getS3Client()
-    let addedCount = 0
 
-    for (const mediaItem of media) {
+    for (let i = 0; i < media.length; i++) {
+      const mediaItem = media[i]
+
       try {
         // Skip copyrighted media with restrictive licenses
         if (
           mediaItem.is_copyrighted === 1 &&
           mediaItem.copyright_license === 8
         ) {
-          console.log(`Skipping copyrighted media M${mediaItem.media_id}`)
           continue
         }
 
-        const mediaStream = await this.downloadMediaFromS3(s3Client, mediaItem)
-        if (mediaStream) {
-          const filename = this.getMediaFilename(mediaItem)
-          archive.append(mediaStream, { name: `media/${filename}` })
-          addedCount++
-          console.log(`Added media file: ${filename}`)
+        const downloadResult = await this.downloadMediaFromS3(
+          s3Client,
+          mediaItem
+        )
+        if (downloadResult && downloadResult.stream) {
+          const filename = this.getMediaFilenameFromS3Key(
+            downloadResult.s3Key,
+            mediaItem
+          )
+          archive.append(downloadResult.stream, { name: `media/${filename}` })
         }
       } catch (error) {
         console.error(
@@ -1030,8 +1031,6 @@ export class SDDExporter {
         // Continue with other files
       }
     }
-
-    console.log(`Added ${addedCount} media files to archive`)
   }
 
   /**
@@ -1040,26 +1039,65 @@ export class SDDExporter {
   async addMatrixFilesToArchive(archive) {
     const matrices = await this.getMatrices()
 
-    for (const matrix of matrices) {
-      try {
-        // Generate NEXUS file for matrix
-        const nexusContent = await this.generateMatrixNexus(matrix)
-        if (nexusContent) {
-          const filename = `matrices/X${
-            matrix.matrix_id
-          }_${matrix.title.replace(/[^a-zA-Z0-9]/g, '_')}_morphobank.nex`
-          archive.append(nexusContent, { name: filename })
-          console.log(`Added matrix file: ${filename}`)
-        }
+    if (!matrices || matrices.length === 0) {
+      return
+    }
 
-        // Add matrix upload files if any
-        await this.addMatrixUploadsToArchive(archive, matrix)
+    for (let i = 0; i < matrices.length; i++) {
+      const matrix = matrices[i]
+
+      try {
+        // Generate NEXUS content using the matrix exporter
+        const nexusContent = await this.generateMatrixNexusContent(
+          matrix.matrix_id
+        )
+
+        if (nexusContent) {
+          const filename = `X${matrix.matrix_id}_${matrix.title.replace(
+            /[^a-zA-Z0-9]/g,
+            '_'
+          )}_morphobank.nex`
+          archive.append(nexusContent, { name: `matrices/${filename}` })
+        }
       } catch (error) {
         console.error(
-          `Error adding matrix X${matrix.matrix_id}:`,
+          `Error processing matrix X${matrix.matrix_id}:`,
           error.message
         )
+        // Continue with other matrices
       }
+    }
+  }
+
+  /**
+   * Generate NEXUS content for a matrix using the NEXUS exporter
+   */
+  async generateMatrixNexusContent(matrixId) {
+    try {
+      // Get matrix data using matrix service functions
+      const options = new ExportOptions()
+      options.matrix = await matrixService.getMatrix(matrixId)
+      options.includeNotes = false
+      options.taxa = await matrixService.getTaxaInMatrix(matrixId)
+      options.characters = await matrixService.getCharactersInMatrix(matrixId)
+      options.cellsTable = await matrixService.getCells(matrixId)
+      options.cellNotes = null
+      options.blocks = await matrixService.getMatrixBlocks(matrixId)
+
+      // Generate NEXUS content
+      let nexusContent = ''
+      const exporter = new NexusExporter((txt) => {
+        nexusContent += txt
+      })
+
+      exporter.export(options)
+      return nexusContent
+    } catch (error) {
+      console.error(
+        `Error generating NEXUS content for matrix ${matrixId}:`,
+        error.message
+      )
+      return null
     }
   }
 
@@ -1070,21 +1108,24 @@ export class SDDExporter {
     const documents = await this.getProjectDocuments()
 
     if (!documents || documents.length === 0) {
-      console.log('No project documents to add')
       return
     }
 
     const s3Client = this.getS3Client()
-    let addedCount = 0
 
-    for (const doc of documents) {
+    for (let i = 0; i < documents.length; i++) {
+      const doc = documents[i]
+
       try {
-        const docStream = await this.downloadDocumentFromS3(s3Client, doc)
-        if (docStream) {
-          const filename = this.getDocumentFilename(doc)
-          archive.append(docStream, { name: `documents/${filename}` })
-          addedCount++
-          console.log(`Added document: ${filename}`)
+        const downloadResult = await this.downloadDocumentFromS3(s3Client, doc)
+        if (downloadResult && downloadResult.stream) {
+          const filename = this.getDocumentFilenameFromS3Key(
+            downloadResult.s3Key,
+            doc
+          )
+          archive.append(downloadResult.stream, {
+            name: `documents/${filename}`,
+          })
         }
       } catch (error) {
         console.error(
@@ -1093,8 +1134,6 @@ export class SDDExporter {
         )
       }
     }
-
-    console.log(`Added ${addedCount} documents to archive`)
   }
 
   /**
@@ -1136,9 +1175,6 @@ export class SDDExporter {
               const mediaVersion = mediaInfo[fileSize]
               if (mediaVersion.S3_KEY) {
                 s3Key = mediaVersion.S3_KEY
-                console.log(
-                  `Found S3 key for M${mediaItem.media_id} (${fileSize}): ${s3Key}`
-                )
                 break
               } else if (mediaVersion.FILENAME) {
                 // Legacy system - construct S3 key
@@ -1146,9 +1182,6 @@ export class SDDExporter {
                   mediaVersion.FILENAME.split('.').pop() || 'jpg'
                 const fileName = `${mediaItem.project_id}_${mediaItem.media_id}_${fileSize}.${fileExtension}`
                 s3Key = `media_files/images/${mediaItem.project_id}/${mediaItem.media_id}/${fileName}`
-                console.log(
-                  `Constructed S3 key for M${mediaItem.media_id} (${fileSize}): ${s3Key}`
-                )
                 break
               }
             }
@@ -1162,29 +1195,6 @@ export class SDDExporter {
       }
 
       if (!s3Key) {
-        // Try to extract from URL if available
-        if (mediaItem.media && (mediaItem.media.url || mediaItem.media.URL)) {
-          const url = mediaItem.media.url || mediaItem.media.URL
-          // Extract S3 key from URL like: https://bucket.s3.amazonaws.com/path/to/file
-          const urlMatch =
-            url.match(/\.s3\.amazonaws\.com\/(.+)$/) ||
-            url.match(/s3\.amazonaws\.com\/[^\/]+\/(.+)$/)
-          if (urlMatch) {
-            s3Key = urlMatch[1]
-            console.log(
-              `Extracted S3 key from URL for M${mediaItem.media_id}: ${s3Key}`
-            )
-          }
-        }
-      }
-
-      if (!s3Key) {
-        console.log(`No S3 key found for media M${mediaItem.media_id}`)
-        console.log(
-          `Media info for M${mediaItem.media_id}:`,
-          JSON.stringify(mediaItem.media, null, 2)
-        )
-        console.log(`Available fields:`, Object.keys(mediaItem.media || {}))
         return null
       }
 
@@ -1194,7 +1204,10 @@ export class SDDExporter {
       })
 
       const response = await s3Client.send(command)
-      return response.Body
+      return {
+        stream: response.Body,
+        s3Key: s3Key,
+      }
     } catch (error) {
       console.error(
         `Error downloading media M${mediaItem.media_id} from S3:`,
@@ -1226,9 +1239,6 @@ export class SDDExporter {
               uploadInfo.ORIGINAL_FILENAME.split('.').pop() || 'bin'
             const fileName = `${document.project_id}_${document.document_id}_original.${fileExtension}`
             s3Key = `documents/${document.project_id}/${document.document_id}/${fileName}`
-            console.log(
-              `Constructed S3 key for document ${document.document_id}: ${s3Key}`
-            )
           }
         } catch (e) {
           console.error(
@@ -1239,12 +1249,6 @@ export class SDDExporter {
       }
 
       if (!s3Key) {
-        console.log(`No S3 key found for document ${document.document_id}`)
-        console.log(
-          `Document upload info for ${document.document_id}:`,
-          JSON.stringify(document.upload, null, 2)
-        )
-        console.log(`Available fields:`, Object.keys(document.upload || {}))
         return null
       }
 
@@ -1254,7 +1258,10 @@ export class SDDExporter {
       })
 
       const response = await s3Client.send(command)
-      return response.Body
+      return {
+        stream: response.Body,
+        s3Key: s3Key,
+      }
     } catch (error) {
       console.error(
         `Error downloading document ${document.document_id} from S3:`,
@@ -1265,7 +1272,23 @@ export class SDDExporter {
   }
 
   /**
-   * Get media filename for archive
+   * Get media filename from S3 key
+   */
+  getMediaFilenameFromS3Key(s3Key, mediaItem) {
+    if (s3Key) {
+      // Extract filename from S3 key path
+      const s3Filename = path.basename(s3Key)
+      if (s3Filename && s3Filename !== s3Key) {
+        return s3Filename
+      }
+    }
+
+    // Fallback to original method
+    return this.getMediaFilename(mediaItem)
+  }
+
+  /**
+   * Get media filename for archive (fallback method)
    */
   getMediaFilename(mediaItem) {
     let filename = `M${mediaItem.media_id}`
@@ -1317,7 +1340,23 @@ export class SDDExporter {
   }
 
   /**
-   * Get document filename for archive
+   * Get document filename from S3 key
+   */
+  getDocumentFilenameFromS3Key(s3Key, document) {
+    if (s3Key) {
+      // Extract filename from S3 key path
+      const s3Filename = path.basename(s3Key)
+      if (s3Filename && s3Filename !== s3Key) {
+        return s3Filename
+      }
+    }
+
+    // Fallback to original method
+    return this.getDocumentFilename(document)
+  }
+
+  /**
+   * Get document filename for archive (fallback method)
    */
   getDocumentFilename(document) {
     let filename = `D${document.document_id}`
@@ -1379,139 +1418,6 @@ export class SDDExporter {
     )
 
     return results
-  }
-
-  /**
-   * Generate NEXUS content for a matrix
-   */
-  async generateMatrixNexus(matrix) {
-    // This is a simplified NEXUS generation
-    // You might want to use your existing matrix export functionality
-    try {
-      const matrixId = matrix.matrix_id
-
-      // Get taxa for this matrix
-      const [taxa] = await sequelizeConn.query(
-        `
-        SELECT t.*, mto.position
-        FROM taxa t
-        INNER JOIN matrix_taxa_order mto ON mto.taxon_id = t.taxon_id
-        WHERE mto.matrix_id = ?
-        ORDER BY mto.position
-      `,
-        {
-          replacements: [matrixId],
-        }
-      )
-
-      // Get characters for this matrix
-      const [characters] = await sequelizeConn.query(
-        `
-        SELECT c.*, mco.position
-        FROM characters c
-        INNER JOIN matrix_character_order mco ON mco.character_id = c.character_id
-        WHERE mco.matrix_id = ?
-        ORDER BY mco.position
-      `,
-        {
-          replacements: [matrixId],
-        }
-      )
-
-      if (taxa.length === 0 || characters.length === 0) {
-        return null
-      }
-
-      // Generate basic NEXUS format
-      let nexus = `#NEXUS\n`
-      nexus += `[Generated by MorphoBank for Matrix ${matrixId}]\n\n`
-      nexus += `BEGIN TAXA;\n`
-      nexus += `\tDIMENSIONS NTAX=${taxa.length};\n`
-      nexus += `\tTAXLABELS\n`
-
-      for (const taxon of taxa) {
-        const name = getTaxonName(taxon, null, false, false).replace(
-          /[^a-zA-Z0-9_]/g,
-          '_'
-        )
-        nexus += `\t\t'${name}'\n`
-      }
-
-      nexus += `\t;\nENDBLOCK;\n\n`
-      nexus += `BEGIN CHARACTERS;\n`
-      nexus += `\tDIMENSIONS NCHAR=${characters.length};\n`
-      nexus += `\tFORMAT DATATYPE=STANDARD GAP=- MISSING=?;\n`
-      nexus += `\tMATRIX\n`
-
-      // Add matrix data (simplified - you might want to implement full cell data)
-      for (const taxon of taxa) {
-        const name = getTaxonName(taxon, null, false, false).replace(
-          /[^a-zA-Z0-9_]/g,
-          '_'
-        )
-        nexus += `\t'${name}'\t${'?'.repeat(characters.length)}\n`
-      }
-
-      nexus += `\t;\nENDBLOCK;\n`
-
-      return nexus
-    } catch (error) {
-      console.error(
-        `Error generating NEXUS for matrix ${matrix.matrix_id}:`,
-        error.message
-      )
-      return null
-    }
-  }
-
-  /**
-   * Add matrix upload files to archive
-   */
-  async addMatrixUploadsToArchive(archive, matrix) {
-    // Get matrix file uploads
-    const [uploads] = await sequelizeConn.query(
-      `
-      SELECT upload_id, upload
-      FROM matrix_file_uploads
-      WHERE matrix_id = ?
-    `,
-      {
-        replacements: [matrix.matrix_id],
-      }
-    )
-
-    const s3Client = this.getS3Client()
-
-    for (const upload of uploads) {
-      try {
-        if (upload.upload) {
-          let uploadInfo = upload.upload
-          // If it's a string, parse it; if it's already an object, use it directly
-          if (typeof uploadInfo === 'string') {
-            uploadInfo = JSON.parse(uploadInfo)
-          }
-
-          const s3Key = uploadInfo.s3_key || uploadInfo.S3_KEY
-
-          if (s3Key) {
-            const command = new GetObjectCommand({
-              Bucket: config.aws.defaultBucket || config.aws.bucketName,
-              Key: s3Key,
-            })
-
-            const response = await s3Client.send(command)
-            const filename =
-              uploadInfo.ORIGINAL_FILENAME || `matrix_upload_${Date.now()}`
-            archive.append(response.Body, {
-              name: `matrix_uploads/${filename}`,
-            })
-            console.log(`Added matrix upload: ${filename}`)
-          }
-        }
-      } catch (error) {
-        console.error(`Error adding matrix upload:`, error.message)
-      }
-    }
   }
 
   /**
