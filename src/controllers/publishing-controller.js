@@ -267,6 +267,7 @@ export async function publishProject(req, res) {
   try {
     const projectId = req.params.projectId
     const userId = req.user.user_id
+    console.log('publishProject: projectId', projectId)
 
     const project = await models.Project.findByPk(projectId)
     if (!project) {

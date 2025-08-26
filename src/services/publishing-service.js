@@ -651,7 +651,7 @@ export async function publishProject(projectId, userId, isCurator = false) {
       project.exemplar_media_id,
       { transaction }
     )
-    if (!exemplarMedia || exemplarMedia.project_id !== projectId) {
+    if (!exemplarMedia || exemplarMedia.project_id != projectId) {
       await transaction.rollback()
       return {
         success: false,
