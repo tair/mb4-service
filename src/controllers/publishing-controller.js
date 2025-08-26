@@ -178,7 +178,29 @@ export async function validateMediaForPublishing(req, res) {
       return res.status(200).json({
         canPublish: false,
         warning: 'no_media',
-        message: 'This project has no media files to publish.',
+        message: 'At least 1 media file is required to publish a project.',
+      })
+    }
+
+    // Check if project has exemplar media set
+    if (!project.exemplar_media_id) {
+      return res.status(200).json({
+        canPublish: false,
+        warning: 'no_exemplar_media',
+        message: 'An exemplar media file must be selected for the project.',
+      })
+    }
+
+    // Verify exemplar media exists and is valid
+    const exemplarMedia = await models.MediaFile.findByPk(
+      project.exemplar_media_id
+    )
+    if (!exemplarMedia || exemplarMedia.project_id != projectId) {
+      return res.status(200).json({
+        canPublish: false,
+        warning: 'invalid_exemplar_media',
+        message:
+          'The selected exemplar media file is invalid or does not exist.',
       })
     }
 
@@ -190,13 +212,39 @@ export async function validateMediaForPublishing(req, res) {
 
     if (unfinishedMedia.length > 0) {
       const mediaNumbers = unfinishedMedia.map((m) => `M${m.media_id}`)
+
+      // Group media by reason types for better messaging
+      const copyrightIssues = unfinishedMedia.filter((m) =>
+        m.reasons.some((r) => r.includes('copyright'))
+      )
+      const missingInfoIssues = unfinishedMedia.filter((m) =>
+        m.reasons.some(
+          (r) => r.includes('missing_specimen') || r.includes('missing_view')
+        )
+      )
+
+      let detailedMessage = `The following media files need their information completed: ${mediaNumbers.join(
+        ', '
+      )}`
+
+      if (copyrightIssues.length > 0) {
+        detailedMessage += `. ${copyrightIssues.length} media file(s) have incomplete copyright information`
+      }
+
+      if (missingInfoIssues.length > 0) {
+        detailedMessage += `. ${missingInfoIssues.length} media file(s) are missing specimen or view information`
+      }
+
       return res.status(200).json({
         canPublish: false,
         warning: 'media_warnings',
-        message: `The following media files need their copyright information completed: ${mediaNumbers.join(
-          ', '
-        )}`,
+        message: detailedMessage,
         unfinishedMedia,
+        mediaStats: {
+          total: unfinishedMedia.length,
+          copyrightIssues: copyrightIssues.length,
+          missingInfoIssues: missingInfoIssues.length,
+        },
       })
     }
 
@@ -219,6 +267,7 @@ export async function publishProject(req, res) {
   try {
     const projectId = req.params.projectId
     const userId = req.user.user_id
+    console.log('publishProject: projectId', projectId)
 
     const project = await models.Project.findByPk(projectId)
     if (!project) {
@@ -416,6 +465,94 @@ export async function validateCitationInfo(req, res) {
     })
   } catch (error) {
     console.error('Error in validateCitationInfo:', error)
+    res.status(500).json({ message: 'Internal server error' })
+  }
+}
+
+/**
+ * Get unpublished items for a project
+ * Returns documents, folios, matrices, and media that would be published when project is published
+ */
+export async function getUnpublishedItems(req, res) {
+  try {
+    const projectId = req.params.projectId
+    const project = await models.Project.findByPk(projectId)
+
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' })
+    }
+
+    // Query for unpublished items (published = 0 means "publish when project is published")
+    const [documents, folios, matrices, media] = await Promise.all([
+      // Documents
+      models.ProjectDocument.findAll({
+        where: {
+          project_id: projectId,
+          published: 1, // Will be published when project is published
+        },
+        attributes: ['document_id', 'title', 'description', 'uploaded_on'],
+        order: [['uploaded_on', 'DESC']],
+      }),
+
+      // Folios
+      models.Folio.findAll({
+        where: {
+          project_id: projectId,
+          published: 1, // Will be published when project is published
+        },
+        attributes: ['folio_id', 'name', 'description', 'created_on'],
+        order: [['created_on', 'DESC']],
+      }),
+
+      // Matrices
+      models.Matrix.findAll({
+        where: {
+          project_id: projectId,
+          published: 1, // Will be published when project is published
+          deleted: 0, // Exclude deleted matrices
+        },
+        attributes: ['matrix_id', 'title', 'notes', 'created_on'],
+        order: [['created_on', 'DESC']],
+      }),
+
+      // Media files
+      models.MediaFile.findAll({
+        where: {
+          project_id: projectId,
+          published: 1, // Will be published when project is published
+        },
+        attributes: ['media_id', 'notes', 'created_on'],
+        order: [['created_on', 'DESC']],
+      }),
+    ])
+
+    return res.status(200).json({
+      documents: documents.map((doc) => ({
+        document_id: doc.document_id,
+        title: doc.title,
+        description: doc.description,
+        uploaded_on: doc.uploaded_on,
+      })),
+      folios: folios.map((folio) => ({
+        folio_id: folio.folio_id,
+        name: folio.name,
+        description: folio.description,
+        created_on: folio.created_on,
+      })),
+      matrices: matrices.map((matrix) => ({
+        matrix_id: matrix.matrix_id,
+        title: matrix.title,
+        notes: matrix.notes,
+        created_on: matrix.created_on,
+      })),
+      media: media.map((mediaFile) => ({
+        media_id: mediaFile.media_id,
+        notes: mediaFile.notes,
+        created_on: mediaFile.created_on,
+      })),
+    })
+  } catch (error) {
+    console.error('Error in getUnpublishedItems:', error)
     res.status(500).json({ message: 'Internal server error' })
   }
 }
