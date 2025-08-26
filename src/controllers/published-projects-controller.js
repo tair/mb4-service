@@ -76,3 +76,33 @@ export async function getProjectTaxonomy(req, res) {
     res.status(500).json({ message: 'Error while fetching taxonomy.' })
   }
 }
+
+export async function getProjectStats(req, res) {
+  try {
+    const { getProjectViewsForLast30Days, getMediaViewsForLast30Days, getMatrixDownloadsForLast30Days, getDocDownloadsForLast30Days } = await import('../services/published-stats-service.js')
+    
+    const [
+      projectViewsForLast30Days,
+      mediaViewsForLast30Days,
+      matrixDownloadsForLast30Days,
+      docDownloadsForLast30Days
+    ] = await Promise.all([
+      getProjectViewsForLast30Days(),
+      getMediaViewsForLast30Days(),
+      getMatrixDownloadsForLast30Days(),
+      getDocDownloadsForLast30Days()
+    ])
+
+    const stats = {
+      projectViewsForLast30Days,
+      mediaViewsForLast30Days,
+      matrixDownloadsForLast30Days,
+      docDownloadsForLast30Days
+    }
+
+    res.status(200).json(stats)
+  } catch (e) {
+    console.error('Error while getting project stats (controller).', e)
+    res.status(500).json({ message: 'Error while fetching project statistics.' })
+  }
+}
