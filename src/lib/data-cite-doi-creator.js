@@ -23,6 +23,7 @@ export class DataCiteDOICreator {
 
   async create(parameter) {
     const content = this.generateJSON(parameter)
+    const fullDoi = `${this.shoulder}/${parameter.id}`
 
     const options = {
       host: this.hostname,
@@ -37,7 +38,11 @@ export class DataCiteDOICreator {
     try {
       const response = await performRequest(options, content)
       const success = response.status < 300
-      return success
+      if (success) {
+        return { success: true, doi: fullDoi }
+      } else {
+        return { success: false, doi: null }
+      }
     } catch (error) {
       console.error('DataCiteDOICreator: Request failed with error:', error)
       throw error

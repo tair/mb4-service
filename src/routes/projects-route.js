@@ -152,6 +152,10 @@ projectRouter.get(
   '/publishing/validate/media',
   publishingController.validateMediaForPublishing
 )
+projectRouter.get(
+  '/publishing/unpublished-items',
+  publishingController.getUnpublishedItems
+)
 projectRouter.post('/publishing/publish', publishingController.publishProject)
 projectRouter.post('/publishing/test-doi', publishingController.testDOICreation)
 
