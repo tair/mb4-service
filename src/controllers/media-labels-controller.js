@@ -17,13 +17,14 @@ export async function getMediaLabels(req, res) {
   }
 
   const type = req.query.type
+  const linkId = req.query.link_id
   const tableNum = getTabelNumberFromType(type)
   if (tableNum == null) {
     res.status(400).json({ message: 'Type not specified' })
     return
   }
 
-  const rows = await service.getMediaLabels(mediaId, tableNum)
+  const rows = await service.getMediaLabels(mediaId, tableNum, linkId)
 
   const labels = []
   for (const row of rows) {
@@ -72,6 +73,20 @@ export async function editMediaLabels(req, res) {
   const media = await models.MediaFile.findByPk(mediaId)
   if (media == null || media.project_id != projectId) {
     res.status(404).json({ message: 'Media is not found' })
+    return
+  }
+
+  // Check project permissions - ensure project is not published (unless user is curator)
+  const project = await models.Project.findByPk(projectId)
+  if (project == null) {
+    res.status(404).json({ message: 'Project not found' })
+    return
+  }
+
+  // Check if user can edit (project not published or user is curator)
+  const canEdit = !project.published || req.user.hasRole?.('curator') || req.user.canDoAction?.('curator')
+  if (!canEdit) {
+    res.status(403).json({ message: 'Cannot edit annotations in published projects' })
     return
   }
 
@@ -159,15 +174,89 @@ export async function editMediaLabels(req, res) {
 }
 
 export async function deleteMediaLabels(req, res) {
+  const projectId = req.params.projectId
+  const mediaId = req.params.mediaId
   const annotationIds = req.body.annotationIds
 
-  // TODO: Implement the ability to delete media labels based on their label_id
-  //     primary keys. We must also verify that the label belongs to the media
-  //     in the URL.
+  if (!annotationIds || !Array.isArray(annotationIds) || annotationIds.length === 0) {
+    res.status(400).json({ message: 'No annotation IDs provided' })
+    return
+  }
 
-  res.status(200).json({
-    annotationIds,
-  })
+  // Confirms that the media file belongs to the project to prevent access to
+  // media files in different projects.
+  const media = await models.MediaFile.findByPk(mediaId)
+  if (media == null || media.project_id != projectId) {
+    res.status(404).json({ message: 'Media is not found' })
+    return
+  }
+
+  // Check project permissions - ensure project is not published (unless user is curator)
+  const project = await models.Project.findByPk(projectId)
+  if (project == null) {
+    res.status(404).json({ message: 'Project not found' })
+    return
+  }
+
+  // Check if user can edit (project not published or user is curator)
+  const canEdit = !project.published || req.user.hasRole?.('curator') || req.user.canDoAction?.('curator')
+  if (!canEdit) {
+    res.status(403).json({ message: 'Cannot edit annotations in published projects' })
+    return
+  }
+
+  const transaction = await sequelizeConn.transaction()
+  
+  try {
+    // Verify all annotations belong to this media file and get them
+    const annotations = await models.MediaLabel.findAll({
+      where: {
+        label_id: annotationIds,
+        media_id: mediaId
+      },
+      transaction
+    })
+
+    if (annotations.length !== annotationIds.length) {
+      await transaction.rollback()
+      res.status(400).json({ message: 'Some annotations not found or do not belong to this media' })
+      return
+    }
+
+    // Check if user can delete these annotations (either owns them or is project owner/curator)
+    const isProjectOwner = project.user_id === req.user.user_id
+    const isCurator = req.user.hasRole?.('curator') || req.user.canDoAction?.('curator')
+    
+    for (const annotation of annotations) {
+      const canDeleteThis = annotation.user_id === req.user.user_id || isProjectOwner || isCurator
+      if (!canDeleteThis) {
+        await transaction.rollback()
+        res.status(403).json({ message: 'Cannot delete annotations created by other users' })
+        return
+      }
+    }
+
+    // Delete the annotations
+    await models.MediaLabel.destroy({
+      where: {
+        label_id: annotationIds,
+        media_id: mediaId
+      },
+      transaction,
+      user: req.user
+    })
+
+    await transaction.commit()
+    
+    res.status(200).json({
+      message: 'Annotations deleted successfully',
+      deletedIds: annotationIds,
+    })
+  } catch (error) {
+    await transaction.rollback()
+    console.error('Error deleting annotations:', error)
+    res.status(500).json({ message: 'Failed to delete annotations' })
+  }
 }
 
 /**
