@@ -56,6 +56,7 @@ export default class MatrixEditorService {
   }
 
   async getCellData() {
+    // Load cell states
     const [rows] = await sequelizeConn.query(
       `
       SELECT
@@ -122,6 +123,7 @@ export default class MatrixEditorService {
       GROUP BY cxm.character_id, cxm.taxon_id, cxm.media_id`,
       { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
     )
+
     const labelCounts = new HyperTable()
     for (const row of labelCountRows) {
       const mediaId = parseInt(row.media_id)
@@ -153,6 +155,7 @@ export default class MatrixEditorService {
       const mediaId = parseInt(row.media_id)
       const taxonId = parseInt(row.taxon_id)
       const characterId = parseInt(row.character_id)
+
       cellMedia.push({
         link_id: linkId,
         media_id: mediaId,
@@ -160,7 +163,7 @@ export default class MatrixEditorService {
         character_id: characterId,
         tiny: getMedia(row.media, 'tiny'),
         icon: getMedia(row.media, 'icon'),
-        label_count: labelCounts.get(taxonId, characterId, mediaId) ?? 0,
+        label_count: labelCounts.get(taxonId, characterId)?.get(mediaId) ?? 0,
       })
     }
 
@@ -224,6 +227,7 @@ export default class MatrixEditorService {
     return cells
   }
 
+  //implemented by Kenzley, not sure where this shall be used
   async getCellCounts(
     startCharacterNum,
     endCharacterNum,
@@ -440,7 +444,8 @@ export default class MatrixEditorService {
         icon: getMedia(row.media, 'icon'),
       }
 
-      const labelCount = labelCounts.get(taxonId, characterId, mediaId)
+      const characterMap = labelCounts.get(taxonId, characterId)
+      const labelCount = characterMap ? characterMap.get(mediaId) : undefined
       if (labelCount) {
         media.label_count = labelCount
       }
@@ -465,7 +470,7 @@ export default class MatrixEditorService {
   }
 
   async getMediaLabelCount(linkId) {
-    const [[{ count }]] = await sequelizeConn.query(
+    const [[{ count: linkedCount }]] = await sequelizeConn.query(
       `
       SELECT COUNT(*) AS count
       FROM media_labels ml
@@ -474,7 +479,8 @@ export default class MatrixEditorService {
       WHERE ml.table_num = ? AND cxm.link_id = ?`,
       { replacements: [TABLE_NUMBERS.cells_x_media, linkId] }
     )
-    return parseInt(count) ?? 0
+    
+    return parseInt(linkedCount) ?? 0
   }
 
   async getCellCitations(taxonId, characterId) {
@@ -5079,7 +5085,7 @@ export default class MatrixEditorService {
         media_id: mediaId,
         icon: getMedia(row.media, 'icon'),
         tiny: getMedia(row.media, 'tiny'),
-        label_count: labelCounts.get(taxonId, characterId, mediaId) ?? 0,
+        label_count: labelCounts.get(taxonId, characterId)?.get(mediaId) ?? 0,
       })
     }
 
