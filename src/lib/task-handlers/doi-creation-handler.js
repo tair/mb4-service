@@ -3,6 +3,7 @@ import { DataCiteDOICreator } from '../data-cite-doi-creator.js'
 import { Handler, HandlerErrors } from './handler.js'
 import { QueryTypes } from 'sequelize'
 import { models } from '../../models/init-models.js'
+import { updateProjectDoiAndRedump } from '../../services/publishing-service.js'
 
 const BASE_URL = `${process.env.FRONTEND_URL}/project`
 
@@ -147,19 +148,8 @@ export class DOICreationHandler extends Handler {
     }
 
     const transaction = await sequelizeConn.transaction()
-    if (project.project_doi == null && projectDoiToUpdate) {
-      await sequelizeConn.query(
-        `
-        UPDATE projects
-        SET project_doi = ?
-        WHERE project_id = ? AND project_doi IS NULL`,
-        {
-          replacements: [projectDoiToUpdate, projectId],
-          type: QueryTypes.UPDATE,
-          transaction: transaction,
-        }
-      )
-    }
+
+    // Update matrix DOIs first
     for (const [matrixId, matrixDoi] of matrixDois.entries()) {
       await sequelizeConn.query(
         `
@@ -174,6 +164,17 @@ export class DOICreationHandler extends Handler {
       )
     }
     await transaction.commit()
+
+    // Handle project DOI update and re-dump separately
+    if (project.project_doi == null && projectDoiToUpdate) {
+      const updateResult = await updateProjectDoiAndRedump(
+        projectId,
+        projectDoiToUpdate
+      )
+      if (!updateResult.success) {
+        console.warn(`DOICreationHandler: ${updateResult.message}`)
+      }
+    }
 
     // Count actual DOIs created (not just attempted)
     let createdCount = 0
