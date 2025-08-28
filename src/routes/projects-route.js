@@ -157,6 +157,6 @@ projectRouter.get(
   publishingController.getUnpublishedItems
 )
 projectRouter.post('/publishing/publish', publishingController.publishProject)
-projectRouter.post('/publishing/test-doi', publishingController.testDOICreation)
+projectRouter.post('/publishing/dump', publishingController.dumpProjectById)
 
 export default projectsRouter
