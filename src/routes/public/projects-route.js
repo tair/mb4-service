@@ -31,6 +31,8 @@ projectsRouter.get('/taxonomy', projectsController.getProjectTaxonomy)
 
 projectsRouter.get('/titles', projectsController.getProjectTitles)
 
+projectsRouter.get('/stats', projectsController.getProjectStats)
+
 // This is a sub-route focused on /public/projects/<projectId>
 const projectRouter = express.Router({ mergeParams: true })
 projectsRouter.use('/:projectId/', projectRouter)
