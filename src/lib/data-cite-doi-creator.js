@@ -5,6 +5,15 @@ import { Buffer } from 'node:buffer'
 export class DataCiteDOICreator {
   constructor() {
     verifyDataciteConfiguration()
+
+    console.log('DataCiteDOICreator: Initializing with config:', {
+      hostname: config.datacite.hostname,
+      urlPath: config.datacite.urlPath,
+      shoulder: config.datacite.shoulder,
+      username: config.datacite.username,
+      password: config.datacite.password ? '[SET]' : '[NOT SET]',
+    })
+
     const bearer = `${config.datacite.username}:${config.datacite.password}`
     this.authorizationToken = `Basic ${Buffer.from(bearer).toString('base64')}`
     this.hostname = config.datacite.hostname
@@ -14,6 +23,8 @@ export class DataCiteDOICreator {
 
   async create(parameter) {
     const content = this.generateJSON(parameter)
+    const fullDoi = `${this.shoulder}/${parameter.id}`
+
     const options = {
       host: this.hostname,
       path: this.urlPath,
@@ -23,8 +34,19 @@ export class DataCiteDOICreator {
         'Content-type': 'application/vnd.api+json',
       },
     }
-    const response = await performRequest(options, content)
-    return response.status < 300
+
+    try {
+      const response = await performRequest(options, content)
+      const success = response.status < 300
+      if (success) {
+        return { success: true, doi: fullDoi }
+      } else {
+        return { success: false, doi: null }
+      }
+    } catch (error) {
+      console.error('DataCiteDOICreator: Request failed with error:', error)
+      throw error
+    }
   }
 
   async exists(doi) {
@@ -36,8 +58,17 @@ export class DataCiteDOICreator {
         Authorization: this.authorizationToken,
       },
     }
-    const response = await performRequest(options)
-    return response.status < 300
+
+    try {
+      const response = await performRequest(options)
+      return response.status < 300
+    } catch (error) {
+      console.error(
+        'DataCiteDOICreator: Exists check failed with error:',
+        error
+      )
+      return false
+    }
   }
 
   generateJSON(parameter) {
@@ -105,15 +136,37 @@ function performRequest(options, content = undefined) {
       })
 
       res.on('close', () => {
-        resolve({
-          status: res.statusCode,
-          data: JSON.parse(data.join('')),
-        })
+        const responseBody = data.join('')
+
+        try {
+          const parsedData = responseBody ? JSON.parse(responseBody) : {}
+          resolve({
+            status: res.statusCode,
+            data: parsedData,
+          })
+        } catch (parseError) {
+          console.error(
+            'DataCiteDOICreator: Failed to parse response JSON:',
+            parseError
+          )
+          console.error('DataCiteDOICreator: Raw response body:', responseBody)
+          resolve({
+            status: res.statusCode,
+            data: { error: 'Failed to parse response', raw: responseBody },
+          })
+        }
       })
     })
 
-    request.end(content)
+    if (content) {
+      request.write(content)
+    }
 
-    request.on('error', (err) => reject(err))
+    request.end()
+
+    request.on('error', (err) => {
+      console.error('DataCiteDOICreator: HTTP request error:', err)
+      reject(err)
+    })
   })
 }

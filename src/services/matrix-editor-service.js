@@ -1725,6 +1725,27 @@ export default class MatrixEditorService {
       referencedCharacterIds
     )
     if (unusedCharacterIds.length) {
+      // Delete annotations for character states of these characters
+      await sequelizeConn.query(
+        `DELETE FROM annotations 
+         WHERE table_num = ? AND row_id IN (
+           SELECT state_id FROM character_states WHERE character_id IN (?)
+         )`,
+        {
+          replacements: [TABLE_NUMBERS.character_states, unusedCharacterIds],
+          transaction: transaction,
+        }
+      )
+
+      // Delete annotations for the characters themselves
+      await sequelizeConn.query(
+        `DELETE FROM annotations WHERE table_num = ? AND row_id IN (?)`,
+        {
+          replacements: [TABLE_NUMBERS.characters, unusedCharacterIds],
+          transaction: transaction,
+        }
+      )
+
       await models.Character.destroy({
         where: {
           character_id: characterIds,
@@ -1879,6 +1900,16 @@ export default class MatrixEditorService {
             transaction: transaction,
           }
         )
+
+        // Delete annotations for character states
+        await sequelizeConn.query(
+          `DELETE FROM annotations WHERE table_num = ? AND row_id IN (?)`,
+          {
+            replacements: [TABLE_NUMBERS.character_states, deletedStateIds],
+            transaction: transaction,
+          }
+        )
+
         await models.CharacterState.destroy({
           where: {
             state_id: deletedStateIds,
@@ -4468,23 +4499,30 @@ export default class MatrixEditorService {
     await this.checkPartitionNameExists(name)
 
     const transaction = await sequelizeConn.transaction()
-    const partition = await models.Partition.create(
-      {
-        project_id: this.project.project_id,
-        user_id: this.user.user_id,
+    try {
+      const partition = await models.Partition.create(
+        {
+          project_id: this.project.project_id,
+          user_id: this.user.user_id,
+          name: name,
+          description: description,
+          source: 'HTML5',
+        },
+        { user: this.user, transaction: transaction }
+      )
+      
+      await transaction.commit()
+
+      return {
+        id: partition.partition_id,
         name: name,
         description: description,
-        source: 'HTML5',
-      },
-      { user: this.user, transaction: transaction }
-    )
-
-    return {
-      id: partition.partition_id,
-      name: name,
-      description: description,
-      user_id: this.user.user_id,
-      project_id: this.project.project_id,
+        user_id: this.user.user_id,
+        project_id: this.project.project_id,
+      }
+    } catch (error) {
+      await transaction.rollback()
+      throw error
     }
   }
 

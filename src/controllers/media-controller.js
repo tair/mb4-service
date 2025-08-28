@@ -934,9 +934,9 @@ export async function serveMediaFile(req, res) {
     const mediaVersion = mediaData[fileSize]
 
     let s3Key
-    if (mediaVersion.S3_KEY) {
-      // New S3-based system
-      s3Key = mediaVersion.S3_KEY
+    if (mediaVersion.S3_KEY || mediaVersion.s3_key) {
+      // New S3-based system - handle both uppercase and lowercase
+      s3Key = mediaVersion.S3_KEY || mediaVersion.s3_key
     } else if (mediaVersion.FILENAME) {
       // Legacy local file system - construct S3 key
       const fileExtension = mediaVersion.FILENAME.split('.').pop() || 'jpg'
@@ -945,7 +945,7 @@ export async function serveMediaFile(req, res) {
     } else {
       return res.status(404).json({
         error: 'Invalid media data',
-        message: 'Media data is missing file information',
+        message: `Media data is missing file information. Available data: ${JSON.stringify(mediaVersion)}`,
       })
     }
 

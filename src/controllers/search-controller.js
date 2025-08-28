@@ -31,8 +31,18 @@ async function searchProjects(req, res) {
   const { canAccessUnpublished } = await getUserAccessInfo(req.user)
   const searchTerm = req.query.searchTerm
 
-  let query =
-    'SELECT project_id, name, article_authors, journal_year, article_title, journal_title, journal_volume article_pp, published FROM projects WHERE (name LIKE :searchTerm OR description LIKE :searchTerm OR journal_title LIKE :searchTerm OR article_title LIKE :searchTerm OR article_authors LIKE :searchTerm) AND deleted = 0'
+  // Check if search term starts with 'P' followed by digits (project ID format)
+  const projectIdMatch = searchTerm.match(/^P(\d+)$/i)
+  let projectIdCondition = 'project_id LIKE :searchTerm'
+  let searchTermValue = `%${searchTerm}%`
+
+  if (projectIdMatch) {
+    // If it's a P-prefixed project ID, search for exact numeric match
+    const numericId = projectIdMatch[1]
+    projectIdCondition = 'project_id = :projectId'
+  }
+
+  let query = `SELECT project_id, name, article_authors, journal_year, article_title, journal_title, journal_volume article_pp, published FROM projects WHERE (name LIKE :searchTerm OR description LIKE :searchTerm OR journal_title LIKE :searchTerm OR article_title LIKE :searchTerm OR article_authors LIKE :searchTerm OR ${projectIdCondition}) AND deleted = 0`
 
   if (!canAccessUnpublished) {
     query += ' AND published = 1'
@@ -40,9 +50,14 @@ async function searchProjects(req, res) {
 
   query += ' ORDER BY published_on desc'
 
+  const replacements = { searchTerm: searchTermValue }
+  if (projectIdMatch) {
+    replacements.projectId = projectIdMatch[1]
+  }
+
   sequelizeConn
     .query(query, {
-      replacements: { searchTerm: `%${searchTerm}%` },
+      replacements: replacements,
       type: Sequelize.QueryTypes.SELECT,
     })
     .then((projects) => {
