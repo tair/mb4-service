@@ -5,15 +5,25 @@ import { MEDIA_TYPES, MEDIA_MIME_TYPES, MEDIA_EXTENSIONS } from './media-constan
 const MEDIA_PORT = config.media.port ? `:${config.media.port}` : ''
 export const MEDIA_PATH = `${config.media.directory}/${config.app.name}`
 export const MEDIA_URL_PATH = `${config.media.scheme}://${config.media.domain}${MEDIA_PORT}/media/${config.app.name}`
+export const NEW_MEDIA_URL_PATH = `${config.media.newDomain}/public/media`
 
-export function getMedia(media, version) {
+export function getMedia(media, version, projectId, mediaId) {
   const mediaVersion = getMediaVersion(media, version)
   if (mediaVersion == null) {
     return undefined
   }
 
+  // For icon and tiny versions, we use the thumbnail endpoint
+  if (version == 'icon' || version == 'tiny') {
+    return {
+      url: `${NEW_MEDIA_URL_PATH}/${projectId}/serve/${mediaId}/thumbnail`,
+      width: mediaVersion['width'],
+      height: mediaVersion['height'],
+    }
+  }
+
   return {
-    url: `${MEDIA_URL_PATH}/${mediaVersion['volume']}/${mediaVersion['hash']}/${mediaVersion['magic']}_${mediaVersion['filename']}`,
+    url: `${NEW_MEDIA_URL_PATH}/${projectId}/serve/${mediaId}/${version}`,
     width: mediaVersion['width'],
     height: mediaVersion['height'],
   }

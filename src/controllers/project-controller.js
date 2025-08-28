@@ -64,7 +64,7 @@ export async function getProjects(req, res) {
       if (row.media) {
         const project = resultMap.get(row.project_id)
         if (project) {
-          project.media = getMedia(row.media, 'thumbnail')
+          project.media = getMedia(row.media, 'thumbnail', row.project_id, row.media_id)
         }
       }
     }
