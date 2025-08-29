@@ -57,4 +57,7 @@ projectRouter.get(
   matrixController.downloadCharacterRules
 )
 
+// SDD ZIP dump endpoint for published projects
+projectRouter.get('/download/sdd', dataDumpController.projectSDDZipDump)
+
 export default projectsRouter

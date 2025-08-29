@@ -1234,43 +1234,26 @@ export async function downloadProjectSDD(req, res) {
   try {
     const { projectId } = req.params
     const { partitionId, format = 'xml' } = req.query
+    const userId = req.user?.user_id
 
-    // Validate project exists
-    const project = await models.Project.findByPk(projectId)
+    // Validate access using service function
+    const { hasAccess, project, partition } =
+      await projectService.validateProjectSDDAccess(
+        projectId,
+        userId,
+        partitionId
+      )
+
     if (!project) {
       return res.status(404).json({ message: 'Project not found' })
-    }
-
-    // Check if project is published or user has access
-    const userId = req.user?.user_id
-    let hasAccess = project.published === 1
-
-    if (!hasAccess && userId) {
-      // Check if user has access to the project
-      const projectUser = await models.ProjectsXUser.findOne({
-        where: {
-          project_id: projectId,
-          user_id: userId,
-        },
-      })
-      hasAccess = !!projectUser
     }
 
     if (!hasAccess) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
-    // Validate partition if specified
-    if (partitionId) {
-      const partition = await models.Partition.findOne({
-        where: {
-          partition_id: partitionId,
-          project_id: projectId,
-        },
-      })
-      if (!partition) {
-        return res.status(404).json({ message: 'Partition not found' })
-      }
+    if (partitionId && !partition) {
+      return res.status(404).json({ message: 'Partition not found' })
     }
 
     console.log(
@@ -1279,8 +1262,15 @@ export async function downloadProjectSDD(req, res) {
       } in ${format} format`
     )
 
-    // Create SDD exporter
-    const exporter = new SDDExporter(projectId, partitionId)
+    // Create progress callback for logging
+    const progressCallback = (progress) => {
+      console.log(
+        `[Project ${projectId}] ${progress.stage}: ${progress.message} (${progress.overallProgress}%)`
+      )
+    }
+
+    // Create SDD exporter with progress tracking
+    const exporter = new SDDExporter(projectId, partitionId, progressCallback)
     const projectName = project.name.replace(/[^a-zA-Z0-9]/g, '_')
 
     if (format === 'zip') {

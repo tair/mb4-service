@@ -16,7 +16,7 @@ import * as matrixService from '../../services/matrix-service.js'
  * Based on the original PHP ProjectSDDExporter
  */
 export class SDDExporter {
-  constructor(projectId, partitionId = null) {
+  constructor(projectId, partitionId = null, progressCallback = null) {
     this.projectId = projectId
     this.partitionId = partitionId
     this.project = null
@@ -26,12 +26,171 @@ export class SDDExporter {
     this.characters = null
     this.media = null
     this.mediaViews = null
+    this.progressCallback = progressCallback
+    this.totalSteps = 0
+    this.currentStep = 0
+  }
+
+  /**
+   * Report progress to callback if provided
+   * @param {string} stage - Current stage name
+   * @param {number} current - Current item number
+   * @param {number} total - Total items in this stage
+   * @param {string} message - Progress message
+   */
+  reportProgress(stage, current = 0, total = 0, message = '') {
+    if (this.progressCallback) {
+      const overallProgress =
+        this.totalSteps > 0 ? (this.currentStep / this.totalSteps) * 100 : 0
+      const stageProgress = total > 0 ? (current / total) * 100 : 0
+
+      this.progressCallback({
+        stage,
+        overallProgress: Math.round(overallProgress),
+        stageProgress: Math.round(stageProgress),
+        current,
+        total,
+        message,
+        projectId: this.projectId,
+        partitionId: this.partitionId,
+      })
+    }
+  }
+
+  /**
+   * Format file size in human readable format
+   * @param {number} bytes - File size in bytes
+   * @returns {string} Formatted size (e.g., "2.5 MB", "150 KB")
+   */
+  formatFileSize(bytes) {
+    if (!bytes || bytes === 0) return '0 B'
+
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(1024))
+    const size = bytes / Math.pow(1024, i)
+
+    if (i === 0) return `${bytes} B`
+    return `${size.toFixed(1)} ${sizes[i]}`
+  }
+
+  /**
+   * Get file size from media JSON field
+   * @param {Object} mediaItem - Media item with media JSON field
+   * @returns {number} File size in bytes
+   */
+  getMediaFileSize(mediaItem) {
+    if (!mediaItem.media) return 0
+
+    try {
+      const mediaData =
+        typeof mediaItem.media === 'string'
+          ? JSON.parse(mediaItem.media)
+          : mediaItem.media
+
+      // Try to get filesize from INPUT section first (original file)
+      if (mediaData.INPUT && mediaData.INPUT.FILESIZE) {
+        return mediaData.INPUT.FILESIZE
+      }
+
+      // Fallback to original section
+      if (
+        mediaData.original &&
+        mediaData.original.PROPERTIES &&
+        mediaData.original.PROPERTIES.filesize
+      ) {
+        return mediaData.original.PROPERTIES.filesize
+      }
+
+      // Last fallback - any version with filesize
+      for (const version of ['large', 'medium', 'small', 'thumbnail']) {
+        if (
+          mediaData[version] &&
+          mediaData[version].PROPERTIES &&
+          mediaData[version].PROPERTIES.filesize
+        ) {
+          return mediaData[version].PROPERTIES.filesize
+        }
+      }
+
+      return 0
+    } catch (error) {
+      console.warn(
+        `Error parsing media JSON for media_id ${mediaItem.media_id}:`,
+        error
+      )
+      return 0
+    }
+  }
+
+  /**
+   * Get file format from media JSON field
+   * @param {Object} mediaItem - Media item with media JSON field and media_type
+   * @returns {string} File extension (e.g., "TIFF", "JPG", "MP4")
+   */
+  getMediaFormat(mediaItem) {
+    if (!mediaItem.media) {
+      // Fallback to media_type from database
+      return mediaItem.media_type
+        ? mediaItem.media_type.toUpperCase()
+        : 'UNKNOWN'
+    }
+
+    try {
+      const mediaData =
+        typeof mediaItem.media === 'string'
+          ? JSON.parse(mediaItem.media)
+          : mediaItem.media
+
+      // Try to get format from original file first
+      if (
+        mediaData.original &&
+        mediaData.original.PROPERTIES &&
+        mediaData.original.PROPERTIES.typename
+      ) {
+        return mediaData.original.PROPERTIES.typename.toUpperCase()
+      }
+
+      // Try INPUT section
+      if (mediaData.INPUT && mediaData.INPUT.MIMETYPE) {
+        const mimeType = mediaData.INPUT.MIMETYPE
+        if (mimeType.includes('tiff')) return 'TIFF'
+        if (mimeType.includes('jpeg')) return 'JPG'
+        if (mimeType.includes('png')) return 'PNG'
+        if (mimeType.includes('gif')) return 'GIF'
+        if (mimeType.includes('mp4')) return 'MP4'
+        if (mimeType.includes('avi')) return 'AVI'
+        if (mimeType.includes('mov')) return 'MOV'
+      }
+
+      // Fallback to original extension
+      if (mediaData.original && mediaData.original.EXTENSION) {
+        return mediaData.original.EXTENSION.toUpperCase()
+      }
+
+      // Last fallback to media_type from database
+      return mediaItem.media_type
+        ? mediaItem.media_type.toUpperCase()
+        : 'UNKNOWN'
+    } catch (error) {
+      console.warn(
+        `Error parsing media JSON for media_id ${mediaItem.media_id}:`,
+        error
+      )
+      return mediaItem.media_type
+        ? mediaItem.media_type.toUpperCase()
+        : 'UNKNOWN'
+    }
   }
 
   /**
    * Export project as SDD XML only
    */
   async export() {
+    this.totalSteps = 2
+    this.currentStep = 0
+
+    this.reportProgress('initializing', 0, 1, 'Loading...')
+
     // Load project
     this.project = await models.Project.findByPk(this.projectId)
     if (!this.project) {
@@ -43,8 +202,15 @@ export class SDDExporter {
       this.partition = await models.Partition.findByPk(this.partitionId)
     }
 
+    this.currentStep++
+    this.reportProgress('generating', 0, 1, 'Generating XML...')
+
     // Generate XML
     const xml = await this.generateXML()
+
+    this.currentStep++
+    this.reportProgress('completed', 1, 1, 'Complete')
+
     return xml
   }
 
@@ -52,6 +218,11 @@ export class SDDExporter {
    * Export project as ZIP archive containing SDD XML and media files
    */
   async exportAsZip(outputStream) {
+    this.totalSteps = 6
+    this.currentStep = 0
+
+    this.reportProgress('initializing', 0, 1, 'Loading...')
+
     // Load project
     this.project = await models.Project.findByPk(this.projectId)
     if (!this.project) {
@@ -62,6 +233,9 @@ export class SDDExporter {
     if (this.partitionId) {
       this.partition = await models.Partition.findByPk(this.partitionId)
     }
+
+    this.currentStep++
+    this.reportProgress('creating_archive', 0, 1, 'Creating archive...')
 
     // Create ZIP archive
     const archive = archiver('zip', {
@@ -76,22 +250,33 @@ export class SDDExporter {
     // Pipe archive to output stream
     archive.pipe(outputStream)
 
+    this.currentStep++
+    this.reportProgress('generating_xml', 0, 1, 'Adding XML...')
+
     // Step 1: Generate and add SDD XML
     const sddXml = await this.generateXML()
     const projectName = this.project.name.replace(/[^a-zA-Z0-9]/g, '_')
     archive.append(sddXml, { name: `${projectName}_sdd.xml` })
 
+    this.currentStep++
     // Step 2: Add media files
     await this.addMediaFilesToArchive(archive)
 
+    this.currentStep++
     // Step 3: Add matrix files (if any)
     await this.addMatrixFilesToArchive(archive)
 
+    this.currentStep++
     // Step 4: Add project documents
     await this.addProjectDocumentsToArchive(archive)
 
+    this.currentStep++
+    this.reportProgress('finalizing', 0, 1, 'Finalizing...')
+
     // Finalize the archive
     await archive.finalize()
+
+    this.reportProgress('completed', 1, 1, 'Complete')
   }
 
   /**
@@ -995,22 +1180,46 @@ export class SDDExporter {
     const media = await this.getMediaForDownload()
 
     if (!media || media.length === 0) {
+      this.reportProgress('adding_media', 0, 0, 'No media')
       return
     }
 
+    this.reportProgress('adding_media', 0, media.length, 'Adding media...')
+
     const s3Client = this.getS3Client()
+    let processed = 0
+    let added = 0
 
     for (let i = 0; i < media.length; i++) {
       const mediaItem = media[i]
+      processed++
 
       try {
+        const fileSizeBytes = this.getMediaFileSize(mediaItem)
+        const fileSize = this.formatFileSize(fileSizeBytes)
+        const format = this.getMediaFormat(mediaItem)
+        const mediaInfo = `M${mediaItem.media_id} (${format}, ${fileSize})`
+
         // Skip copyrighted media with restrictive licenses
         if (
           mediaItem.is_copyrighted === 1 &&
           mediaItem.copyright_license === 8
         ) {
+          this.reportProgress(
+            'adding_media',
+            processed,
+            media.length,
+            `${processed}/${media.length} - Skipped ${mediaInfo}`
+          )
           continue
         }
+
+        this.reportProgress(
+          'adding_media',
+          processed,
+          media.length,
+          `${processed}/${media.length} - ${mediaInfo}`
+        )
 
         const downloadResult = await this.downloadMediaFromS3(
           s3Client,
@@ -1022,6 +1231,7 @@ export class SDDExporter {
             mediaItem
           )
           archive.append(downloadResult.stream, { name: `media/${filename}` })
+          added++
         }
       } catch (error) {
         console.error(
@@ -1031,6 +1241,13 @@ export class SDDExporter {
         // Continue with other files
       }
     }
+
+    this.reportProgress(
+      'adding_media',
+      media.length,
+      media.length,
+      `${added} added`
+    )
   }
 
   /**
@@ -1040,13 +1257,28 @@ export class SDDExporter {
     const matrices = await this.getMatrices()
 
     if (!matrices || matrices.length === 0) {
+      this.reportProgress('adding_matrices', 0, 0, 'No matrices')
       return
     }
+
+    this.reportProgress(
+      'adding_matrices',
+      0,
+      matrices.length,
+      'Adding matrices...'
+    )
 
     for (let i = 0; i < matrices.length; i++) {
       const matrix = matrices[i]
 
       try {
+        this.reportProgress(
+          'adding_matrices',
+          i + 1,
+          matrices.length,
+          `${i + 1}/${matrices.length}`
+        )
+
         // Generate NEXUS content using the matrix exporter
         const nexusContent = await this.generateMatrixNexusContent(
           matrix.matrix_id
@@ -1067,6 +1299,13 @@ export class SDDExporter {
         // Continue with other matrices
       }
     }
+
+    this.reportProgress(
+      'adding_matrices',
+      matrices.length,
+      matrices.length,
+      `${matrices.length} added`
+    )
   }
 
   /**
@@ -1108,15 +1347,31 @@ export class SDDExporter {
     const documents = await this.getProjectDocuments()
 
     if (!documents || documents.length === 0) {
+      this.reportProgress('adding_documents', 0, 0, 'No documents')
       return
     }
 
+    this.reportProgress(
+      'adding_documents',
+      0,
+      documents.length,
+      'Adding documents...'
+    )
+
     const s3Client = this.getS3Client()
+    let added = 0
 
     for (let i = 0; i < documents.length; i++) {
       const doc = documents[i]
 
       try {
+        this.reportProgress(
+          'adding_documents',
+          i + 1,
+          documents.length,
+          `${i + 1}/${documents.length}`
+        )
+
         const downloadResult = await this.downloadDocumentFromS3(s3Client, doc)
         if (downloadResult && downloadResult.stream) {
           const filename = this.getDocumentFilenameFromS3Key(
@@ -1126,6 +1381,7 @@ export class SDDExporter {
           archive.append(downloadResult.stream, {
             name: `documents/${filename}`,
           })
+          added++
         }
       } catch (error) {
         console.error(
@@ -1134,6 +1390,13 @@ export class SDDExporter {
         )
       }
     }
+
+    this.reportProgress(
+      'adding_documents',
+      documents.length,
+      documents.length,
+      `${added} added`
+    )
   }
 
   /**
@@ -1392,7 +1655,7 @@ export class SDDExporter {
     }
 
     const [results] = await sequelizeConn.query(`
-      SELECT media_id, project_id, media, is_copyrighted, copyright_license
+      SELECT media_id, project_id, media, is_copyrighted, copyright_license, media_type
       FROM media_files 
       WHERE ${whereClause}
       ORDER BY media_id
