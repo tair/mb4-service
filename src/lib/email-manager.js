@@ -67,6 +67,12 @@ export class EmailManager {
 
 async function generateTemplate(templatePath, parameters) {
   let template = await readFile(`${templateFolder}/${templatePath}`, 'utf-8')
+  
+  // Replace FRONTEND_URL environment variable first
+  const frontendUrl = process.env.FRONTEND_URL || 'https://www.morphobank.org'
+  template = template.replaceAll('$FRONTEND_URL', frontendUrl)
+  
+  // Then replace all other parameters
   for (const [name, value] of Object.entries(parameters)) {
     template = template.replaceAll(`$${name}`, value)
   }
