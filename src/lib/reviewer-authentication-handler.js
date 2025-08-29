@@ -16,13 +16,19 @@ export default class ReviewerAuthenticationHandler {
     const projectId = getProjectId(email)
     const project = await models.Project.findByPk(projectId)
     if (!project) {
-      const error = new Error('Project is does not exist')
+      const error = new Error('Project does not exist')
       error.statusCode = 401
       throw error
     }
 
     if (!project.allow_reviewer_login) {
       const error = new Error('Project does not allow anonymous reviewers')
+      error.statusCode = 401
+      throw error
+    }
+
+    if (!project.reviewer_login_password) {
+      const error = new Error('No reviewer password set for this project')
       error.statusCode = 401
       throw error
     }
@@ -39,8 +45,11 @@ export default class ReviewerAuthenticationHandler {
 
     return {
       name: `Project ${projectId}`,
-      project_id: projectId,
+      user_id: `Project${projectId}`,
+      email: `project${projectId}@morphobank.org`, // Placeholder email for JWT
+      project_id: parseInt(projectId),
       is_anonymous: true,
+      access: ['anonymous_reviewer'],
     }
   }
 }

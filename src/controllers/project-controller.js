@@ -237,7 +237,16 @@ export async function updateProject(req, res) {
 
     for (const field of updatableFields) {
       if (req.body[field] !== undefined) {
-        project[field] = req.body[field]
+        if (field === 'reviewer_login_password') {
+          // Hash the reviewer login password if provided and reviewer login is enabled
+          if (req.body.allow_reviewer_login && req.body[field]) {
+            project[field] = await models.User.hashPassword(req.body[field])
+          } else {
+            project[field] = null
+          }
+        } else {
+          project[field] = req.body[field]
+        }
       }
     }
 
@@ -382,7 +391,12 @@ export async function editProject(req, res, next) {
         project.name = name
         project.nsf_funded = nsf_funded
         project.allow_reviewer_login = allow_reviewer_login
-        project.reviewer_login_password = reviewer_login_password
+        // Hash the reviewer login password if provided
+        if (allow_reviewer_login && reviewer_login_password) {
+          project.reviewer_login_password = await models.User.hashPassword(reviewer_login_password)
+        } else if (!allow_reviewer_login) {
+          project.reviewer_login_password = null
+        }
         project.journal_title = journal_title_other || journal_title
         project.article_authors = article_authors
         project.article_title = article_title
@@ -922,13 +936,18 @@ export async function createProject(req, res, next) {
     let mediaUploader = null
 
     try {
+      // Hash the reviewer login password if provided
+      const hashedReviewerPassword = (allow_reviewer_login && reviewer_login_password) 
+        ? await models.User.hashPassword(reviewer_login_password)
+        : null
+
       // Create the project first
       const project = await models.Project.create(
         {
           name,
           nsf_funded,
           allow_reviewer_login,
-          reviewer_login_password,
+          reviewer_login_password: hashedReviewerPassword,
           journal_title: journal_title_other || journal_title,
           article_authors,
           article_title,
