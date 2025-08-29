@@ -9,9 +9,10 @@ import * as projectService from '../services/projects-service.js'
 import * as projectStatsService from '../services/project-stats-service.js'
 import * as projectUserService from '../services/project-user-service.js'
 import * as mediaService from '../services/media-service.js'
-import { FileUploader } from '../lib/file-uploader.js'
 import { S3MediaUploader } from '../lib/s3-media-uploader.js'
 import { SDDExporter } from '../lib/project-export/sdd-exporter.js'
+import s3Service from '../services/s3-service.js'
+import config from '../config.js'
 import axios from 'axios'
 import { MembershipType } from '../models/projects-x-user.js'
 import { EmailManager } from '../lib/email-manager.js'
@@ -1228,6 +1229,50 @@ export async function createBulkMediaViews(req, res) {
 }
 
 /**
+ * Helper function to check and serve preprocessed SDD file from S3
+ * @param {string} projectId - The project ID
+ * @param {Object} res - Express response object
+ * @returns {Promise<boolean>} - Returns true if S3 file was served, false otherwise
+ */
+async function tryServeFromS3(projectId, res) {
+  try {
+    // Construct S3 key for preprocessed file (only support full project exports)
+    const s3Key = `sdd_exports/${projectId}_morphobank.zip`
+    const bucketName = config.aws.defaultBucket || 'mb4-data'
+
+    // Check if the preprocessed file exists in S3
+    const exists = await s3Service.objectExists(bucketName, s3Key)
+
+    if (!exists) {
+      console.log(`Preprocessed file not found in S3: ${s3Key}`)
+      return false
+    }
+
+    // Get the file from S3
+    const s3Object = await s3Service.getObject(bucketName, s3Key)
+
+    // Set appropriate headers for ZIP download
+    const filename = `project_${projectId}_sdd.zip`
+
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.setHeader('Content-Length', s3Object.contentLength)
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+
+    // Send the file data
+    res.send(s3Object.data)
+
+    console.log(`Successfully served preprocessed file from S3: ${s3Key}`)
+    return true
+  } catch (error) {
+    console.error('Error serving from S3:', error)
+    return false
+  }
+}
+
+/**
  * Download project as SDD (Structured Descriptive Data) XML or ZIP with media
  */
 export async function downloadProjectSDD(req, res) {
@@ -1257,10 +1302,34 @@ export async function downloadProjectSDD(req, res) {
     }
 
     console.log(
-      `Starting SDD export for project ${projectId}${
+      `Starting SDD download for project ${projectId}${
         partitionId ? ` with partition ${partitionId}` : ''
       } in ${format} format`
     )
+
+    // For ZIP format, first try to serve from S3 preprocessed files
+    // Note: Only full project exports are supported in S3 (no partition support)
+    if (format === 'zip' && !partitionId) {
+      try {
+        const servedFromS3 = await tryServeFromS3(projectId, res)
+
+        if (servedFromS3) {
+          console.log(
+            `Successfully served preprocessed ZIP from S3 for project ${projectId}`
+          )
+          return // Response already sent
+        }
+
+        console.log(
+          `No preprocessed file found in S3, falling back to live export for project ${projectId}`
+        )
+      } catch (s3Error) {
+        console.error(`S3 check failed for project ${projectId}:`, s3Error)
+        console.log(`Falling back to live export due to S3 error`)
+      }
+    }
+
+    // Fallback to live export using SDDExporter
 
     // Create progress callback for logging
     const progressCallback = (progress) => {
@@ -1288,12 +1357,61 @@ export async function downloadProjectSDD(req, res) {
       req.setTimeout(1800000) // 30 minutes
       res.setTimeout(1800000)
 
-      // Stream ZIP directly to response
-      await exporter.exportAsZip(res)
+      // For full project exports (no partition), capture the ZIP data to upload to S3
+      if (!partitionId) {
+        // Create a PassThrough stream to capture the data
+        const { PassThrough } = await import('stream')
+        const captureStream = new PassThrough()
+        const chunks = []
 
-      console.log(`SDD ZIP export completed for project ${projectId}`)
+        // Capture data as it flows through
+        captureStream.on('data', (chunk) => {
+          chunks.push(chunk)
+        })
+
+        // Handle completion
+        captureStream.on('end', async () => {
+          try {
+            const zipBuffer = Buffer.concat(chunks)
+            const s3Key = `sdd_exports/${projectId}_morphobank.zip`
+            const bucketName = config.aws.defaultBucket || 'mb4-data'
+
+            console.log(
+              `Uploading generated ZIP to S3: ${bucketName}/${s3Key} (${zipBuffer.length} bytes)`
+            )
+
+            const uploadResult = await s3Service.putObject(
+              bucketName,
+              s3Key,
+              zipBuffer,
+              'application/zip'
+            )
+
+            console.log(
+              `Successfully uploaded ZIP to S3 for future use: ${s3Key}`
+            )
+          } catch (s3UploadError) {
+            console.error(
+              `Failed to upload ZIP to S3 for project ${projectId}:`,
+              s3UploadError
+            )
+            // Don't fail the user download if S3 upload fails
+          }
+        })
+
+        // Pipe to both the response and our capture stream
+        captureStream.pipe(res)
+
+        // Stream ZIP to the capture stream (which pipes to response)
+        await exporter.exportAsZip(captureStream)
+      } else {
+        // For partition exports, stream directly (no S3 upload)
+        await exporter.exportAsZip(res)
+      }
+
+      console.log(`Live SDD ZIP export completed for project ${projectId}`)
     } else {
-      // Generate XML only
+      // Generate XML only (no S3 preprocessing for XML format)
       const sddXml = await exporter.export()
       const filename = `${projectName}_sdd.xml`
 
