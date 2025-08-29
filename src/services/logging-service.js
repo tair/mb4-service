@@ -205,6 +205,12 @@ class LoggingService {
    */
   logLogin(loginData) {
     if (!this._canAcceptEvents()) return
+    
+    // Skip logging for anonymous reviewers (they have string user_ids like 'Project7077')
+    // Regular users have integer user_ids that the database expects
+    if (typeof loginData.user_id === 'string' && /^Project\d+$/.test(loginData.user_id)) {
+      return
+    }
 
     this.buffers.logins.push({
       session_key: loginData.session_key,
@@ -228,6 +234,12 @@ class LoggingService {
 
   logLogout(logoutData) {
     if (!this._canAcceptEvents()) return
+    
+    // Skip logging for anonymous reviewers (they have string user_ids like 'Project7077')
+    // Regular users have integer user_ids that the database expects
+    if (typeof logoutData.user_id === 'string' && /^Project\d+$/.test(logoutData.user_id)) {
+      return
+    }
 
     this.buffers.logouts.push({
       session_key: logoutData.session_key,
@@ -406,7 +418,10 @@ class LoggingService {
     if (hits.length > 0) {
       const hitValues = hits.map(hit => {
         const sessionKey = sequelizeConn.escape(hit.session_key)
-        const userId = hit.user_id || 'NULL'
+        // For anonymous users (string user_ids like 'Project7077'), use NULL since database expects integers
+        const userId = (hit.user_id && typeof hit.user_id === 'string' && /^Project\d+$/.test(hit.user_id)) 
+          ? 'NULL' 
+          : (hit.user_id || 'NULL')
         const hitType = sequelizeConn.escape(hit.hit_type)
         return `(${sessionKey}, ${userId}, ${hit.hit_datetime}, ${hitType}, ${hit.project_id}, ${hit.row_id || 'NULL'})`
       }).join(',')
@@ -422,7 +437,10 @@ class LoggingService {
     if (downloads.length > 0) {
       const downloadValues = downloads.map(download => {
         const sessionKey = sequelizeConn.escape(download.session_key)
-        const userId = download.user_id || 'NULL'
+        // For anonymous users (string user_ids like 'Project7077'), use NULL since database expects integers
+        const userId = (download.user_id && typeof download.user_id === 'string' && /^Project\d+$/.test(download.user_id)) 
+          ? 'NULL' 
+          : (download.user_id || 'NULL')
         const downloadType = sequelizeConn.escape(download.download_type)
         return `(${sessionKey}, ${userId}, ${download.download_datetime}, ${downloadType}, ${download.project_id}, ${download.row_id || 'NULL'})`
       }).join(',')
@@ -444,9 +462,10 @@ class LoggingService {
     if (logins.length > 0) {
       const loginValues = logins.map(login => {
         const sessionKey = sequelizeConn.escape(login.session_key)
+        const userId = sequelizeConn.escape(login.user_id)
         const ipAddr = sequelizeConn.escape(login.ip_addr)
         const userAgent = sequelizeConn.escape(login.user_agent)
-        return `(${sessionKey}, ${login.user_id}, ${login.datetime_started}, NULL, ${ipAddr}, ${userAgent})`
+        return `(${sessionKey}, ${userId}, ${login.datetime_started}, NULL, ${ipAddr}, ${userAgent})`
       }).join(',')
 
       await sequelizeConn.query(
@@ -500,7 +519,13 @@ class LoggingService {
     if (updates.length === 0) return 0
 
     // Group updates by user_id for efficiency
+    // Skip anonymous users (they have string user_ids like 'Project7077') since database expects integers
     const updateGroups = updates.reduce((groups, update) => {
+      // Skip anonymous users
+      if (typeof update.user_id === 'string' && /^Project\d+$/.test(update.user_id)) {
+        return groups
+      }
+      
       if (!groups[update.user_id]) {
         groups[update.user_id] = []
       }
