@@ -65,3 +65,58 @@ export function getJournalCoverPath(journalTitle) {
 
   return coverPath
 }
+
+/**
+ * Validate if a user has access to download SDD for a project
+ * @param {number} projectId - The project ID
+ * @param {number|null} userId - The user ID (null for anonymous)
+ * @param {number|null} partitionId - Optional partition ID
+ * @returns {Promise<{hasAccess: boolean, project: object|null, partition: object|null}>}
+ */
+export async function validateProjectSDDAccess(
+  projectId,
+  userId = null,
+  partitionId = null
+) {
+  const { models } = await import('../models/init-models.js')
+
+  // Validate project exists
+  const project = await models.Project.findByPk(projectId)
+  if (!project) {
+    return { hasAccess: false, project: null, partition: null }
+  }
+
+  // Check if project is published or user has access
+  let hasAccess = project.published === 1
+
+  if (!hasAccess && userId) {
+    // Check if user has access to the project
+    const projectUser = await models.ProjectsXUser.findOne({
+      where: {
+        project_id: projectId,
+        user_id: userId,
+      },
+    })
+    hasAccess = !!projectUser
+  }
+
+  if (!hasAccess) {
+    return { hasAccess: false, project, partition: null }
+  }
+
+  // Validate partition if specified
+  let partition = null
+  if (partitionId) {
+    partition = await models.Partition.findOne({
+      where: {
+        partition_id: partitionId,
+        project_id: projectId,
+      },
+    })
+    if (!partition) {
+      return { hasAccess: false, project, partition: null }
+    }
+  }
+
+  return { hasAccess: true, project, partition }
+}
