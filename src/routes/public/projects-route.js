@@ -5,6 +5,7 @@ import * as dataDumpController from '../../controllers/datadump-controller.js'
 import * as matrixController from '../../controllers/matrix-controller.js'
 import { getPublishedFolio } from '../../controllers/folios-controller.js'
 import matrixEditorRouter from '../matrix-editor-route.js'
+import mediaLabelsRouter from '../media-labels-route.js'
 import { authorizePublishedProject } from '../project-interceptor.js'
 
 const projectsRouter = express.Router({ mergeParams: true })
@@ -43,6 +44,9 @@ projectRouter.use(authorizePublishedProject)
 projectRouter.get('/', projectsController.getProjectsById)
 
 projectRouter.get('/media', mediaController.getMediaFiles)
+projectRouter.get('/media/:mediaId', mediaController.getMediaFile)
+projectRouter.get('/media/:mediaId/details', mediaController.getMediaFileDetails)
+projectRouter.use('/media/:mediaId/labels', mediaLabelsRouter)
 
 projectRouter.use('/matrices/:matrixId/view', matrixEditorRouter)
 

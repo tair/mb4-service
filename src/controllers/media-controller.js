@@ -18,6 +18,7 @@ import s3Service from '../services/s3-service.js'
 import config from '../config.js'
 import path from 'path'
 import { getSpecimenName } from '../util/specimen.js'
+import { getTaxonName } from '../util/taxa.js'
 
 /**
  * Validates specimen and view IDs for a given project
@@ -598,7 +599,15 @@ export async function getMediaFileDetails(req, res) {
         t.subspecific_epithet AS specimen_subspecific_epithet,
         t.scientific_name_author AS specimen_author,
         t.scientific_name_year AS specimen_year,
-        t.is_extinct AS specimen_is_extinct
+        t.is_extinct AS specimen_is_extinct,
+        
+        -- Direct taxon association (when media is linked to taxon outside of character context)
+        dt.genus AS direct_taxon_genus,
+        dt.specific_epithet AS direct_taxon_specific_epithet,
+        dt.subspecific_epithet AS direct_taxon_subspecific_epithet,
+        dt.scientific_name_author AS direct_taxon_author,
+        dt.scientific_name_year AS direct_taxon_year,
+        dt.is_extinct AS direct_taxon_is_extinct
         
       FROM media_files mf
       LEFT JOIN media_views mv ON mf.view_id = mv.view_id
@@ -606,6 +615,8 @@ export async function getMediaFileDetails(req, res) {
       LEFT JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
       LEFT JOIN taxa t ON t.taxon_id = ts.taxon_id
       LEFT JOIN ca_users u ON mf.user_id = u.user_id
+      LEFT JOIN taxa_x_media txm ON mf.media_id = txm.media_id
+      LEFT JOIN taxa dt ON dt.taxon_id = txm.taxon_id
       WHERE mf.project_id = ? AND mf.media_id = ?
     `
     
@@ -675,12 +686,19 @@ export async function getMediaFileDetails(req, res) {
       
       // Enhanced specimen information
       specimen_display: getSpecimenDisplayName(mediaData),
+      specimen_notes: mediaData.specimen_description || null, // Add specimen description
       
       // Enhanced copyright information  
       copyright_holder: getCopyrightHolderName(mediaData),
       
       // Character information (if available)
       character_display: mediaData.character_display || null,
+      
+      // Direct taxon context (when media is associated with a taxon outside of character context)
+      taxon_display: getDirectTaxonDisplayName(mediaData),
+      
+      // Media notes
+      media_notes: mediaData.media_notes || null,
     }
     
     res.status(200).json({ media: detailedMedia })
@@ -756,6 +774,36 @@ function getCopyrightHolderName(mediaData) {
   }
   
   return null
+}
+
+// Helper function to get direct taxon display name (when media is associated with taxon)
+function getDirectTaxonDisplayName(mediaData) {
+  // Only show direct taxon association if we have direct taxon data
+  // and it's different from specimen taxon (to avoid duplication)
+  if (!mediaData.direct_taxon_genus) return null
+  
+  // Check if this is the same taxon as the specimen's taxon
+  if (mediaData.specimen_genus === mediaData.direct_taxon_genus &&
+      mediaData.specimen_specific_epithet === mediaData.direct_taxon_specific_epithet &&
+      mediaData.specimen_author === mediaData.direct_taxon_author &&
+      mediaData.specimen_year === mediaData.direct_taxon_year) {
+    // Don't show duplicate taxon information
+    return null
+  }
+  
+  // Create a record object for the getTaxonName utility
+  const taxonRecord = {
+    genus: mediaData.direct_taxon_genus,
+    specific_epithet: mediaData.direct_taxon_specific_epithet,
+    subspecific_epithet: mediaData.direct_taxon_subspecific_epithet,
+    scientific_name_author: mediaData.direct_taxon_author,
+    scientific_name_year: mediaData.direct_taxon_year,
+    is_extinct: mediaData.direct_taxon_is_extinct
+  }
+  
+  // Use the utility function to get the taxon name
+  // showExtinctMarker=true, showAuthor=true, skipSubgenus=false
+  return getTaxonName(taxonRecord, null, true, true, false)
 }
 
 export async function editMediaFiles(req, res) {
