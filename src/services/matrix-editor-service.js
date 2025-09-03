@@ -161,8 +161,7 @@ export default class MatrixEditorService {
         media_id: mediaId,
         taxon_id: taxonId,
         character_id: characterId,
-        tiny: getMedia(row.media, 'tiny', this.project.project_id, mediaId),
-        icon: getMedia(row.media, 'icon', this.project.project_id, mediaId),
+        thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, mediaId),
         label_count: labelCounts.get(taxonId, characterId)?.get(mediaId) ?? 0,
       })
     }
@@ -440,8 +439,7 @@ export default class MatrixEditorService {
         taxon_id: taxonId,
         character_id: characterId,
         media_id: mediaId,
-        tiny: getMedia(row.media, 'tiny', this.project.project_id, mediaId),
-        icon: getMedia(row.media, 'icon', this.project.project_id, mediaId),
+        thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, mediaId),
       }
 
       const characterMap = labelCounts.get(taxonId, characterId)
@@ -987,7 +985,7 @@ export default class MatrixEditorService {
     )
 
     const mediaList = new Map()
-    const versions = ['tiny', 'small', 'medium', 'icon']
+    const versions = ['thumbnail', 'large']
     for (const row of rows) {
       const media = {
         link_id: parseInt(row.link_id),
@@ -1491,7 +1489,7 @@ export default class MatrixEditorService {
           link_id: taxaMedium.link_id,
           taxon_id: taxonId,
           media_id: mediaId,
-          tiny: getMedia(medium, 'tiny', this.project.project_id, mediaId),
+          thumbnail: getMedia(medium, 'thumbnail', this.project.project_id, mediaId),
         })
       }
     }
@@ -1544,8 +1542,8 @@ export default class MatrixEditorService {
         mediaIds.push(mediaId)
         media.push({
           media_id: mediaId,
-          icon: getMedia(row.media, 'icon', this.project.project_id, mediaId),
-          tiny: getMedia(row.media, 'tiny', this.project.project_id, mediaId),
+          thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, mediaId),
+          large: getMedia(row.media, 'large', this.project.project_id, mediaId),
         })
       }
     }
@@ -2154,8 +2152,8 @@ export default class MatrixEditorService {
         character_id: characterId,
         media_id: medium.media_id,
         state_id: stateId,
-        icon: getMedia(medium.media, 'icon', this.project.project_id, medium.media_id),
-        tiny: getMedia(medium.media, 'tiny', this.project.project_id, medium.media_id),
+        thumbnail: getMedia(medium.media, 'thumbnail', this.project.project_id, medium.media_id),
+        large: getMedia(medium.media, 'large', this.project.project_id, medium.media_id),
       })
     }
 
@@ -2701,8 +2699,8 @@ export default class MatrixEditorService {
       const actionId = parseInt(row.action_id)
       const characterRuleAction = characterRuleActions.get(actionId)
       characterRuleAction.media_id = parseInt(row.media_id)
-      characterRuleAction.icon = getMedia(row.media, 'icon', this.project.project_id, parseInt(row.media_id))
-      characterRuleAction.tiny = getMedia(row.media, 'tiny', this.project.project_id, parseInt(row.media_id))
+      characterRuleAction.thumbnail = getMedia(row.media, 'thumbnail', this.project.project_id, parseInt(row.media_id))
+      characterRuleAction.large = getMedia(row.media, 'large', this.project.project_id, parseInt(row.media_id))
     }
 
     const transaction = await sequelizeConn.transaction()
@@ -2938,8 +2936,8 @@ export default class MatrixEditorService {
         character_id: characterId,
         taxon_id: taxonId,
         media_id: mediaId,
-        icon: getMedia(row.media, 'icon', this.project.project_id, mediaId),
-        tiny: getMedia(row.media, 'tiny', this.project.project_id, mediaId),
+        thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, mediaId),
+        large: getMedia(row.media, 'large', this.project.project_id, mediaId),
       })
     }
 
@@ -3638,8 +3636,8 @@ export default class MatrixEditorService {
     const mediaMap = new Map()
     for (const [mediaId, media] of mediaList) {
       mediaMap.set(mediaId, {
-        icon: getMedia(media, 'icon', this.project.project_id, mediaId),
-        tiny: getMedia(media, 'tiny', this.project.project_id, mediaId),
+        thumbnail: getMedia(media, 'thumbnail', this.project.project_id, mediaId),
+        large: getMedia(media, 'large', this.project.project_id, mediaId),
       })
       for (const characterId of characterIds) {
         const [cellMedia, created] = await models.CellsXMedium.findOrCreate({
@@ -4364,8 +4362,8 @@ export default class MatrixEditorService {
 
               updates.added_media.push({
                 ...mediaSnapshot,
-                icon: getMedia(mediaFile.media, 'icon', this.project.project_id, mediaFile.media_id),
-                tiny: getMedia(mediaFile.media, 'tiny', this.project.project_id, mediaFile.media_id),
+                thumbnail: getMedia(mediaFile.media, 'thumbnail', this.project.project_id, mediaFile.media_id),
+                large: getMedia(mediaFile.media, 'large', this.project.project_id, mediaFile.media_id),
               })
               break
             }
@@ -5083,8 +5081,8 @@ export default class MatrixEditorService {
         taxon_id: taxonId,
         character_id: characterId,
         media_id: mediaId,
-        icon: getMedia(row.media, 'icon', this.project.project_id, mediaId),
-        tiny: getMedia(row.media, 'tiny', this.project.project_id, mediaId),
+        thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, mediaId),
+        large: getMedia(row.media, 'large', this.project.project_id, mediaId),
         label_count: labelCounts.get(taxonId, characterId)?.get(mediaId) ?? 0,
       })
     }
@@ -5634,7 +5632,7 @@ export default class MatrixEditorService {
         link_id: parseInt(row.link_id),
         taxon_id: taxonId,
         media_id: parseInt(row.media_id),
-        tiny: getMedia(row.media, 'tiny', this.project.project_id, parseInt(row.media_id)),
+        thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, parseInt(row.media_id)),
       })
     }
 
@@ -6589,7 +6587,7 @@ export default class MatrixEditorService {
         taxon_id: taxonId,
         link_id: parseInt(row.link_id),
         media_id: parseInt(row.media_id),
-        tiny: getMedia(row.media, 'tiny', this.project.project_id, parseInt(row.media_id)),
+        thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, parseInt(row.media_id)),
       })
     }
     return media
