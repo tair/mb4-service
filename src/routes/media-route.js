@@ -23,6 +23,7 @@ mediaRouter.post('/create/video', upload.single('file'), controller.createVideoM
 mediaRouter.post('/create/stacks', upload.single('file'), controller.createStacksMediaFile)
 
 mediaRouter.get('/:mediaId', controller.getMediaFile)
+mediaRouter.get('/:mediaId/details', controller.getMediaFileDetails)
 mediaRouter.post(
   '/:mediaId/edit',
   upload.single('file'),

@@ -14,6 +14,7 @@ const config = {
     domain: process.env.MEDIA_DOMAIN,
     port: process.env.MEDIA_PORT,
     directory: process.env.MEDIA_DIRECTORY,
+    newDomain: process.env.NEW_MEDIA_DOMAIN,
   },
   db: {
     host: process.env.DB_HOST,

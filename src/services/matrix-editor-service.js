@@ -56,6 +56,7 @@ export default class MatrixEditorService {
   }
 
   async getCellData() {
+    // Load cell states
     const [rows] = await sequelizeConn.query(
       `
       SELECT
@@ -122,6 +123,7 @@ export default class MatrixEditorService {
       GROUP BY cxm.character_id, cxm.taxon_id, cxm.media_id`,
       { replacements: [this.matrix.matrix_id, taxaIds, characterIds] }
     )
+
     const labelCounts = new HyperTable()
     for (const row of labelCountRows) {
       const mediaId = parseInt(row.media_id)
@@ -153,14 +155,14 @@ export default class MatrixEditorService {
       const mediaId = parseInt(row.media_id)
       const taxonId = parseInt(row.taxon_id)
       const characterId = parseInt(row.character_id)
+
       cellMedia.push({
         link_id: linkId,
         media_id: mediaId,
         taxon_id: taxonId,
         character_id: characterId,
-        tiny: getMedia(row.media, 'tiny'),
-        icon: getMedia(row.media, 'icon'),
-        label_count: labelCounts.get(taxonId, characterId, mediaId) ?? 0,
+        thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, mediaId),
+        label_count: labelCounts.get(taxonId, characterId)?.get(mediaId) ?? 0,
       })
     }
 
@@ -224,6 +226,7 @@ export default class MatrixEditorService {
     return cells
   }
 
+  //implemented by Kenzley, not sure where this shall be used
   async getCellCounts(
     startCharacterNum,
     endCharacterNum,
@@ -436,11 +439,11 @@ export default class MatrixEditorService {
         taxon_id: taxonId,
         character_id: characterId,
         media_id: mediaId,
-        tiny: getMedia(row.media, 'tiny'),
-        icon: getMedia(row.media, 'icon'),
+        thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, mediaId),
       }
 
-      const labelCount = labelCounts.get(taxonId, characterId, mediaId)
+      const characterMap = labelCounts.get(taxonId, characterId)
+      const labelCount = characterMap ? characterMap.get(mediaId) : undefined
       if (labelCount) {
         media.label_count = labelCount
       }
@@ -465,7 +468,7 @@ export default class MatrixEditorService {
   }
 
   async getMediaLabelCount(linkId) {
-    const [[{ count }]] = await sequelizeConn.query(
+    const [[{ count: linkedCount }]] = await sequelizeConn.query(
       `
       SELECT COUNT(*) AS count
       FROM media_labels ml
@@ -474,7 +477,8 @@ export default class MatrixEditorService {
       WHERE ml.table_num = ? AND cxm.link_id = ?`,
       { replacements: [TABLE_NUMBERS.cells_x_media, linkId] }
     )
-    return parseInt(count) ?? 0
+    
+    return parseInt(linkedCount) ?? 0
   }
 
   async getCellCitations(taxonId, characterId) {
@@ -981,7 +985,7 @@ export default class MatrixEditorService {
     )
 
     const mediaList = new Map()
-    const versions = ['tiny', 'small', 'medium', 'icon']
+    const versions = ['thumbnail', 'large']
     for (const row of rows) {
       const media = {
         link_id: parseInt(row.link_id),
@@ -990,7 +994,7 @@ export default class MatrixEditorService {
         state_id: row.state_id == null ? null : parseInt(row.state_id),
       }
       for (const version of versions) {
-        media[version] = getMedia(row.media, version)
+        media[version] = getMedia(row.media, version, this.project.project_id, parseInt(row.media_id))
       }
 
       const characterId = parseInt(row.character_id)
@@ -1485,7 +1489,7 @@ export default class MatrixEditorService {
           link_id: taxaMedium.link_id,
           taxon_id: taxonId,
           media_id: mediaId,
-          tiny: getMedia(medium, 'tiny'),
+          thumbnail: getMedia(medium, 'thumbnail', this.project.project_id, mediaId),
         })
       }
     }
@@ -1538,8 +1542,8 @@ export default class MatrixEditorService {
         mediaIds.push(mediaId)
         media.push({
           media_id: mediaId,
-          icon: getMedia(row.media, 'icon'),
-          tiny: getMedia(row.media, 'tiny'),
+          thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, mediaId),
+          large: getMedia(row.media, 'large', this.project.project_id, mediaId),
         })
       }
     }
@@ -2148,8 +2152,8 @@ export default class MatrixEditorService {
         character_id: characterId,
         media_id: medium.media_id,
         state_id: stateId,
-        icon: getMedia(medium.media, 'icon'),
-        tiny: getMedia(medium.media, 'tiny'),
+        thumbnail: getMedia(medium.media, 'thumbnail', this.project.project_id, medium.media_id),
+        large: getMedia(medium.media, 'large', this.project.project_id, medium.media_id),
       })
     }
 
@@ -2695,8 +2699,8 @@ export default class MatrixEditorService {
       const actionId = parseInt(row.action_id)
       const characterRuleAction = characterRuleActions.get(actionId)
       characterRuleAction.media_id = parseInt(row.media_id)
-      characterRuleAction.icon = getMedia(row.media, 'icon')
-      characterRuleAction.tiny = getMedia(row.media, 'tiny')
+      characterRuleAction.thumbnail = getMedia(row.media, 'thumbnail', this.project.project_id, parseInt(row.media_id))
+      characterRuleAction.large = getMedia(row.media, 'large', this.project.project_id, parseInt(row.media_id))
     }
 
     const transaction = await sequelizeConn.transaction()
@@ -2932,8 +2936,8 @@ export default class MatrixEditorService {
         character_id: characterId,
         taxon_id: taxonId,
         media_id: mediaId,
-        icon: getMedia(row.media, 'icon'),
-        tiny: getMedia(row.media, 'tiny'),
+        thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, mediaId),
+        large: getMedia(row.media, 'large', this.project.project_id, mediaId),
       })
     }
 
@@ -3632,8 +3636,8 @@ export default class MatrixEditorService {
     const mediaMap = new Map()
     for (const [mediaId, media] of mediaList) {
       mediaMap.set(mediaId, {
-        icon: getMedia(media, 'icon'),
-        tiny: getMedia(media, 'tiny'),
+        thumbnail: getMedia(media, 'thumbnail', this.project.project_id, mediaId),
+        large: getMedia(media, 'large', this.project.project_id, mediaId),
       })
       for (const characterId of characterIds) {
         const [cellMedia, created] = await models.CellsXMedium.findOrCreate({
@@ -4358,8 +4362,8 @@ export default class MatrixEditorService {
 
               updates.added_media.push({
                 ...mediaSnapshot,
-                icon: getMedia(mediaFile.media, 'icon'),
-                tiny: getMedia(mediaFile.media, 'tiny'),
+                thumbnail: getMedia(mediaFile.media, 'thumbnail', this.project.project_id, mediaFile.media_id),
+                large: getMedia(mediaFile.media, 'large', this.project.project_id, mediaFile.media_id),
               })
               break
             }
@@ -5077,9 +5081,9 @@ export default class MatrixEditorService {
         taxon_id: taxonId,
         character_id: characterId,
         media_id: mediaId,
-        icon: getMedia(row.media, 'icon'),
-        tiny: getMedia(row.media, 'tiny'),
-        label_count: labelCounts.get(taxonId, characterId, mediaId) ?? 0,
+        thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, mediaId),
+        large: getMedia(row.media, 'large', this.project.project_id, mediaId),
+        label_count: labelCounts.get(taxonId, characterId)?.get(mediaId) ?? 0,
       })
     }
 
@@ -5628,7 +5632,7 @@ export default class MatrixEditorService {
         link_id: parseInt(row.link_id),
         taxon_id: taxonId,
         media_id: parseInt(row.media_id),
-        tiny: getMedia(row.media, 'tiny'),
+        thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, parseInt(row.media_id)),
       })
     }
 
@@ -6583,7 +6587,7 @@ export default class MatrixEditorService {
         taxon_id: taxonId,
         link_id: parseInt(row.link_id),
         media_id: parseInt(row.media_id),
-        tiny: getMedia(row.media, 'tiny'),
+        thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, parseInt(row.media_id)),
       })
     }
     return media

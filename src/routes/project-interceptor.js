@@ -124,6 +124,9 @@ export async function authorizePublishedProject(req, res, next) {
       .json({ message: 'This project is not yet publicly available.' })
   }
 
+  // Set the project so that it's accessible in the controllers
+  req.project = project
+
   next()
 }
 

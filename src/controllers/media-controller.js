@@ -17,6 +17,8 @@ import {
 import s3Service from '../services/s3-service.js'
 import config from '../config.js'
 import path from 'path'
+import { getSpecimenName } from '../util/specimen.js'
+import { getTaxonName } from '../util/taxa.js'
 
 /**
  * Validates specimen and view IDs for a given project
@@ -539,13 +541,269 @@ export async function getUsage(req, res) {
 export async function getMediaFile(req, res) {
   const projectId = req.project.project_id
   const mediaId = req.params.mediaId
-  const media = models.MediaFile.findByPk(mediaId)
+  const media = await models.MediaFile.findByPk(mediaId)
   if (media == null || media.project_id != projectId) {
     res.status(404).json({ message: 'Media is not found' })
     return
   }
 
   res.status(200).json({ media: convertMediaResponse(media) })
+}
+
+export async function getMediaFileDetails(req, res) {
+  const projectId = req.project.project_id
+  const mediaId = req.params.mediaId
+  const linkId = req.query.link_id
+  
+  try {
+    // Build the comprehensive query with all necessary joins for detailed information
+    let query = `
+      SELECT 
+        mf.media_id,
+        mf.project_id,
+        mf.specimen_id,
+        mf.view_id,
+        mf.is_copyrighted,
+        mf.copyright_info,
+        mf.copyright_permission,
+        mf.copyright_license,
+        mf.media,
+        mf.notes AS media_notes,
+        mf.url,
+        mf.url_description,
+        mf.user_id,
+        mf.created_on AS media_created,
+        mf.last_modified_on,
+        mf.is_sided,
+        
+        -- View details
+        mv.name AS view_name,
+        
+        -- Specimen details  
+        s.specimen_id AS specimen_id_full,
+        s.reference_source,
+        s.institution_code,
+        s.collection_code,
+        s.catalog_number,
+        s.description AS specimen_description,
+        s.occurrence_id,
+        
+        -- User details (for copyright holder)
+        u.fname AS user_fname,
+        u.lname AS user_lname,
+        u.email AS user_email,
+        
+        -- Taxon details (for complete specimen name formatting)
+        t.genus AS specimen_genus,
+        t.specific_epithet AS specimen_specific_epithet,
+        t.subspecific_epithet AS specimen_subspecific_epithet,
+        t.scientific_name_author AS specimen_author,
+        t.scientific_name_year AS specimen_year,
+        t.is_extinct AS specimen_is_extinct,
+        
+        -- Direct taxon association (when media is linked to taxon outside of character context)
+        dt.genus AS direct_taxon_genus,
+        dt.specific_epithet AS direct_taxon_specific_epithet,
+        dt.subspecific_epithet AS direct_taxon_subspecific_epithet,
+        dt.scientific_name_author AS direct_taxon_author,
+        dt.scientific_name_year AS direct_taxon_year,
+        dt.is_extinct AS direct_taxon_is_extinct
+        
+      FROM media_files mf
+      LEFT JOIN media_views mv ON mf.view_id = mv.view_id
+      LEFT JOIN specimens s ON mf.specimen_id = s.specimen_id
+      LEFT JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
+      LEFT JOIN taxa t ON t.taxon_id = ts.taxon_id
+      LEFT JOIN ca_users u ON mf.user_id = u.user_id
+      LEFT JOIN taxa_x_media txm ON mf.media_id = txm.media_id
+      LEFT JOIN taxa dt ON dt.taxon_id = txm.taxon_id
+      WHERE mf.project_id = ? AND mf.media_id = ?
+    `
+    
+    const replacements = [projectId, mediaId]
+    
+    const [rows] = await sequelizeConn.query(query, { replacements })
+    
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ message: 'Media is not found' })
+    }
+    
+    let mediaData = rows[0]
+    
+    // If linkId is provided, get comprehensive character, state, and taxonomic information
+    if (linkId) {
+      const characterQuery = `
+        SELECT 
+          -- Cell and Media relationship data
+          cxm.link_id,
+          cxm.matrix_id,
+          cxm.character_id,
+          cxm.taxon_id,
+          cxm.media_id,
+          cxm.notes AS cell_notes,
+          
+          -- Character information
+          c.name AS character_name,
+          c.description AS character_description,
+          c.num AS character_number,
+          c.type AS character_type,
+          
+          -- Character state information (from actual cell data)
+          cells.state_id,
+          cs.name AS state_name,
+          cs.num AS state_number,
+          cs.description AS state_description
+          
+        FROM cells_x_media cxm
+        LEFT JOIN characters c ON cxm.character_id = c.character_id
+        LEFT JOIN cells ON cells.character_id = cxm.character_id 
+          AND cells.taxon_id = cxm.taxon_id 
+          AND cells.matrix_id = cxm.matrix_id
+        LEFT JOIN character_states cs ON cells.state_id = cs.state_id 
+          AND cs.character_id = cells.character_id
+        WHERE cxm.link_id = ? AND cxm.media_id = ?
+        LIMIT 1
+      `
+      
+      const [characterRows] = await sequelizeConn.query(characterQuery, { 
+        replacements: [linkId, mediaId] 
+      })
+
+      if (characterRows && characterRows.length > 0) {
+        const charData = characterRows[0]
+        
+        // Enhanced character information with formatted display
+        mediaData.character_display = formatCharacterDisplay(charData)
+      }
+    }
+    
+    // Convert and clean up the response
+    const detailedMedia = {
+      ...convertMediaResponse(mediaData),
+      
+      // Enhanced view information
+      view_name: mediaData.view_name,
+      
+      // Enhanced specimen information
+      specimen_display: getSpecimenDisplayName(mediaData),
+      specimen_notes: mediaData.specimen_description || null, // Add specimen description
+      
+      // Enhanced copyright information  
+      copyright_holder: getCopyrightHolderName(mediaData),
+      
+      // Character information (if available)
+      character_display: mediaData.character_display || null,
+      
+      // Direct taxon context (when media is associated with a taxon outside of character context)
+      taxon_display: getDirectTaxonDisplayName(mediaData),
+      
+      // Media notes
+      media_notes: mediaData.media_notes || null,
+    }
+    
+    res.status(200).json({ media: detailedMedia })
+    
+  } catch (error) {
+    console.error('Error fetching media details:', error)
+    res.status(500).json({ message: 'Error while fetching media details.' })
+  }
+}
+
+// Helper function to build specimen display name using utility functions
+function getSpecimenDisplayName(mediaData) {
+  if (!mediaData.specimen_id) return null
+  
+  // Create a record object with the expected field names for the utility functions
+  const specimenRecord = {
+    // Specimen fields
+    specimen_id: mediaData.specimen_id,
+    reference_source: mediaData.reference_source,
+    institution_code: mediaData.institution_code,
+    collection_code: mediaData.collection_code,
+    catalog_number: mediaData.catalog_number,
+    
+    // Taxon fields (using the specimen-associated taxon data)
+    genus: mediaData.specimen_genus,
+    specific_epithet: mediaData.specimen_specific_epithet,
+    subspecific_epithet: mediaData.specimen_subspecific_epithet,
+    scientific_name_author: mediaData.specimen_author,
+    scientific_name_year: mediaData.specimen_year,
+    is_extinct: mediaData.specimen_is_extinct
+  }
+  
+  // Use the utility function to get the specimen name
+  // showExtinctMarker=true, showAuthor=false, skipSubgenus=false
+  return getSpecimenName(specimenRecord, null, true, false, false)
+}
+
+// Helper function to format complete character display with state information
+function formatCharacterDisplay(charData) {
+  if (!charData) return null
+  
+  // Start with the basic character display (number + cleaned name)
+  let fullDisplay
+  if (charData.character_name) {
+    // Clean character name by removing trailing colon
+    let characterName = charData.character_name.trim()
+    if (characterName.endsWith(':')) {
+      characterName = characterName.slice(0, -1).trim()
+    }
+    fullDisplay = characterName
+  }
+  if (!fullDisplay) return null
+  
+  // Add state information if available
+  if (charData.state_name) {
+    fullDisplay += ` :: ${charData.state_name} (${charData.state_number})`
+  }
+  
+  return fullDisplay
+}
+
+// Helper function to get copyright holder name
+function getCopyrightHolderName(mediaData) {
+  if (mediaData.copyright_info) {
+    return mediaData.copyright_info
+  }
+  
+  if (mediaData.user_fname || mediaData.user_lname) {
+    const parts = []
+    if (mediaData.user_fname) parts.push(mediaData.user_fname)
+    if (mediaData.user_lname) parts.push(mediaData.user_lname)
+    return parts.join(' ')
+  }
+  
+  return null
+}
+
+// Helper function to get direct taxon display name (when media is associated with taxon)
+function getDirectTaxonDisplayName(mediaData) {
+  // Only show direct taxon association if we have direct taxon data
+  // and it's different from specimen taxon (to avoid duplication)
+  if (!mediaData.direct_taxon_genus) return null
+  
+  // Check if this is the same taxon as the specimen's taxon
+  if (mediaData.specimen_genus === mediaData.direct_taxon_genus &&
+      mediaData.specimen_specific_epithet === mediaData.direct_taxon_specific_epithet &&
+      mediaData.specimen_author === mediaData.direct_taxon_author &&
+      mediaData.specimen_year === mediaData.direct_taxon_year) {
+    // Don't show duplicate taxon information
+    return null
+  }
+  
+  // Create a record object for the getTaxonName utility
+  const taxonRecord = {
+    genus: mediaData.direct_taxon_genus,
+    specific_epithet: mediaData.direct_taxon_specific_epithet,
+    subspecific_epithet: mediaData.direct_taxon_subspecific_epithet,
+    scientific_name_author: mediaData.direct_taxon_author,
+    scientific_name_year: mediaData.direct_taxon_year,
+    is_extinct: mediaData.direct_taxon_is_extinct
+  }
+  
+  // Use the utility function to get the taxon name
+  // showExtinctMarker=true, showAuthor=true, skipSubgenus=false
+  return getTaxonName(taxonRecord, null, true, true, false)
 }
 
 export async function editMediaFiles(req, res) {
