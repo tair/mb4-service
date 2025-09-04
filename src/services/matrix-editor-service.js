@@ -13,6 +13,7 @@ import {
   getTypesForCharacterIds,
 } from '../services/character-service.js'
 import { getTaxonName, TAXA_FIELD_NAMES } from '../util/taxa.js'
+import { getSpecimenName } from '../util/specimen.js'
 import { models } from '../models/init-models.js'
 import { UserError } from '../lib/user-errors.js'
 import { ForbiddenError } from '../lib/forbidden-error.js'
@@ -163,7 +164,6 @@ export default class MatrixEditorService {
         parsedMedia = typeof row.media === 'string' ? JSON.parse(row.media) : row.media
         originalMimeType = parsedMedia?.original?.MIMETYPE || null
       } catch (error) {
-        console.log(`[getCellMedia] Media ${mediaId} - JSON parsing failed:`, error)
         // If parsing fails, continue without MIME type info
       }
 
@@ -454,7 +454,6 @@ export default class MatrixEditorService {
         parsedMedia = typeof row.media === 'string' ? JSON.parse(row.media) : row.media
         originalMimeType = parsedMedia?.original?.MIMETYPE || null
       } catch (error) {
-        console.log(`[getCellMedia] Media ${mediaId} - JSON parsing failed:`, error)
         // If parsing fails, continue without MIME type info
       }
 
@@ -584,10 +583,61 @@ export default class MatrixEditorService {
     return matrices
   }
 
-  // TODO(kenzley): We need to implement this when the search engine is done.
   async findCitation(text) {
-    const citations = []
-    return { text: text, citations: citations }
+    if (!text || text.trim().length === 0) {
+      return []
+    }
+
+    const searchTerm = `%${text.trim()}%`
+    
+    // Search bibliographic references within the current project
+    const query = `SELECT 
+      br.reference_id,
+      br.article_title,
+      br.journal_title,
+      br.monograph_title,
+      br.authors,
+      br.editors,
+      br.vol,
+      br.num,
+      br.pubyear,
+      br.publisher,
+      br.abstract,
+      br.description,
+      br.keywords,
+      br.reference_type,
+      br.place_of_publication,
+      br.collation
+      FROM bibliographic_references br
+      INNER JOIN matrices m ON br.project_id = m.project_id
+      WHERE m.matrix_id = :matrixId
+      AND (br.article_title LIKE :searchTerm 
+        OR br.journal_title LIKE :searchTerm
+        OR br.monograph_title LIKE :searchTerm
+        OR br.publisher LIKE :searchTerm
+        OR br.abstract LIKE :searchTerm
+        OR br.description LIKE :searchTerm
+        OR br.keywords LIKE :searchTerm
+        OR JSON_EXTRACT(br.authors, '$') LIKE :searchTerm
+        OR JSON_EXTRACT(br.editors, '$') LIKE :searchTerm)
+      ORDER BY br.pubyear DESC, br.article_title ASC
+      LIMIT 50`
+
+    const results = await sequelizeConn.query(query, {
+      replacements: { 
+        matrixId: this.matrix.matrix_id,
+        searchTerm: searchTerm
+      },
+      type: QueryTypes.SELECT,
+    })
+
+    // Format citations for frontend display
+    const citations = results.map(row => ({
+      id: row.reference_id,
+      name: getCitationText(row)
+    }))
+
+    return citations
   }
 
   async addCellCitations(
@@ -1022,7 +1072,6 @@ export default class MatrixEditorService {
         parsedMedia = typeof row.media === 'string' ? JSON.parse(row.media) : row.media
         originalMimeType = parsedMedia?.original?.MIMETYPE || null
       } catch (error) {
-        console.log(`[getMediaForCharacters] Media ${mediaId} - JSON parsing failed:`, error)
         // If parsing fails, continue without MIME type info
       }
 
@@ -1541,83 +1590,316 @@ export default class MatrixEditorService {
     }
   }
 
-  async loadTaxaMedia(taxonId, search) {
+  async loadTaxaMedia(params) {
+    // Handle both old signature (taxonId, search) and new signature (params object)
+    let taxonId, search
+    if (typeof params === 'object' && params !== null) {
+      taxonId = params.taxon_id
+      search = params.search
+    } else {
+      // Backward compatibility: loadTaxaMedia(taxonId, search)
+      taxonId = params
+      search = arguments[1]
+    }
+
+    const projectId = this.project.project_id
+    const userId = this.user.user_id
+    const matrixId = this.matrix.matrix_id
+
+    // Validate required parameters
+    if (!projectId) {
+      throw new UserError('Project ID is required')
+    }
+    if (!userId) {
+      throw new UserError('User ID is required')
+    }
+
+    // Mode selection based on design specs
+    if (search && search.trim().length > 0) {
+      // Mode A: Text-based search
+      return await this.performTextSearch(search, projectId, matrixId, userId)
+    } else if (taxonId) {
+      // Mode B: Taxonomic relationship browsing
+      return await this.performTaxonomicBrowsing(taxonId, projectId, matrixId, userId)
+    } else {
+      // Mode C: Return empty results
+      return { media: [], media_ids: [] }
+    }
+  }
+
+  async performTextSearch(search, projectId, matrixId, userId) {
+    // Use shared search logic for taxa media with enhanced query
+    const results = await this.executeMediaSearch(search, 'taxa')
+    
+    return await this.formatMediaResults(results, userId, matrixId)
+  }
+
+  async performTaxonomicBrowsing(taxonId, projectId, matrixId, userId) {
+    const taxon = await models.Taxon.findByPk(taxonId)
+    
+    if (!taxon) {
+      // If taxon not found, return all project media
+      return await this.getAllProjectMedia(projectId, matrixId, userId)
+    }
+
+    // Build taxonomic filters with priority order: subspecific_epithet, specific_epithet, genus
+    const taxonomicConditions = []
+    const replacements = [projectId]
+    const taxonomicUnits = ['subspecific_epithet', 'specific_epithet', 'genus']
+    
+    for (const unit of taxonomicUnits) {
+      const value = taxon[unit]
+      if (value && value.trim()) {
+        taxonomicConditions.push(`t.${unit} = ?`)
+        replacements.push(value.trim())
+      }
+    }
+
+    let taxonomicClause = ''
+    if (taxonomicConditions.length > 0) {
+      taxonomicClause = ` AND (${taxonomicConditions.join(' AND ')})`
+    }
+
+    const query = `
+      SELECT DISTINCT 
+        mf.project_id,
+        mf.media_id, 
+        mf.media,
+        mf.notes as media_notes,
+        mf.view_id,
+        mf.is_sided,
+        mv.name as view_name,
+        s.specimen_id,
+        s.reference_source,
+        s.institution_code,
+        s.collection_code,
+        s.catalog_number,
+        s.description as specimen_description,
+        t.genus,
+        t.specific_epithet,
+        t.subspecific_epithet,
+        t.scientific_name_author,
+        t.scientific_name_year,
+        t.is_extinct,
+        t.taxon_id
+      FROM media_files mf
+      INNER JOIN specimens AS s ON s.specimen_id = mf.specimen_id
+      INNER JOIN taxa_x_specimens AS txs ON s.specimen_id = txs.specimen_id
+      INNER JOIN taxa AS t ON txs.taxon_id = t.taxon_id
+      LEFT JOIN media_views mv ON mf.view_id = mv.view_id
+      WHERE mf.project_id = ? AND mf.cataloguing_status = 0 ${taxonomicClause}
+      ORDER BY mf.media_id`
+
+    const results = await sequelizeConn.query(query, {
+      replacements: replacements,
+      type: QueryTypes.SELECT,
+    })
+
+    return await this.formatMediaResults(results, userId, matrixId)
+  }
+
+  async getAllProjectMedia(projectId, matrixId, userId) {
+    const query = `
+      SELECT DISTINCT 
+        mf.project_id,
+        mf.media_id, 
+        mf.media,
+        mf.notes as media_notes,
+        mf.view_id,
+        mf.is_sided,
+        mv.name as view_name,
+        s.specimen_id,
+        s.reference_source,
+        s.institution_code,
+        s.collection_code,
+        s.catalog_number,
+        s.description as specimen_description,
+        t.genus,
+        t.specific_epithet,
+        t.subspecific_epithet,
+        t.scientific_name_author,
+        t.scientific_name_year,
+        t.is_extinct,
+        t.taxon_id
+      FROM media_files mf
+      LEFT JOIN specimens AS s ON s.specimen_id = mf.specimen_id
+      LEFT JOIN taxa_x_specimens AS txs ON s.specimen_id = txs.specimen_id
+      LEFT JOIN taxa AS t ON txs.taxon_id = t.taxon_id
+      LEFT JOIN media_views mv ON mf.view_id = mv.view_id
+      WHERE mf.project_id = ? AND mf.cataloguing_status = 0
+      ORDER BY mf.media_id
+      LIMIT 100`
+
+    const results = await sequelizeConn.query(query, {
+      replacements: [projectId],
+      type: QueryTypes.SELECT,
+    })
+
+    return await this.formatMediaResults(results, userId, matrixId)
+  }
+
+  async processMediaResults(results, outputFormat = 'taxa', userId = null, matrixId = null) {
     const media = []
     const mediaIds = []
 
-    if (search) {
-      // TODO(kenzley): Implement search functionality using Elastic Search.
+    // Process results with shared formatting logic
+    for (const result of results) {
+      if (!mediaIds.includes(result.media_id)) {
+        mediaIds.push(result.media_id)
+        
+        const processedMedia = this.processMediaItem(result, outputFormat)
+        media.push(processedMedia)
+      }
+    }
+
+    // Apply usage-based sorting if userId and matrixId are provided
+    let sortedMedia = media
+    if (userId && matrixId && mediaIds.length > 0) {
+      sortedMedia = await this.applySortByRecentUsage(media, mediaIds, userId, matrixId)
+    }
+
+    // Return format based on output type
+    if (outputFormat === 'character') {
+      return { media: sortedMedia }
     } else {
-      const replacements = [this.project.project_id]
-      let clause = ''
-      const taxon = await models.Taxon.findByPk(taxonId)
-      if (taxon != null) {
-        // Instead of searching by a single taxon, we are searching for media
-        // belonging to similar taxa which match the genus, species, and
-        // subspecies if available. If none are available, let's instead return
-        // all media associated with the project.
-        const fields = ['subspecific_epithet', 'specific_epithet', 'genus']
-        for (const field of fields) {
-          const unit = taxon[field]
-          if (unit) {
-            clause += ` AND t.${field} = ?`
-            replacements.push(unit)
-          }
-        }
-      }
-
-      const [rows] = await sequelizeConn.query(
-        `
-          SELECT
-            DISTINCT mf.media_id, mf.media
-          FROM media_files mf
-          INNER JOIN specimens AS s ON s.specimen_id = mf.specimen_id
-          INNER JOIN taxa_x_specimens AS txs ON s.specimen_id = txs.specimen_id
-          INNER JOIN taxa AS t ON txs.taxon_id = t.taxon_id
-          WHERE mf.project_id = ? AND mf.cataloguing_status = 0 ${clause}
-          ORDER BY mf.media_id`,
-        { replacements: replacements }
-      )
-      for (const row of rows) {
-        const mediaId = parseInt(row.media_id)
-        mediaIds.push(mediaId)
-        media.push({
-          media_id: mediaId,
-          thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, mediaId),
-          large: getMedia(row.media, 'large', this.project.project_id, mediaId),
-        })
+      return {
+        media: sortedMedia,
+        media_ids: mediaIds
       }
     }
+  }
 
-    // Sort by the last the time user recently used the media. This ensures
-    // that recently used media is at the top of the media grid.
-    if (mediaIds.length) {
-      const [rows] = await sequelizeConn.query(
-        `
-        SELECT media_id, MAX(created_on) AS created_on
-        FROM cells_x_media
-        WHERE matrix_id = ? AND user_id = ? AND media_id IN (?)
-        GROUP BY media_id`,
-        { replacements: [this.matrix.matrix_id, this.user.user_id, mediaIds] }
-      )
-
-      const mediaTimes = new Map()
-      for (const row of rows) {
-        const mediaId = parseInt(row.media_id)
-        const createdOn = parseInt(row.created_on)
-        mediaTimes.set(mediaId, createdOn)
+  processMediaItem(result, outputFormat = 'taxa') {
+    let specimenName = null
+    
+    // Create specimen name using shared logic
+    if (result.specimen_id) {
+      const specimenRecord = {
+        specimen_id: result.specimen_id,
+        reference_source: result.reference_source,
+        institution_code: result.institution_code,
+        collection_code: result.collection_code,
+        catalog_number: result.catalog_number,
+        genus: result.genus,
+        specific_epithet: result.specific_epithet,
+        subspecific_epithet: result.subspecific_epithet,
+        scientific_name_author: result.scientific_name_author,
+        scientific_name_year: result.scientific_name_year,
+        is_extinct: result.is_extinct
       }
+      
+      // Use the specimen utility function (showExtinctMarker=true, showAuthor=false, skipSubgenus=false)
+      specimenName = getSpecimenName(specimenRecord, null, true, false, false)
+    }
+    
+    // Get side designation
+    const sideDesignation = result.is_sided ? models.MediaFile.getSideRepresentation(result.is_sided) : null
+    
+    // Create formatted caption using shared logic
+    const caption = this.generateMediaCaption(specimenName, result.view_name, sideDesignation, result.media_id)
 
-      media.sort((a, b) => {
-        const aTime = mediaTimes.get(a['media_id']) ?? 0
-        const bTime = mediaTimes.get(b['media_id']) ?? 0
-        return Math.sign(bTime - aTime)
-      })
+    // Return different formats based on output type
+    if (outputFormat === 'character') {
+      return {
+        id: result.media_id,
+        image: getMedia(result.media, 'thumbnail', result.project_id, result.media_id),
+        specimen_name: specimenName,
+        view_name: result.view_name,
+        side_designation: sideDesignation,
+        media_notes: result.media_notes,
+        caption: caption
+      }
+    } else {
+      // Taxa format (more comprehensive)
+      return {
+        media_id: result.media_id,
+        icon: getMedia(result.media, 'icon', result.project_id, result.media_id),
+        tiny: getMedia(result.media, 'tiny', result.project_id, result.media_id),
+        media_icon_tag: this.generateMediaTag(result.media, 'icon', result.project_id, result.media_id),
+        media_tiny_tag: this.generateMediaTag(result.media, 'tiny', result.project_id, result.media_id),
+        specimen_name: specimenName,
+        view_name: result.view_name,
+        side_designation: sideDesignation,
+        media_notes: result.media_notes,
+        taxa_notes: result.taxa_media_notes,
+        caption: caption,
+        // Additional metadata for compatibility
+        genus: result.genus,
+        specific_epithet: result.specific_epithet,
+        subspecific_epithet: result.subspecific_epithet,
+        taxon_id: result.taxon_id,
+        specimen_description: result.specimen_description,
+        catalog_number: result.catalog_number
+      }
+    }
+  }
+
+  generateMediaCaption(specimenName, viewName, sideDesignation, mediaId) {
+    const captionParts = []
+    
+    if (specimenName) {
+      // Truncate specimen name if too long and make it italic
+      const truncatedSpecimen = specimenName.length > 35 ? specimenName.substring(0, 32) + '...' : specimenName
+      captionParts.push(`<em>${truncatedSpecimen}</em>`)
+    }
+    
+    // Add view and side information on second line
+    const viewParts = []
+    if (viewName) {
+      viewParts.push(viewName)
+    }
+    if (sideDesignation && sideDesignation !== 'not applicable') {
+      viewParts.push(sideDesignation)
+    }
+    if (viewParts.length > 0) {
+      captionParts.push(viewParts.join(', '))
+    }
+    
+    return captionParts.length > 0 ? captionParts.join('<br>') : `M${mediaId}`
+  }
+
+  // Keep the old method name for backward compatibility
+  async formatMediaResults(results, userId, matrixId) {
+    return await this.processMediaResults(results, 'taxa', userId, matrixId)
+  }
+
+  async applySortByRecentUsage(media, mediaIds, userId, matrixId) {
+    if (mediaIds.length === 0) {
+      return media
     }
 
-    return {
-      media: media,
+    // Query user's recent media usage history
+    const [rows] = await sequelizeConn.query(
+      `
+      SELECT media_id, MAX(created_on) AS created_on
+      FROM cells_x_media
+      WHERE matrix_id = ? AND user_id = ? AND media_id IN (?)
+      GROUP BY media_id`,
+      { replacements: [matrixId, userId, mediaIds] }
+    )
+
+    const mediaTimes = new Map()
+    for (const row of rows) {
+      const mediaId = parseInt(row.media_id)
+      const createdOn = parseInt(row.created_on)
+      mediaTimes.set(mediaId, createdOn)
     }
+
+    // Sort media array based on usage recency (most recent first)
+    return media.sort((a, b) => {
+      const aTime = mediaTimes.get(a.media_id) ?? 0
+      const bTime = mediaTimes.get(b.media_id) ?? 0
+      return Math.sign(bTime - aTime)
+    })
+  }
+
+  generateMediaTag(media, version, projectId, mediaId) {
+    const mediaObj = getMedia(media, version, projectId, mediaId)
+    if (!mediaObj) {
+      return ''
+    }
+    
+    return `<img src="${mediaObj.url}" width="${mediaObj.width}" height="${mediaObj.height}" alt="Media ${mediaId}" />`
   }
 
   async addCharacter(name, type, index) {
@@ -2116,16 +2398,134 @@ export default class MatrixEditorService {
     }
   }
 
-  // TODO(kenzley): We need to implement this when the search engine is done.
   async findCharacterMedia(search) {
-    if (!search) {
+    if (!search || search?.trim()?.length === 0) {
       throw new UserError('Character media text cannot be empty')
     }
-    const media = []
+
+    // Use shared search logic for character media
+    const results = await this.executeMediaSearch(search, 'character')
+    
+    // Use shared media processing logic with character-specific output format
+    const processedResults = await this.processMediaResults(results, 'character')
+
     return {
       search: search,
-      media: media,
+      media: processedResults.media,
     }
+  }
+
+  async executeMediaSearch(search, searchType = 'character') {
+    const searchTerm = `%${search.trim()}%`
+    // Check if search term is a media ID (either numeric or M+number format)
+    const mediaIdMatch = search.trim().match(/^M?(\d+)$/i)
+    let mediaIdCondition = ''
+    let replacements = { 
+      matrixId: this.matrix.matrix_id,
+      searchTerm: searchTerm
+    }
+    
+    if (mediaIdMatch) {
+      // If it's a media ID format, add exact media_id search
+      const numericId = mediaIdMatch[1]
+      mediaIdCondition = ' OR mf.media_id = :mediaId'
+      replacements.mediaId = numericId
+    }
+
+    let query = ''
+    
+    if (searchType === 'character') {
+      // Search media files for character use case
+      query = `SELECT DISTINCT
+        mf.project_id,
+        mf.media_id,
+        mf.media,
+        mf.notes as media_notes,
+        mf.is_sided,
+        mv.name as view_name,
+        s.specimen_id,
+        s.reference_source,
+        s.institution_code,
+        s.collection_code,
+        s.catalog_number,
+        s.description as specimen_description,
+        t.genus,
+        t.specific_epithet,
+        t.subspecific_epithet,
+        t.scientific_name_author,
+        t.scientific_name_year,
+        t.is_extinct
+        FROM media_files mf
+        INNER JOIN matrices m ON mf.project_id = m.project_id
+        LEFT JOIN specimens s ON mf.specimen_id = s.specimen_id
+        LEFT JOIN taxa_x_specimens txs ON s.specimen_id = txs.specimen_id
+        LEFT JOIN taxa t ON txs.taxon_id = t.taxon_id
+        LEFT JOIN media_views mv ON mf.view_id = mv.view_id
+        WHERE m.matrix_id = :matrixId
+        AND mf.cataloguing_status = 0
+        AND (mf.notes LIKE :searchTerm
+          OR s.description LIKE :searchTerm
+          OR s.catalog_number LIKE :searchTerm
+          OR t.genus LIKE :searchTerm
+          OR t.specific_epithet LIKE :searchTerm
+          OR mv.name LIKE :searchTerm${mediaIdCondition})
+        ORDER BY mf.media_id
+        LIMIT 100`
+    } else {
+      // Search media files for taxa use case (enhanced with taxa_x_media relationship)
+      replacements.projectId = this.project.project_id
+      query = `SELECT DISTINCT
+        mf.project_id,
+        mf.media_id,
+        mf.media,
+        mf.notes as media_notes,
+        mf.view_id,
+        mf.is_sided,
+        mf.is_copyrighted,
+        mf.copyright_info,
+        mf.copyright_license,
+        mf.copyright_permission,
+        mv.name as view_name,
+        s.specimen_id,
+        s.reference_source,
+        s.institution_code,
+        s.collection_code,
+        s.catalog_number,
+        s.description as specimen_description,
+        t.genus,
+        t.specific_epithet,
+        t.subspecific_epithet,
+        t.scientific_name_author,
+        t.scientific_name_year,
+        t.is_extinct,
+        t.taxon_id,
+        txm.notes as taxa_media_notes
+        FROM media_files mf
+        INNER JOIN matrices m ON mf.project_id = m.project_id
+        LEFT JOIN taxa_x_media txm ON mf.media_id = txm.media_id
+        LEFT JOIN taxa t ON txm.taxon_id = t.taxon_id
+        LEFT JOIN specimens s ON mf.specimen_id = s.specimen_id
+        LEFT JOIN taxa_x_specimens txs ON s.specimen_id = txs.specimen_id
+        LEFT JOIN media_views mv ON mf.view_id = mv.view_id
+        WHERE m.matrix_id = :matrixId
+        AND mf.project_id = :projectId
+        AND mf.cataloguing_status = 0
+        AND (mf.notes LIKE :searchTerm
+          OR txm.notes LIKE :searchTerm
+          OR t.genus LIKE :searchTerm
+          OR t.specific_epithet LIKE :searchTerm
+          OR t.subspecific_epithet LIKE :searchTerm
+          OR s.description LIKE :searchTerm
+          OR s.catalog_number LIKE :searchTerm
+          OR mv.name LIKE :searchTerm${mediaIdCondition})
+        ORDER BY mf.media_id
+        LIMIT 100`
+    }
+    
+    return await sequelizeConn.query(query, {
+      replacements: replacements,
+      type: QueryTypes.SELECT,
+    })
   }
 
   async addCharacterMedia(characterId, stateId, mediaIds) {
@@ -6630,7 +7030,6 @@ export default class MatrixEditorService {
         parsedMedia = typeof row.media === 'string' ? JSON.parse(row.media) : row.media
         originalMimeType = parsedMedia?.original?.MIMETYPE || null
       } catch (error) {
-        console.log(`[getTaxonMedia] Media ${mediaId} - JSON parsing failed:`, error)
         // If parsing fails, continue without MIME type info
       }
       
