@@ -15,11 +15,6 @@ export class DOICreationHandler extends Handler {
   }
 
   async process(parameters) {
-    console.log(
-      'DOICreationHandler: Starting process with parameters:',
-      parameters
-    )
-
     const projectId = parseInt(parameters.project_id)
     if (!projectId) {
       console.log(
@@ -77,29 +72,18 @@ export class DOICreationHandler extends Handler {
           resource: projectResource,
         })
         if (!result.success) {
-          console.log(
-            'DOICreationHandler: Failed to create project DOI:',
-            projectDoiId
-          )
           return this.createError(
             HandlerErrors.HTTP_CLIENT_ERROR,
             `Error creating DOI: ${projectDoiId}`
           )
         } else {
           projectDoiToUpdate = result.doi
-          console.log(
-            'DOICreationHandler: Project DOI created:',
-            projectDoiToUpdate
-          )
         }
       } else {
         // DOI exists but database is null, construct full DOI for update
         projectDoiToUpdate = `${this.doiCreator.shoulder}/${projectDoiId}`
       }
     } else {
-      console.log(
-        'DOICreationHandler: Skipping project DOI - already set in database'
-      )
     }
 
     const matrixDois = new Map()
@@ -137,7 +121,6 @@ export class DOICreationHandler extends Handler {
             `Error creating DOI: ${matrixDoiId}`
           )
         } else {
-          console.log('DOICreationHandler: Matrix DOI created:', result.doi)
           matrixDois.set(matrixId, result.doi)
         }
       } else {

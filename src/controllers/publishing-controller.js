@@ -262,7 +262,6 @@ export async function validateMediaForPublishing(req, res) {
 export async function dumpProjectById(req, res) {
   try {
     const projectId = req.params.projectId
-    console.log('dumpProjectById: projectId', projectId)
     const result = await publishingService.dumpSingleProject(projectId)
     return res.status(200).json(result)
   } catch (error) {
@@ -279,7 +278,6 @@ export async function publishProject(req, res) {
   try {
     const projectId = req.params.projectId
     const userId = req.user.user_id
-    console.log('publishProject: projectId', projectId)
 
     const project = await models.Project.findByPk(projectId)
     if (!project) {
@@ -414,7 +412,6 @@ export async function publishProject(req, res) {
       }
 
       processTasks()
-      console.log('post-publication tasks scheduled')
     } catch (taskError) {
       // Log task scheduling errors but don't fail the publication
       console.error('Error scheduling post-publication tasks:', taskError)

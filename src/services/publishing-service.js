@@ -454,8 +454,6 @@ export async function updateProjectDoiAndRedump(
   transaction = null
 ) {
   try {
-    console.log(`Updating project ${projectId} with DOI: ${projectDoi}`)
-
     const shouldCommit = !transaction
     const tx = transaction || (await sequelizeConn.transaction())
 
@@ -545,8 +543,6 @@ export async function dumpAndUploadProjectsList() {
 
   const end = Date.now()
   const timeElapsed = (end - start) / 1000
-
-  console.log('Dumped project list data - DONE!')
 
   return {
     success: true,
@@ -746,7 +742,6 @@ export async function dumpAndUploadProjectStats(projectId) {
 export async function dumpSingleProject(projectId) {
   try {
     const totalStart = Date.now()
-    console.log(`Start dumping project ${projectId} data...`)
 
     // Step 1: Dump and upload project details
     const detailsResult = await dumpAndUploadProjectDetails(projectId)
@@ -786,10 +781,6 @@ export async function dumpSingleProject(projectId) {
     ]
     const s3SuccessCount = s3Results.filter((r) => r.success).length
     const s3FailureCount = s3Results.filter((r) => !r.success).length
-
-    console.log(
-      `Finished: Total: ${totalTimeElapsed}s, S3: ${s3SuccessCount} successful, ${s3FailureCount} failed`
-    )
 
     // Extract S3 paths from successful uploads
     const s3Paths = s3Results.filter((r) => r.success).map((r) => r.key)
@@ -917,7 +908,7 @@ export async function publishProject(projectId, userId, isCurator = false) {
         dumpResult.message
       )
     } else {
-      console.log(`Project ${projectId} data dumped successfully`)
+      // console.log(`Project ${projectId} data dumped successfully`)
     }
 
     return { success: true, dumpResult }
