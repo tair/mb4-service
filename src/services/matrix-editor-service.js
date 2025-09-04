@@ -156,6 +156,17 @@ export default class MatrixEditorService {
       const taxonId = parseInt(row.taxon_id)
       const characterId = parseInt(row.character_id)
 
+      // Parse the media JSON to extract MIME type information
+      let parsedMedia = {}
+      let originalMimeType = null
+      try {
+        parsedMedia = typeof row.media === 'string' ? JSON.parse(row.media) : row.media
+        originalMimeType = parsedMedia?.original?.MIMETYPE || null
+      } catch (error) {
+        console.log(`[getCellMedia] Media ${mediaId} - JSON parsing failed:`, error)
+        // If parsing fails, continue without MIME type info
+      }
+
       cellMedia.push({
         link_id: linkId,
         media_id: mediaId,
@@ -163,6 +174,7 @@ export default class MatrixEditorService {
         character_id: characterId,
         thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, mediaId),
         label_count: labelCounts.get(taxonId, characterId)?.get(mediaId) ?? 0,
+        original_mimetype: originalMimeType,
       })
     }
 
@@ -434,12 +446,26 @@ export default class MatrixEditorService {
       const taxonId = parseInt(row.taxon_id)
       const characterId = parseInt(row.character_id)
       const mediaId = parseInt(row.media_id)
+      
+      // Parse the media JSON to extract MIME type information
+      let parsedMedia = {}
+      let originalMimeType = null
+      try {
+        parsedMedia = typeof row.media === 'string' ? JSON.parse(row.media) : row.media
+        originalMimeType = parsedMedia?.original?.MIMETYPE || null
+      } catch (error) {
+        console.log(`[getCellMedia] Media ${mediaId} - JSON parsing failed:`, error)
+        // If parsing fails, continue without MIME type info
+      }
+
       const media = {
         link_id: linkId,
         taxon_id: taxonId,
         character_id: characterId,
         media_id: mediaId,
         thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, mediaId),
+        // Add MIME type information for TIFF detection
+        original_mimetype: originalMimeType,
       }
 
       const characterMap = labelCounts.get(taxonId, characterId)
@@ -987,11 +1013,26 @@ export default class MatrixEditorService {
     const mediaList = new Map()
     const versions = ['thumbnail', 'large']
     for (const row of rows) {
+      const mediaId = parseInt(row.media_id)
+      
+      // Parse the media JSON to extract MIME type information
+      let parsedMedia = {}
+      let originalMimeType = null
+      try {
+        parsedMedia = typeof row.media === 'string' ? JSON.parse(row.media) : row.media
+        originalMimeType = parsedMedia?.original?.MIMETYPE || null
+      } catch (error) {
+        console.log(`[getMediaForCharacters] Media ${mediaId} - JSON parsing failed:`, error)
+        // If parsing fails, continue without MIME type info
+      }
+
       const media = {
         link_id: parseInt(row.link_id),
         character_id: parseInt(row.character_id),
-        media_id: parseInt(row.media_id),
+        media_id: mediaId,
         state_id: row.state_id == null ? null : parseInt(row.state_id),
+        // Add MIME type information for TIFF detection
+        original_mimetype: originalMimeType,
       }
       for (const version of versions) {
         media[version] = getMedia(row.media, version, this.project.project_id, parseInt(row.media_id))
@@ -6580,14 +6621,29 @@ export default class MatrixEditorService {
     const media = new Map()
     for (const row of rows) {
       const taxonId = parseInt(row.taxon_id)
+      const mediaId = parseInt(row.media_id)
+      
+      // Parse the media JSON to extract MIME type information
+      let parsedMedia = {}
+      let originalMimeType = null
+      try {
+        parsedMedia = typeof row.media === 'string' ? JSON.parse(row.media) : row.media
+        originalMimeType = parsedMedia?.original?.MIMETYPE || null
+      } catch (error) {
+        console.log(`[getTaxonMedia] Media ${mediaId} - JSON parsing failed:`, error)
+        // If parsing fails, continue without MIME type info
+      }
+      
       if (!media.has(taxonId)) {
         media.set(taxonId, [])
       }
       media.get(taxonId).push({
         taxon_id: taxonId,
         link_id: parseInt(row.link_id),
-        media_id: parseInt(row.media_id),
-        thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, parseInt(row.media_id)),
+        media_id: mediaId,
+        thumbnail: getMedia(row.media, 'thumbnail', this.project.project_id, mediaId),
+        // Add MIME type information for TIFF detection
+        original_mimetype: originalMimeType,
       })
     }
     return media
