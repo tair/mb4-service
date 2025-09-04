@@ -33,6 +33,7 @@ export async function getMediaLabels(req, res) {
     const properties = row.properties
     const label = {
       annotation_id: row.label_id,
+      link_id: row.link_id,
       x: properties.x,
       y: properties.y,
       w: properties.w || 1,

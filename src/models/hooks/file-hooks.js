@@ -153,12 +153,12 @@ async function unlink(tableName, rowId, json, transaction, user) {
 
     if (s3Keys.length > 0) {
       const bucket = config.aws.defaultBucket
-      console.log(`Deleting ${s3Keys.length} S3 files for ${tableName}/${rowId}:`, s3Keys)
+      // console.log(`Deleting ${s3Keys.length} S3 files for ${tableName}/${rowId}:`, s3Keys)
       
       for (const s3Key of s3Keys) {
         try {
           await s3Service.deleteObject(bucket, s3Key)
-          console.log(`Successfully deleted S3 file: ${s3Key}`)
+          // console.log(`Successfully deleted S3 file: ${s3Key}`)
         } catch (error) {
           // Log error but don't fail the transaction
           if (error.name === 'NoSuchKey') {
