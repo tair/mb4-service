@@ -41,6 +41,10 @@ export class DataCiteDOICreator {
       if (success) {
         return { success: true, doi: fullDoi }
       } else {
+        console.error(
+          'DataCiteDOICreator: Request failed with error:',
+          response.data
+        )
         return { success: false, doi: null }
       }
     } catch (error) {

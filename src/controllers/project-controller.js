@@ -1244,7 +1244,6 @@ async function tryServeFromS3(projectId, res) {
     const exists = await s3Service.objectExists(bucketName, s3Key)
 
     if (!exists) {
-      console.log(`Preprocessed file not found in S3: ${s3Key}`)
       return false
     }
 
@@ -1264,7 +1263,6 @@ async function tryServeFromS3(projectId, res) {
     // Send the file data
     res.send(s3Object.data)
 
-    console.log(`Successfully served preprocessed file from S3: ${s3Key}`)
     return true
   } catch (error) {
     console.error('Error serving from S3:', error)
@@ -1301,12 +1299,6 @@ export async function downloadProjectSDD(req, res) {
       return res.status(404).json({ message: 'Partition not found' })
     }
 
-    console.log(
-      `Starting SDD download for project ${projectId}${
-        partitionId ? ` with partition ${partitionId}` : ''
-      } in ${format} format`
-    )
-
     // For ZIP format, first try to serve from S3 preprocessed files
     // Note: Only full project exports are supported in S3 (no partition support)
     if (format === 'zip' && !partitionId) {
@@ -1314,15 +1306,8 @@ export async function downloadProjectSDD(req, res) {
         const servedFromS3 = await tryServeFromS3(projectId, res)
 
         if (servedFromS3) {
-          console.log(
-            `Successfully served preprocessed ZIP from S3 for project ${projectId}`
-          )
           return // Response already sent
         }
-
-        console.log(
-          `No preprocessed file found in S3, falling back to live export for project ${projectId}`
-        )
       } catch (s3Error) {
         console.error(`S3 check failed for project ${projectId}:`, s3Error)
         console.log(`Falling back to live export due to S3 error`)
@@ -1333,9 +1318,9 @@ export async function downloadProjectSDD(req, res) {
 
     // Create progress callback for logging
     const progressCallback = (progress) => {
-      console.log(
-        `[Project ${projectId}] ${progress.stage}: ${progress.message} (${progress.overallProgress}%)`
-      )
+      // console.log(
+      //   `[Project ${projectId}] ${progress.stage}: ${progress.message} (${progress.overallProgress}%)`
+      // )
     }
 
     // Create SDD exporter with progress tracking
@@ -1376,19 +1361,11 @@ export async function downloadProjectSDD(req, res) {
             const s3Key = `sdd_exports/${projectId}_morphobank.zip`
             const bucketName = config.aws.defaultBucket || 'mb4-data'
 
-            console.log(
-              `Uploading generated ZIP to S3: ${bucketName}/${s3Key} (${zipBuffer.length} bytes)`
-            )
-
             const uploadResult = await s3Service.putObject(
               bucketName,
               s3Key,
               zipBuffer,
               'application/zip'
-            )
-
-            console.log(
-              `Successfully uploaded ZIP to S3 for future use: ${s3Key}`
             )
           } catch (s3UploadError) {
             console.error(
@@ -1408,8 +1385,6 @@ export async function downloadProjectSDD(req, res) {
         // For partition exports, stream directly (no S3 upload)
         await exporter.exportAsZip(res)
       }
-
-      console.log(`Live SDD ZIP export completed for project ${projectId}`)
     } else {
       // Generate XML only (no S3 preprocessing for XML format)
       const sddXml = await exporter.export()
@@ -1419,8 +1394,6 @@ export async function downloadProjectSDD(req, res) {
       res.setHeader('Content-Type', 'application/xml')
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
       res.setHeader('Cache-Control', 'no-cache')
-
-      console.log(`SDD XML export completed for project ${projectId}`)
 
       // Send the XML content
       res.send(sddXml)
