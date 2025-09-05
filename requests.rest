@@ -47,3 +47,33 @@ sample request
 curl http://localhost:8080/home/project/777/matrix
 
 GET http://localhost:8080/public/projects/authors_projects
+
+###
+# Test addCharacter API with character states creation
+# This should now return character with states in the response
+POST http://localhost:8080/projects/1/matrices/1/edit/addCharacter
+Content-Type: application/json
+Authorization: Bearer {token from the login end point}
+
+{
+    "name": "Test Character",
+    "charType": "C",
+    "index": null
+}
+
+# Expected response should include:
+# {
+#   "ok": true,
+#   "character": {
+#     "id": 123,
+#     "n": "Test Character",
+#     "r": 1,
+#     "t": 1,
+#     "uid": 1,
+#     "last_changed_on": 1234567890,
+#     "s": [
+#       { "id": 456, "r": 0, "n": "New State I" },
+#       { "id": 457, "r": 1, "n": "New State II" }
+#     ]
+#   }
+# }
