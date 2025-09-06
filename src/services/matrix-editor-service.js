@@ -1981,8 +1981,59 @@ export default class MatrixEditorService {
       }
     )
 
+    // Create two placeholder character states
+    await models.CharacterState.create(
+      {
+        name: 'New State I',
+        num: 0,
+        character_id: character.character_id,
+        user_id: this.user.user_id,
+        description: '',
+        access: 0,
+      },
+      {
+        user: this.user,
+        transaction: transaction,
+      }
+    )
+
+    await models.CharacterState.create(
+      {
+        name: 'New State II',
+        num: 1,
+        character_id: character.character_id,
+        user_id: this.user.user_id,
+        description: '',
+        access: 0,
+      },
+      {
+        user: this.user,
+        transaction: transaction,
+      }
+    )
+
     await this.logMatrixChange(transaction)
     await transaction.commit()
+
+    // Get the character states we just created
+    const [stateRows] = await sequelizeConn.query(
+      `
+      SELECT state_id, num, name
+      FROM character_states
+      WHERE character_id = ?
+      ORDER BY num`,
+      { replacements: [character.character_id] }
+    )
+
+    const states = []
+    for (const row of stateRows) {
+      states.push({
+        id: row.state_id,
+        r: row.num,
+        n: row.name,
+      })
+    }
+
     return {
       character: {
         id: character.character_id,
@@ -1991,6 +2042,7 @@ export default class MatrixEditorService {
         t: type,
         uid: this.user.user_id,
         last_changed_on: time(),
+        s: states,
       },
     }
   }
