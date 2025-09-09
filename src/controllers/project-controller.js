@@ -1178,6 +1178,7 @@ export async function retrieveDOI(req, res, next) {
       journal_number: data.issue || '',
       article_pp: data.page || '',
       journal_url: data.URL || `https://doi.org/${article_doi}`,
+      abstract: data.abstract || '',
     }
 
     res.json({
