@@ -100,7 +100,8 @@ export async function getProjects(req, res) {
 
 export async function getOverview(req, res) {
   const projectId = req.params.projectId
-  const userId = req.user?.user_id
+  const userId = req.credential?.user_id
+
   const summary = await projectService.getProject(projectId)
   // TODO(kenzley): Change this to output the media with the util/media.ts:getMedia method.
   const image_props = await mediaService.getImageProps(
