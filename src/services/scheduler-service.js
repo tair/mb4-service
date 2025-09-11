@@ -3,6 +3,8 @@ import axios from 'axios'
 import config from '../config.js'
 import CipresRequestService from './cipres-request-service.js'
 import { processTasks } from './task-queue-service.js'
+import { ProjectOverviewGenerator } from '../lib/project-overview-generator.js'
+import { ProjectRecencyStatisticsGenerator } from '../lib/project-recency-generator.js'
 
 class SchedulerService {
   constructor() {
@@ -51,6 +53,21 @@ class SchedulerService {
 
     this.jobs.set('task-queue', taskQueueJob)
     console.log('✓ Task queue processing scheduled to run every minute')
+
+    // Schedule stats cache update every 30 minutes
+    const statsCacheJob = cron.schedule(
+      '*/30 * * * *',
+      async () => {
+        await this.updateStatsCache()
+      },
+      {
+        scheduled: true,
+        timezone: 'UTC',
+      }
+    )
+
+    this.jobs.set('stats-cache', statsCacheJob)
+    console.log('✓ Stats cache update scheduled to run every 30 minutes')
 
     // Optional: Add more scheduled tasks here
     // Example: Daily cleanup task
@@ -147,6 +164,61 @@ class SchedulerService {
   }
 
   /**
+   * Update stats cache for recently accessed projects
+   */
+  async updateStatsCache() {
+    const startTime = Date.now()
+    console.log(`[${new Date().toISOString()}] Starting stats cache update...`)
+
+    try {
+      const overviewGenerator = new ProjectOverviewGenerator()
+      const recencyGenerator = new ProjectRecencyStatisticsGenerator()
+
+      // Get projects that were accessed in the last 30 minutes
+      const outdatedProjects = await overviewGenerator.getOutdatedProjects()
+      
+      if (outdatedProjects.length === 0) {
+        console.log(`[${new Date().toISOString()}] No projects need stats cache update`)
+        return
+      }
+
+      console.log(`[${new Date().toISOString()}] Updating stats cache for ${outdatedProjects.length} projects`)
+
+      let successCount = 0
+      let errorCount = 0
+
+      for (const project of outdatedProjects) {
+        try {
+          // Update project overview stats (stats_projects_overview, stats_taxa_overview, stats_members_overview)
+          await overviewGenerator.generateStats(project)
+          
+          // Update user recency stats (stats_user_overview)
+          await recencyGenerator.generateStats(project.project_id)
+          
+          successCount++
+        } catch (projectError) {
+          console.error(
+            `[${new Date().toISOString()}] Failed to update stats for project ${project.project_id}:`,
+            projectError.message
+          )
+          errorCount++
+        }
+      }
+
+      const duration = Date.now() - startTime
+      console.log(
+        `[${new Date().toISOString()}] Stats cache update completed in ${duration}ms - ${successCount} successful, ${errorCount} failed`
+      )
+    } catch (error) {
+      const duration = Date.now() - startTime
+      console.error(
+        `[${new Date().toISOString()}] Stats cache update failed after ${duration}ms:`,
+        error.message
+      )
+    }
+  }
+
+  /**
    * Example of another scheduled task
    */
   async dailyCleanup() {
@@ -165,6 +237,9 @@ class SchedulerService {
         break
       case 'task-queue':
         await this.processTaskQueue()
+        break
+      case 'stats-cache':
+        await this.updateStatsCache()
         break
       case 'daily-cleanup':
         await this.dailyCleanup()

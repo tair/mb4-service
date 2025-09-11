@@ -100,7 +100,8 @@ export async function getProjects(req, res) {
 
 export async function getOverview(req, res) {
   const projectId = req.params.projectId
-  const userId = req.user?.user_id
+  const userId = req.credential?.user_id
+
   const summary = await projectService.getProject(projectId)
   // TODO(kenzley): Change this to output the media with the util/media.ts:getMedia method.
   const image_props = await mediaService.getImageProps(
@@ -125,6 +126,52 @@ export async function getOverview(req, res) {
     members,
   }
   res.status(200).json({ overview })
+}
+
+export async function refreshProjectStats(req, res) {
+  try {
+    const projectId = req.params.projectId
+    const userId = req.user?.user_id
+    
+    // Import the required classes
+    const { ProjectOverviewGenerator } = await import('../lib/project-overview-generator.js')
+    const { ProjectRecencyStatisticsGenerator } = await import('../lib/project-recency-generator.js')
+    
+    // Get project info
+    const [projects] = await sequelizeConn.query(
+      `SELECT project_id, user_id, published, publish_matrix_media_only, publish_inactive_members
+       FROM projects WHERE project_id = ?`,
+      { replacements: [projectId] }
+    )
+    
+    if (projects.length === 0) {
+      return res.status(404).json({ error: 'Project not found' })
+    }
+    
+    const project = projects[0]
+    
+    // Regenerate project overview stats
+    const overviewGenerator = new ProjectOverviewGenerator()
+    await overviewGenerator.generateStats(project)
+    
+    // Regenerate recent changes stats if user is provided
+    if (userId) {
+      const recencyGenerator = new ProjectRecencyStatisticsGenerator()
+      await recencyGenerator.generateStats(projectId)
+    }
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'Project statistics refreshed successfully',
+      project_id: projectId
+    })
+  } catch (error) {
+    console.error('Error refreshing project stats:', error)
+    res.status(500).json({ 
+      error: 'Failed to refresh project statistics',
+      message: error.message 
+    })
+  }
 }
 
 export async function setCopyright(req, res) {

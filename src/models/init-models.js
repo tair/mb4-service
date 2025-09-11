@@ -837,4 +837,8 @@ function initModels(sequelizeConn) {
 
 const models = initModels(sequelizeConn)
 
+// Install disk usage tracking hooks
+import installDiskUsageHooks from '../lib/disk-usage-hooks.js'
+installDiskUsageHooks(models)
+
 export { models }

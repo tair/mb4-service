@@ -70,7 +70,35 @@ export async function getTaxaStats(projectId) {
 export async function getMembersStats(projectId) {
   const [rows] = await sequelizeConn.query(
     `
-    SELECT smo.*
+    SELECT
+      smo.project_id,
+      smo.user_id,
+      smo.fname,
+      smo.lname,
+      smo.member_email as email,
+      smo.administrator,
+      smo.membership_status,
+      smo.member_role,
+      smo.last_access as last_login,
+      smo.taxa,
+      smo.specimens,
+      smo.media,
+      smo.media_notes,
+      smo.characters,
+      smo.character_comments,
+      smo.character_notes,
+      smo.character_media,
+      smo.character_media_labels,
+      smo.cell_scorings,
+      smo.cell_scorings_scored,
+      smo.cell_scorings_npa,
+      smo.cell_scorings_not,
+      smo.cell_comments,
+      smo.cell_notes,
+      smo.cell_media,
+      smo.cell_media_labels,
+      smo.rules,
+      smo.warnings
     FROM stats_members_overview smo
     LEFT JOIN projects_x_users AS pxu
       ON
