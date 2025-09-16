@@ -19,7 +19,7 @@ services:
     env_file:
       - ./.env                 # dev env vars
     ports:
-      - "8083:8080"
+      - "8080:8080"
     command: ["npm","run","dev"]
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get({host:'127.0.0.1',port:8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
@@ -48,7 +48,7 @@ services:
     env_file:
       - ./.env                 # prod env vars (or .env.prod)
     ports:
-      - "8083:8080"
+      - "8080:8080"
     command: ["node", "src/server.js"]  # Override to use correct entry point
     volumes:
       - ./data:/data          # data persistence
