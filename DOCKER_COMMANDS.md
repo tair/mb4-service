@@ -19,7 +19,7 @@ docker-compose -f docker-compose.2.yml --profile dev logs -f
 docker-compose -f docker-compose.2.yml --profile prod up -d
 
 # Verify deployment
-curl http://localhost:8083/healthz
+curl http://localhost:8080/healthz
 ```
 
 ## Essential Commands
@@ -47,7 +47,7 @@ docker-compose -f docker-compose.2.yml logs -f mb4-service-prod # prod logs
 docker-compose -f docker-compose.2.yml ps
 
 # Check health
-curl http://localhost:8083/healthz
+curl http://localhost:8080/healthz
 ```
 
 ### Development Workflow
@@ -83,7 +83,7 @@ docker-compose -f docker-compose.2.yml down
 docker-compose -f docker-compose.2.yml --profile prod up -d --build
 
 # Verify
-curl http://localhost:8083/healthz
+curl http://localhost:8080/healthz
 ```
 
 ## Cleanup
@@ -111,7 +111,7 @@ docker system prune -a --volumes
 ### Common Issues
 ```bash
 # Check if port is in use
-lsof -i :8083
+lsof -i :8080
 
 # View container logs
 docker logs mb4-service-container-dev
@@ -150,8 +150,8 @@ docker network create shared_network
 
 ## Service URLs
 
-- **Production API:** http://localhost:8083
-- **Health Check:** http://localhost:8083/healthz
+- **Production API:** http://localhost:8080
+- **Health Check:** http://localhost:8080/healthz
 - **Internal Network:** http://mb4-service-container-prod:8080 (from other containers)
 
 ## Container Names
