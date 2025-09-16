@@ -1,0 +1,72 @@
+version: "3.4"
+
+services:
+  # ========================
+  # Dev profile
+  # ========================
+  mb4-service:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: Dockerfile2  # <-- Use Dockerfile2 instead of default Dockerfile
+      target: build            # <-- build stage from Dockerfile2
+    image: mb4-service-dev:1.0
+    container_name: mb4-service-container-dev
+    volumes:
+      - .:/app                 # bind mount code for hot reload
+      - /app/node_modules      # anonymous volume to keep container's node_modules
+      - ./data:/data
+    env_file:
+      - ./.env                 # dev env vars
+    ports:
+      - "8080:8080"
+    command: ["npm","run","dev"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get({host:'127.0.0.1',port:8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 2s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - shared_network
+
+  # ========================
+  # Prod profile
+  # ========================
+  mb4-service-prod:
+    profiles: ["prod"]
+    build:
+      context: .
+      dockerfile: Dockerfile2  # <-- Use Dockerfile2 instead of default Dockerfile
+      target: runner           # <-- production runner stage from Dockerfile2
+    image: mb4-service:1.0
+    container_name: mb4-service-container-prod
+    env_file:
+      - ./.env                 # prod env vars (or .env.prod)
+    ports:
+      - "8080:8080"
+    command: ["node", "src/server.js"]  # Override to use correct entry point
+    volumes:
+      - ./data:/data          # data persistence
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get({host:'127.0.0.1',port:8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 2s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - shared_network
+
+# External shared network
+networks:
+  shared_network:
+    external: true

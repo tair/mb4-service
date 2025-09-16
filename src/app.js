@@ -66,6 +66,15 @@ app.get('/', (req, res) => {
   res.json({ message: 'The API service is alive!' })
 })
 
+// Health check endpoint for Docker health checks
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime() 
+  })
+})
+
 app.use('/media', express.static(config.media.directory))
 
 app.use('/auth', authRouter)

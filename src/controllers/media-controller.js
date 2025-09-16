@@ -842,6 +842,13 @@ export async function editMediaFiles(req, res) {
   const mediaIds = req.body.media_ids
   const values = req.body.media
 
+  // Validate media_ids array
+  if (!mediaIds || !Array.isArray(mediaIds) || mediaIds.length === 0) {
+    return res.status(400).json({
+      message: 'media_ids must be a non-empty array',
+    })
+  }
+
   // Validate that we're not accidentally updating the media field
   if (values.media) {
     console.error(
