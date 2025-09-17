@@ -31,8 +31,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    networks:
-      - shared_network
 
   # ========================
   # Prod profile
@@ -52,6 +50,38 @@ services:
     command: ["node", "src/server.js"]  # Override to use correct entry point
     volumes:
       - ./data:/data          # data persistence
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get({host:'127.0.0.1',port:8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 2s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ========================
+  # Local profile (with shared network)
+  # ========================
+  mb4-service-local:
+    profiles: ["local"]
+    build:
+      context: .
+      dockerfile: Dockerfile2
+      target: build
+    image: mb4-service-local:1.0
+    container_name: mb4-service-container-local
+    volumes:
+      - .:/app                 # bind mount code for hot reload
+      - /app/node_modules      # anonymous volume to keep container's node_modules
+      - ./data:/data
+    env_file:
+      - ./.env                 # local env vars
+    ports:
+      - "8080:8080"
+    command: ["npm","run","dev"]
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get({host:'127.0.0.1',port:8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
