@@ -1,7 +1,8 @@
 import sequelizeConn from '../util/db.js'
-import axios from 'axios'
 import * as mediaService from './media-service.js'
 import { getProjectStats } from './project-stats-service.js'
+import config from '../config.js'
+import s3Service from './s3-service.js'
 
 export async function getProjects() {
   const start = new Date().getTime()
@@ -45,43 +46,52 @@ async function getContinuousCharDict() {
 }
 
 async function setJournalCoverUrl(project) {
-  project.journal_cover_url = ''
-  const urlByTitle = getCoverUrlByJournalTitle(project.journal_title)
+  console.log('setting journal cover url for project', project.project_id)
+  project.journal_cover_path = ''
+  const pathByTitle = getCoverPathByJournalTitle(project.journal_title)
   delete project.journal_title
-  const urlByCover = getCoverUrlByJournalCover(project.journal_cover)
+  const pathByCover = getCoverUrlPathJournalCover(project.journal_cover)
   delete project.journal_cover
 
-  if (urlByTitle) {
+  if (pathByTitle) {
     try {
-      await axios.get(urlByTitle)
-      project.journal_cover_url = urlByTitle
-      return
+      const exists = await s3Service.objectExists(config.aws.defaultBucket, pathByTitle)
+      if (exists) {
+        project.journal_cover_path = `/s3/${pathByTitle}`
+        return
+      }
     } catch (e) {
+      console.log('error checking S3 object existence for urlByTitle', e)
       // do nothing
     }
   }
 
-  if (urlByCover) {
+  if (pathByCover) {
     try {
-      await axios.get(urlByCover)
-      project.journal_cover_url = urlByCover
-      return
+      const exists = await s3Service.objectExists(config.aws.defaultBucket, pathByCover)
+      if (exists) {
+        project.journal_cover_path = `/s3/${pathByCover}`
+        return
+      }
     } catch (e) {
+      console.log('error checking S3 object existence for urlByCover', e)
       // do nothing
     }
   }
 }
 
-function getCoverUrlByJournalCover(journalCover) {
+function getCoverUrlPathJournalCover(journalCover) {
   if (journalCover) {
-    const preview = journalCover.preview
-    const urlByCover = `https://morphobank.org/media/morphobank3/images/${preview.HASH}/${preview.MAGIC}_${preview.FILENAME}`
-    return urlByCover
+    // Check if it's the new migrated format
+    if (journalCover.filename && journalCover.migrated) {
+      const s3Key = `media_files/journal_covers/uploads/${journalCover.filename}`
+      return s3Key
+    }
   }
   return ''
 }
 
-function getCoverUrlByJournalTitle(journalTitle) {
+function getCoverPathByJournalTitle(journalTitle) {
   if (journalTitle) {
     const cleanTitle = journalTitle
       .replace(/\s/g, '_')
@@ -89,8 +99,8 @@ function getCoverUrlByJournalTitle(journalTitle) {
       .replace(/\./g, '')
       .replace(/&/g, 'and')
       .toLowerCase()
-    const urlByTitle = `https://morphobank.org/themes/default/graphics/journalIcons/${cleanTitle}.jpg`
-    return urlByTitle
+    const s3Key = `media_files/journal_covers/${cleanTitle}.jpg`
+    return s3Key
   }
   return ''
 }

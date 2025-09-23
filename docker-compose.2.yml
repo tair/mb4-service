@@ -24,8 +24,9 @@ services:
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get({host:'127.0.0.1',port:8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s
-      timeout: 2s
+      timeout: 10s              # Increased timeout for health check
       retries: 3
+      start_period: 40s         # Give container time to start
     logging:
       driver: json-file
       options:
@@ -54,8 +55,9 @@ services:
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get({host:'127.0.0.1',port:8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s
-      timeout: 2s
+      timeout: 10s              # Increased timeout for health check
       retries: 3
+      start_period: 40s         # Give container time to start
     logging:
       driver: json-file
       options:
@@ -86,8 +88,9 @@ services:
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get({host:'127.0.0.1',port:8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s
-      timeout: 2s
+      timeout: 10s              # Increased timeout for health check
       retries: 3
+      start_period: 40s         # Give container time to start
     logging:
       driver: json-file
       options:
@@ -95,6 +98,10 @@ services:
         max-file: "3"
     networks:
       - shared_network
+    # Add environment variables for better debugging
+    environment:
+      - NODE_ENV=development
+      # - DEBUG=*
 
 # External shared network
 networks:

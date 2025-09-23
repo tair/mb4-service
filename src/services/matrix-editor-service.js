@@ -1984,7 +1984,7 @@ export default class MatrixEditorService {
     // Create two placeholder character states
     await models.CharacterState.create(
       {
-        name: 'New State I',
+        name: 'please define state 0',
         num: 0,
         character_id: character.character_id,
         user_id: this.user.user_id,
@@ -1999,7 +1999,7 @@ export default class MatrixEditorService {
 
     await models.CharacterState.create(
       {
-        name: 'New State II',
+        name: 'please define state 1',
         num: 1,
         character_id: character.character_id,
         user_id: this.user.user_id,
