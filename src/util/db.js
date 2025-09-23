@@ -14,8 +14,32 @@ const sequelizeConn = new Sequelize(
     pool: {
       max: 10,
       min: 5,
-      acquire: 30000,
+      acquire: 60000,  // Increased from 30s to 60s
       idle: 10000,
+    },
+    dialectOptions: {
+      connectTimeout: 60000,  // Connection timeout in milliseconds
+      charset: 'utf8mb4',     // Set charset
+    },
+    retry: {
+      match: [
+        /ETIMEDOUT/,
+        /EHOSTUNREACH/,
+        /ECONNRESET/,
+        /ECONNREFUSED/,
+        /ETIMEDOUT/,
+        /ESOCKETTIMEDOUT/,
+        /EHOSTUNREACH/,
+        /EPIPE/,
+        /EAI_AGAIN/,
+        /SequelizeConnectionError/,
+        /SequelizeConnectionRefusedError/,
+        /SequelizeHostNotFoundError/,
+        /SequelizeHostNotReachableError/,
+        /SequelizeInvalidConnectionError/,
+        /SequelizeConnectionTimedOutError/
+      ],
+      max: 3
     },
   }
 )

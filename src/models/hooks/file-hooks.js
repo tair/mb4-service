@@ -138,10 +138,12 @@ async function unlink(tableName, rowId, json, transaction, user) {
 
   // Handle S3-based files - check for any S3 keys (normalized to lowercase)
   // Media files have nested s3_key properties, documents have direct s3_key property
+  // Journal covers have filename + migrated flag (new format)
   const hasS3Files = (json.thumbnail && json.thumbnail.s3_key) || 
                      (json.large && json.large.s3_key) || 
                      (json.original && json.original.s3_key) ||
-                     json.s3_key // Direct S3 key for documents
+                     json.s3_key || // Direct S3 key for documents
+                     (json.filename && json.migrated) // Journal covers (new format)
   
   if (hasS3Files) {
     // This is a new S3-based file - delete directly from S3
@@ -150,6 +152,12 @@ async function unlink(tableName, rowId, json, transaction, user) {
     if (json.large && json.large.s3_key) s3Keys.push(json.large.s3_key)
     if (json.original && json.original.s3_key) s3Keys.push(json.original.s3_key)
     if (json.s3_key) s3Keys.push(json.s3_key) // Direct S3 key for documents
+    
+    // Handle journal covers (new format)
+    if (json.filename && json.migrated) {
+      const journalCoverS3Key = `media_files/journal_covers/uploads/${json.filename}`
+      s3Keys.push(journalCoverS3Key)
+    }
 
     if (s3Keys.length > 0) {
       const bucket = config.aws.defaultBucket
