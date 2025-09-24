@@ -26,7 +26,7 @@ export async function getProject(projectId) {
           journal_cover, journal_year, article_authors, article_title,
           article_pp, group_id, published_on, exemplar_media_id,
           partition_published_on, article_doi, project_doi, nsf_funded,
-          disk_usage, disk_usage_limit, publish_cc0, allow_reviewer_login
+          disk_usage, disk_usage_limit, publish_cc0, allow_reviewer_login, journal_in_press
       FROM projects
       WHERE project_id = ?`,
     { replacements: [projectId] }
