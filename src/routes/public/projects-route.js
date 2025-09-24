@@ -23,6 +23,10 @@ projectsRouter.get(
   projectsController.getJournalsWithProjects
 )
 projectsRouter.get(
+  '/titles_projects',
+  projectsController.getTitlesWithProjects
+)
+projectsRouter.get(
   '/institutions',
   projectsController.getInstitutionsWithProjects
 )

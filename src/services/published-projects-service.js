@@ -110,7 +110,7 @@ export async function getProjectTitles() {
     SELECT project_id, name, article_authors, journal_year, journal_title, article_title
     FROM projects 
     WHERE published = 1 AND deleted = 0
-    ORDER BY name ASC`)
+    ORDER BY UPPER(COALESCE(NULLIF(TRIM(article_title), ''), name)) ASC`)
   return rows
 }
 
@@ -247,6 +247,74 @@ export async function getJournalsWithProjects() {
   return {
     chars: chars,
     journals: journals,
+  }
+}
+
+export async function getTitlesWithProjects() {
+  const [rows] = await sequelizeConn.query(`
+    SELECT
+      p.project_id,
+      p.name,
+      p.article_authors,
+      p.journal_year,
+      TRIM(p.journal_title) as journal_title,
+      p.article_title,
+      COALESCE(NULLIF(TRIM(p.article_title), ''), p.name) as display_title
+    FROM projects AS p
+    WHERE p.published = 1 AND p.deleted = 0`)
+
+  // Build array with sanitized sort keys
+  const items = rows.map((row) => {
+    const displayTitle = row.display_title || ''
+    // Remove HTML tags, normalize and strip diacritics, then keep only alphanumerics
+    const noTags = displayTitle.replace(/<[^>]*>/g, '')
+    const nfd = noTags.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    const alnumOnly = nfd.replace(/[^a-zA-Z0-9]/g, '')
+    const upper = alnumOnly.toUpperCase()
+    const sortKeyPrefixLen = 10
+    const sortKey = upper.substring(0, sortKeyPrefixLen)
+
+    return { row, displayTitle, sortKey }
+  })
+
+  // Sort by sanitized key, then by project_id to stabilize
+  items.sort((a, b) => {
+    if (a.sortKey < b.sortKey) return -1
+    if (a.sortKey > b.sortKey) return 1
+    return a.row.project_id - b.row.project_id
+  })
+
+  const titles = {}
+  const chars = []
+
+  for (const item of items) {
+    const row = item.row
+    const displayTitle = item.displayTitle
+    const firstChar = item.sortKey.charAt(0)
+
+    if (/[A-Z0-9]/.test(firstChar) && !chars.includes(firstChar)) {
+      chars.push(firstChar)
+    }
+
+    const project = {
+      id: row.project_id,
+      name: row.name,
+      article_authors: row.article_authors,
+      journal_year: row.journal_year,
+      journal_title: row.journal_title,
+      article_title: row.article_title,
+    }
+
+    if (!titles[displayTitle]) {
+      titles[displayTitle] = [project]
+    } else {
+      titles[displayTitle].push(project)
+    }
+  }
+
+  return {
+    chars: chars,
+    titles: titles,
   }
 }
 
