@@ -1695,6 +1695,12 @@ export default class MatrixEditorService {
       type: QueryTypes.SELECT,
     })
 
+    // If no media matched the taxonomic filters, fall back to showing
+    // a general list of project media so users can still attach media.
+    if (!results || results.length === 0) {
+      return await this.getAllProjectMedia(projectId, matrixId, userId)
+    }
+
     return await this.formatMediaResults(results, userId, matrixId)
   }
 
