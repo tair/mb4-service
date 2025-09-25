@@ -36,6 +36,23 @@ export async function unzip(filePath) {
           throw new Error(`Unsafe file path detected in ZIP archive: ${file.path}`)
         }
 
+        // Skip directories and symlinks explicitly to avoid EISDIR errors
+        if (file.type === 'directory' || file.type === 'symlink' || file.path.endsWith('/')) {
+          return false
+        }
+
+        // Skip common OS metadata and junk files
+        if (
+          normalizedPath.startsWith('__MACOSX/') ||
+          normalizedPath.endsWith('/.DS_Store') ||
+          normalizedPath === '.DS_Store' ||
+          normalizedPath.startsWith('._') ||
+          normalizedPath.endsWith('/Thumbs.db') ||
+          normalizedPath === 'Thumbs.db'
+        ) {
+          return false
+        }
+
         // Security check: Prevent files with dangerous names
         const fileName = path.basename(file.path)
         if (fileName.startsWith('.') && !fileName.match(/^\.(jpg|jpeg|png|gif|tiff?|bmp|webp|dcm|dicom)$/i)) {
