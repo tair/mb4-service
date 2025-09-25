@@ -13,7 +13,8 @@
     "lint": "eslint . --ext .js",
     "pretty": "prettier --write \"./**/*.{js,js,json,vue}\"",
     "generate-model": "sequelize-auto -o \"./models\" -d morphobank -h mb4-db-dev -u morphobank -p 3306 -x {password} -e mysql -l esm --cf k --cp o --cm p --sg",
-    "generate-model-ts": "sequelize-auto -o \"./models\" -d morphobank -h mb4-db-dev -u morphobank -p 3306 -x {password} -e mysql -l ts --cf k --cp o --cm p --sg"
+    "generate-model-ts": "sequelize-auto -o \"./models\" -d morphobank -h mb4-db-dev -u morphobank -p 3306 -x {password} -e mysql -l ts --cf k --cp o --cm p --sg",
+    "migrate:hp-media": "node scripts/migrate-hp-media-to-s3.js"
   },
   "keywords": [],
   "author": "",
