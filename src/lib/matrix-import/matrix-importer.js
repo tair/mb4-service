@@ -81,6 +81,8 @@ export async function importMatrix(
     transaction
   )
   await transaction.commit()
+
+  return matrix
 }
 
 /**
@@ -430,7 +432,11 @@ async function importIntoMatrix(
         for (let i = 0; i < values.length; ++i) {
           const trimmedValue = values[i].trim()
           // Handle empty strings, missing data markers, and invalid values
-          if (trimmedValue === '' || trimmedValue === '?' || trimmedValue === '-') {
+          if (
+            trimmedValue === '' ||
+            trimmedValue === '?' ||
+            trimmedValue === '-'
+          ) {
             values[i] = null
           } else {
             const parsedValue = parseFloat(trimmedValue)

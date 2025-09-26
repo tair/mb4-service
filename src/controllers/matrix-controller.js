@@ -401,6 +401,123 @@ export async function uploadMatrix(req, res) {
   }
 }
 
+export async function uploadCsvMatrix(req, res) {
+  try {
+    const file = req.file
+    if (!file) {
+      res.status(400).json({ message: 'No file uploaded' })
+      return
+    }
+
+    const ext = (file.originalname || '').toLowerCase()
+    if (
+      !ext.endsWith('.csv') &&
+      !ext.endsWith('.xlsx') &&
+      !ext.endsWith('.xls')
+    ) {
+      res.status(400).json({
+        message: 'Unsupported file type. Only .csv, .xlsx, .xls are allowed',
+      })
+      return
+    }
+
+    const projectId = req.params.projectId
+    const title = req.body.title
+    if (!title) {
+      res.status(400).json({ message: 'Title was not defined' })
+      return
+    }
+
+    // Optional fields to mirror existing uploadMatrix
+    const notes = req.body.notes || ''
+    const itemNotes = req.body.itemNotes || ''
+    const otu = req.body.otu || 'genus'
+    const published = req.body.published
+
+    // Use client-provided parsed matrix if present; otherwise parse on server
+    let matrixObj
+    if (req.body.matrix) {
+      try {
+        matrixObj = JSON.parse(req.body.matrix)
+      } catch (e) {
+        res.status(400).json({ message: 'Invalid matrix payload' })
+        return
+      }
+    } else {
+      const { parseCsvXlsxToMatrix } = await import(
+        '../lib/matrix-import/csv-xlsx-parser.js'
+      )
+      const parsed = parseCsvXlsxToMatrix(file)
+      matrixObj = parsed.matrixObj
+    }
+
+    // Reuse existing importer and persistence logic
+    const { importMatrix } = await import(
+      '../lib/matrix-import/matrix-importer.js'
+    )
+    const actingUser = req.user || {
+      user_id: 0,
+      fname: 'CSV',
+      lname: 'Import',
+    }
+    const results = await importMatrix(
+      title,
+      notes,
+      itemNotes,
+      otu,
+      published,
+      actingUser,
+      projectId,
+      matrixObj,
+      file
+    )
+
+    res.status(200).json({ status: true, results })
+  } catch (e) {
+    console.log('CSV/XLSX Matrix not imported correctly', e)
+    res.status(400).json({ message: 'Matrix not imported correctly' })
+  }
+}
+
+export async function parseCsvMatrix(req, res) {
+  try {
+    const file = req.file
+    if (!file) {
+      res.status(400).json({ message: 'No file uploaded' })
+      return
+    }
+
+    const ext = (file.originalname || '').toLowerCase()
+    if (
+      !ext.endsWith('.csv') &&
+      !ext.endsWith('.xlsx') &&
+      !ext.endsWith('.xls')
+    ) {
+      res.status(400).json({
+        message: 'Unsupported file type. Only .csv, .xlsx, .xls are allowed',
+      })
+      return
+    }
+
+    const { parseCsvXlsxToMatrix } = await import(
+      '../lib/matrix-import/csv-xlsx-parser.js'
+    )
+    const mode = req.body.mode
+    const { matrixObj, warnings } = parseCsvXlsxToMatrix(file, {
+      mode: mode === 'discrete' || mode === 'continuous' ? mode : undefined,
+    })
+
+    res
+      .status(200)
+      .json({ status: true, matrix: matrixObj, warnings: warnings || [] })
+  } catch (e) {
+    console.log('CSV/XLSX Matrix not parsed correctly', e)
+    res
+      .status(400)
+      .json({ message: e.message || 'Matrix not parsed correctly' })
+  }
+}
+
 export async function mergeMatrixFile(req, res) {
   const matrixId = req.params.matrixId
   if (!matrixId) {
@@ -528,7 +645,7 @@ export async function run(req, res) {
     jobChar = 'vparam.specify_pct_'
   }*/
 
-  console.info("Received tool = " + req.query.tool + " in the request")
+  console.info('Received tool = ' + req.query.tool + ' in the request')
   /* const formData1 = {
     tool: req.query.tool,
     'input.infile_': fileContent,
@@ -574,16 +691,15 @@ export async function run(req, res) {
             'vparam.nchains_specified_': req.query.nchains_specified,
             'vparam.runtime_': 1,
           }
-        fileContent += "\n" + req.query.mrbayesblock
+        fileContent += '\n' + req.query.mrbayesblock
         console.info(fileContent)
-      }
-      else
-          formData2 = {
-            'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
-            'vparam.nruns_specified_': req.query.nruns_specified,
-            'vparam.nchains_specified_': req.query.nchains_specified,
-            'vparam.runtime_': req.query.runtime,
-          }
+      } else
+        formData2 = {
+          'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
+          'vparam.nruns_specified_': req.query.nruns_specified,
+          'vparam.nchains_specified_': req.query.nchains_specified,
+          'vparam.runtime_': req.query.runtime,
+        }
     }
     if (req.query.mrbayesblockquery == '0') {
       if (req.query.set_outgroup != null)

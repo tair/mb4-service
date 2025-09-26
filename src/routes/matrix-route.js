@@ -26,6 +26,16 @@ matrixRouter.get(
 )
 
 matrixRouter.post('/upload', upload.single('file'), controller.uploadMatrix)
+matrixRouter.post(
+  '/upload-csv',
+  upload.single('file'),
+  controller.uploadCsvMatrix
+)
+matrixRouter.post(
+  '/parse-csv',
+  upload.single('file'),
+  controller.parseCsvMatrix
+)
 matrixRouter.post('/create', controller.createMatrix)
 matrixRouter.post(
   '/:matrixId/upload',
