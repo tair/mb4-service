@@ -397,7 +397,33 @@ export async function uploadMatrix(req, res) {
     res.status(200).json({ status: true, results })
   } catch (e) {
     console.log('Matrix not imported correctly', e)
-    res.status(400).json({ message: 'Matrix not imported correctly' })
+    
+    // Provide more specific error messages
+    if (e.code === 'ER_LOCK_WAIT_TIMEOUT' || e.parent?.code === 'ER_LOCK_WAIT_TIMEOUT') {
+      res.status(500).json({ 
+        message: 'The database was busy processing other operations. Please try uploading again.',
+        code: 'DB_LOCK_TIMEOUT',
+        retry: true
+      })
+    } else if (e.code === 'ECONNRESET' || e.parent?.code === 'ECONNRESET') {
+      res.status(500).json({ 
+        message: 'Database connection was lost. Please try again.',
+        code: 'DB_CONNECTION_ERROR',
+        retry: true
+      })
+    } else if (e.name === 'SequelizeDatabaseError') {
+      res.status(500).json({ 
+        message: 'A database error occurred. Please try again or contact support if the issue persists.',
+        code: 'DB_ERROR',
+        retry: true
+      })
+    } else {
+      res.status(400).json({ 
+        message: e.message || 'Matrix not imported correctly',
+        code: 'IMPORT_ERROR',
+        retry: false
+      })
+    }
   }
 }
 
