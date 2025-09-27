@@ -1,5 +1,6 @@
 import { models } from '../models/init-models.js'
 import { array_intersect } from '../util/util.js'
+import { MembershipType } from '../models/projects-x-user.js'
 
 const ALL_PROJECT_ACCESS_ROLES = ['admin', 'curator']
 
@@ -77,10 +78,17 @@ export async function authorizeProject(req, res, next) {
       })
     }
     switch (projectUser.membership_type) {
-      case 0: // Full User
+      case MembershipType.ADMIN: // Full User - can edit everything
         permissions.push('edit', 'view')
         break
-      default: // Observer, Character Annonator, Bibliography maintainer
+      case MembershipType.CHARACTER_ANNOTATOR: // Character Annotator - can edit matrix/character content
+        permissions.push('edit', 'view')
+        break
+      case MembershipType.BIBLIOGRAPHY_MAINTAINER: // Bibliography Maintainer - can edit bibliography content
+        permissions.push('edit', 'view')
+        break
+      case MembershipType.OBSERVER: // Observer - view only
+      default: // Default to view only for unknown types
         permissions.push('view')
     }
 
