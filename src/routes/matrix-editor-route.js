@@ -1,7 +1,11 @@
 import express from 'express'
 import * as controller from '../controllers/matrix-editor-controller.js'
+import { requireEntityEditPermission, EntityType } from '../lib/auth-middleware.js'
 
 const router = express.Router({ mergeParams: true })
+
+// Apply matrix edit permission to all matrix editor routes
+router.use(requireEntityEditPermission(EntityType.MATRIX))
 
 // Taxa endpoints
 router.post('/getAvailableTaxa', controller.getAvailableTaxa)
