@@ -17,9 +17,9 @@
  *   --verbose     Show detailed logging
  */
 
-import sequelizeConn from '../src/util/db.js'
-import s3Service from '../src/services/s3-service.js'
-import config from '../src/config.js'
+import sequelizeConn from '../../src/util/db.js'
+import s3Service from '../../src/services/s3-service.js'
+import config from '../../src/config.js'
 import axios from 'axios'
 import path from 'path'
 import fs from 'fs'
