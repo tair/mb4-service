@@ -11,6 +11,7 @@ import { authorizePublishedProject } from '../project-interceptor.js'
 const projectsRouter = express.Router({ mergeParams: true })
 
 projectsRouter.get('/data_dump', dataDumpController.dataDump)
+projectsRouter.get('/project_list_dump', dataDumpController.projectListDump)
 
 projectsRouter.get('/', projectsController.getProjects)
 projectsRouter.get(
@@ -20,6 +21,10 @@ projectsRouter.get(
 projectsRouter.get(
   '/journals_projects',
   projectsController.getJournalsWithProjects
+)
+projectsRouter.get(
+  '/titles_projects',
+  projectsController.getTitlesWithProjects
 )
 projectsRouter.get(
   '/institutions',

@@ -56,6 +56,7 @@ Manually trigger a specific job by name.
 
 Available job names:
 - `cipres-sync`: Sync CIPRES jobs
+- `stats-cache`: Update project stats cache for recently accessed projects
 - `daily-cleanup`: Daily cleanup task (example)
 
 ## Configuration
@@ -69,6 +70,8 @@ Available job names:
 The scheduler runs the following tasks:
 
 - **CIPRES Sync**: Every 5 minutes (`*/5 * * * *`)
+- **Task Queue Processing**: Every minute (`* * * * *`)
+- **Stats Cache Update**: Every 30 minutes (`*/30 * * * *`) - Updates `stats_projects_overview` for recently accessed projects
 - **Daily Cleanup**: Every day at 2 AM UTC (`0 2 * * *`) - commented out by default
 
 ## Shell Scripts

@@ -28,14 +28,15 @@ export class S3MediaUploader {
     }
 
     const extension = file.originalname.split('.').pop().toLowerCase()
+    const originalMimeType = file.mimetype || 'image/jpeg'
 
     // Process image with Sharp
     const image = sharp(file.path)
     const metadata = await image.metadata()
 
-    // Define image sizes - only the three we need
+    // Define image sizes - preserve original format for 'original', compress thumbnails
     const sizes = {
-      original: null, // No resizing, but will compress
+      original: null, // No resizing, preserve original format and quality
       large: { maxWidth: 800, maxHeight: 800 },
       thumbnail: { width: 120, height: 120 },
     }
@@ -47,66 +48,87 @@ export class S3MediaUploader {
     // Upload each size variant to S3
     for (const [sizeName, dimensions] of Object.entries(sizes)) {
       try {
-        let processedImage = image
+        let outputBuffer
+        let outputMimeType
+        let outputExtension
+        let outputWidth
+        let outputHeight
 
-        // Resize if dimensions are specified
-        if (dimensions) {
-          if (sizeName === 'large') {
-            // For large, maintain aspect ratio and compress if larger than 800px
-            if (
-              metadata.width > dimensions.maxWidth ||
-              metadata.height > dimensions.maxHeight
-            ) {
-              processedImage = image.resize(
-                dimensions.maxWidth,
-                dimensions.maxHeight,
-                {
-                  fit: 'inside',
-                  withoutEnlargement: true,
-                }
-              )
+        if (sizeName === 'original') {
+          // For original version, upload the raw file without any processing to preserve exact quality and size
+          const fs = await import('fs')
+          outputBuffer = await fs.promises.readFile(file.path)
+          outputMimeType = originalMimeType
+          outputExtension = extension // Preserve original extension (.jpeg or .jpg)
+          outputWidth = metadata.width
+          outputHeight = metadata.height
+        } else {
+          // For thumbnails and large versions, process with Sharp
+          let processedImage = image
+
+          // Resize if dimensions are specified
+          if (dimensions) {
+            if (sizeName === 'large') {
+              // For large, maintain aspect ratio and compress if larger than 800px
+              if (
+                metadata.width > dimensions.maxWidth ||
+                metadata.height > dimensions.maxHeight
+              ) {
+                processedImage = image.resize(
+                  dimensions.maxWidth,
+                  dimensions.maxHeight,
+                  {
+                    fit: 'inside',
+                    withoutEnlargement: true,
+                  }
+                )
+              }
+            } else if (sizeName === 'thumbnail') {
+              // For thumbnail, resize to exact dimensions
+              processedImage = image.resize(dimensions.width, dimensions.height, {
+                fit: 'cover',
+              })
             }
-          } else if (sizeName === 'thumbnail') {
-            // For thumbnail, resize to exact dimensions
-            processedImage = image.resize(dimensions.width, dimensions.height, {
-              fit: 'cover',
-            })
           }
+
+          // For thumbnails and large versions, use JPEG compression for consistency and smaller file sizes
+          outputBuffer = await processedImage
+            .jpeg({ quality: 85, progressive: true })
+            .toBuffer()
+          outputMimeType = 'image/jpeg'
+          outputExtension = 'jpg'
+
+          const processedMetadata = await processedImage.metadata()
+          outputWidth = processedMetadata.width
+          outputHeight = processedMetadata.height
         }
 
-        // Convert to buffer with compression - always use JPEG for consistency
-        const buffer = await processedImage
-          .jpeg({ quality: 85, progressive: true })
-          .toBuffer()
-
-        const processedMetadata = await processedImage.metadata()
-
-        // Generate S3 key - always use .jpg extension since we're converting to JPEG
-        const fileName = `${model.project_id}_${rowId}_${sizeName}.jpg`
+        // Generate S3 key with appropriate extension
+        const fileName = `${model.project_id}_${rowId}_${sizeName}.${outputExtension}`
         const s3Key = `media_files/images/${model.project_id}/${rowId}/${fileName}`
 
         // Upload to S3 with correct MIME type
         const result = await s3Service.putObject(
           config.aws.defaultBucket,
           s3Key,
-          buffer,
-          'image/jpeg' // Always use image/jpeg since we're converting everything to JPEG
+          outputBuffer,
+          outputMimeType
         )
 
-        // Store clean S3-based metadata (no legacy fields like HASH, MAGIC, etc.)
+        // Store clean S3-based metadata
         json[sizeName] = {
           S3_KEY: s3Key,
           S3_ETAG: result.etag,
-          WIDTH: processedMetadata.width,
-          HEIGHT: processedMetadata.height,
-          FILESIZE: buffer.length,
-          MIMETYPE: 'image/jpeg', // Always JPEG since we convert everything
-          EXTENSION: 'jpg', // Always jpg since we convert everything
+          WIDTH: outputWidth,
+          HEIGHT: outputHeight,
+          FILESIZE: outputBuffer.length,
+          MIMETYPE: outputMimeType,
+          EXTENSION: outputExtension,
           PROPERTIES: {
-            height: processedMetadata.height,
-            width: processedMetadata.width,
-            mimetype: 'image/jpeg',
-            filesize: buffer.length,
+            height: outputHeight,
+            width: outputWidth,
+            mimetype: outputMimeType,
+            filesize: outputBuffer.length,
             version: sizeName,
           },
         }

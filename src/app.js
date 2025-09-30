@@ -23,6 +23,7 @@ import tntRouter from './routes/tnt-route.js'
 import schedulerService from './services/scheduler-service.js'
 import s3Router from './routes/s3-route.js'
 import { duplicationRequestRouter } from './routes/duplication-request-route.js'
+import apiServiceRouter from './routes/api-service-route.js'
 import { trackSession } from './lib/session-middleware.js'
 import { gracefulShutdown } from './controllers/analytics-controller.js'
 import loggingService from './services/logging-service.js'
@@ -65,6 +66,15 @@ app.get('/', (req, res) => {
   res.json({ message: 'The API service is alive!' })
 })
 
+// Health check endpoint for Docker health checks
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime() 
+  })
+})
+
 app.use('/media', express.static(config.media.directory))
 
 app.use('/auth', authRouter)
@@ -84,6 +94,7 @@ app.use('/scheduler', schedulerRouter)
 app.use('/s3', s3Router)
 app.use('/tnt', tntRouter)
 app.use('/duplication-requests', duplicationRequestRouter)
+app.use('/service', apiServiceRouter)
 
 // Initialize stats cache
 initializeCache().catch((error) => {

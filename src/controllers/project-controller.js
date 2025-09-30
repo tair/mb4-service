@@ -10,6 +10,7 @@ import * as projectStatsService from '../services/project-stats-service.js'
 import * as projectUserService from '../services/project-user-service.js'
 import * as mediaService from '../services/media-service.js'
 import { S3MediaUploader } from '../lib/s3-media-uploader.js'
+import { S3JournalCoverUploader } from '../lib/s3-journal-cover-uploader.js'
 import { SDDExporter } from '../lib/project-export/sdd-exporter.js'
 import s3Service from '../services/s3-service.js'
 import config from '../config.js'
@@ -100,7 +101,8 @@ export async function getProjects(req, res) {
 
 export async function getOverview(req, res) {
   const projectId = req.params.projectId
-  const userId = req.user?.user_id
+  const userId = req.credential?.user_id
+
   const summary = await projectService.getProject(projectId)
   // TODO(kenzley): Change this to output the media with the util/media.ts:getMedia method.
   const image_props = await mediaService.getImageProps(
@@ -125,6 +127,52 @@ export async function getOverview(req, res) {
     members,
   }
   res.status(200).json({ overview })
+}
+
+export async function refreshProjectStats(req, res) {
+  try {
+    const projectId = req.params.projectId
+    const userId = req.user?.user_id
+    
+    // Import the required classes
+    const { ProjectOverviewGenerator } = await import('../lib/project-overview-generator.js')
+    const { ProjectRecencyStatisticsGenerator } = await import('../lib/project-recency-generator.js')
+    
+    // Get project info
+    const [projects] = await sequelizeConn.query(
+      `SELECT project_id, user_id, published, publish_matrix_media_only, publish_inactive_members
+       FROM projects WHERE project_id = ?`,
+      { replacements: [projectId] }
+    )
+    
+    if (projects.length === 0) {
+      return res.status(404).json({ error: 'Project not found' })
+    }
+    
+    const project = projects[0]
+    
+    // Regenerate project overview stats
+    const overviewGenerator = new ProjectOverviewGenerator()
+    await overviewGenerator.generateStats(project)
+    
+    // Regenerate recent changes stats if user is provided
+    if (userId) {
+      const recencyGenerator = new ProjectRecencyStatisticsGenerator()
+      await recencyGenerator.generateStats(projectId)
+    }
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'Project statistics refreshed successfully',
+      project_id: projectId
+    })
+  } catch (error) {
+    console.error('Error refreshing project stats:', error)
+    res.status(500).json({ 
+      error: 'Failed to refresh project statistics',
+      message: error.message 
+    })
+  }
 }
 
 export async function setCopyright(req, res) {
@@ -315,6 +363,7 @@ export async function editProject(req, res, next) {
       disk_space_usage,
       publication_status,
       exemplar_media_id,
+      removeJournalCover,
     } = projectData
 
     // Only validate required fields if this is a full project update (not just exemplar media update)
@@ -462,46 +511,35 @@ export async function editProject(req, res, next) {
 
       // Handle journal cover upload
       if (journalCoverFile) {
-        mediaUploader = new S3MediaUploader(transaction, req.user)
+        const journalCoverUploader = new S3JournalCoverUploader(transaction, req.user)
 
-        // Create a new media file record for journal cover
-        const journalCoverMedia = await models.MediaFile.create(
-          {
-            project_id: project.project_id,
-            user_id: req.user.user_id,
-            notes: 'Journal cover image',
-            published: 0,
-            access: 0,
-            cataloguing_status: 0, // Journal covers should NOT go to curation
-            media_type: 'image',
-          },
-          {
-            transaction,
-            user: req.user,
+        try {
+          // Upload journal cover using new format
+          const journalCoverData = await journalCoverUploader.uploadJournalCover(
+            project.project_id,
+            journalCoverFile
+          )
+
+          // Update the project's journal_cover field with new format
+          project.journal_cover = {
+            filename: journalCoverData.filename,
+            ORIGINAL_FILENAME: journalCoverData.ORIGINAL_FILENAME,
+            migrated: journalCoverData.migrated,
+            migrated_at: journalCoverData.migrated_at
           }
-        )
 
-        // Process and upload the journal cover image
-        await mediaUploader.setMedia(
-          journalCoverMedia,
-          'media',
-          journalCoverFile
-        )
-
-        await journalCoverMedia.save({
-          transaction,
-          user: req.user,
-          shouldSkipLogChange: true,
-        })
-
-        // Update the project's journal_cover field (JSON field)
-        project.journal_cover = {
-          media_id: journalCoverMedia.media_id,
-          filename: journalCoverFile.originalname,
+          // Commit the journal cover uploader
+          journalCoverUploader.commit()
+        } catch (error) {
+          // Rollback journal cover upload on error
+          await journalCoverUploader.rollback()
+          throw error
         }
+      }
 
-        // Commit the media uploader
-        mediaUploader.commit()
+      // Handle journal cover removal
+      if (removeJournalCover && !journalCoverFile) {
+        project.journal_cover = null
       }
 
       // Handle exemplar media upload
@@ -873,6 +911,7 @@ export async function createProject(req, res, next) {
       description,
       disk_space_usage,
       publication_status,
+      removeJournalCover,
     } = projectData
 
     // Validate required fields
@@ -1007,46 +1046,35 @@ export async function createProject(req, res, next) {
 
       // Handle journal cover upload
       if (journalCoverFile) {
-        mediaUploader = new S3MediaUploader(transaction, req.user)
+        const journalCoverUploader = new S3JournalCoverUploader(transaction, req.user)
 
-        // Create a new media file record for journal cover
-        const journalCoverMedia = await models.MediaFile.create(
-          {
-            project_id: project.project_id,
-            user_id: req.user.user_id,
-            notes: 'Journal cover image',
-            published: 0,
-            access: 0,
-            cataloguing_status: 0, // Journal covers should NOT go to curation
-            media_type: 'image',
-          },
-          {
-            transaction,
-            user: req.user,
+        try {
+          // Upload journal cover using new format
+          const journalCoverData = await journalCoverUploader.uploadJournalCover(
+            project.project_id,
+            journalCoverFile
+          )
+
+          // Update the project's journal_cover field with new format
+          project.journal_cover = {
+            filename: journalCoverData.filename,
+            ORIGINAL_FILENAME: journalCoverData.ORIGINAL_FILENAME,
+            migrated: journalCoverData.migrated,
+            migrated_at: journalCoverData.migrated_at
           }
-        )
 
-        // Process and upload the journal cover image
-        await mediaUploader.setMedia(
-          journalCoverMedia,
-          'media',
-          journalCoverFile
-        )
-
-        await journalCoverMedia.save({
-          transaction,
-          user: req.user,
-          shouldSkipLogChange: true,
-        })
-
-        // Update the project's journal_cover field (JSON field)
-        project.journal_cover = {
-          media_id: journalCoverMedia.media_id,
-          filename: journalCoverFile.originalname,
+          // Commit the journal cover uploader
+          journalCoverUploader.commit()
+        } catch (error) {
+          // Rollback journal cover upload on error
+          await journalCoverUploader.rollback()
+          throw error
         }
+      }
 
-        // Commit the media uploader
-        mediaUploader.commit()
+      // Handle journal cover removal
+      if (removeJournalCover && !journalCoverFile) {
+        project.journal_cover = null
       }
 
       // Handle exemplar media upload
@@ -1178,6 +1206,7 @@ export async function retrieveDOI(req, res, next) {
       journal_number: data.issue || '',
       article_pp: data.page || '',
       journal_url: data.URL || `https://doi.org/${article_doi}`,
+      abstract: data.abstract || '',
     }
 
     res.json({

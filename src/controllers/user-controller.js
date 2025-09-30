@@ -293,4 +293,36 @@ async function createInstitution(req, res, next) {
   }
 }
 
-export { getUsers, signup, getProfile, updateProfile, searchInstitutions, checkProfileConfirmation, createInstitution }
+async function verifyAuthentication(req, res, next) {
+  try {
+    // If we reach this point, the authenticateToken middleware has validated the token
+    // and the user exists in the database (via authorizeUser middleware)
+    const user = await models.User.findByPk(req.credential.user_id, {
+      attributes: ['user_id', 'email', 'fname', 'lname', 'active', 'userclass']
+    })
+    
+    if (!user) {
+      return res.status(401).json({ message: 'User not found.' })
+    }
+
+    if (user.userclass == 255 /* deleted */ || user.active == false) {
+      return res.status(401).json({ message: 'User account is inactive.' })
+    }
+
+    res.status(200).json({
+      authenticated: true,
+      user_id: user.user_id,
+      email: user.email,
+      name: `${user.fname} ${user.lname}`.trim(),
+      message: 'Authentication verified'
+    })
+  } catch (error) {
+    console.error('Error verifying authentication:', error)
+    return res.status(500).json({ 
+      message: 'Error verifying authentication.',
+      error: error.message 
+    })
+  }
+}
+
+export { getUsers, signup, getProfile, updateProfile, searchInstitutions, checkProfileConfirmation, createInstitution, verifyAuthentication }

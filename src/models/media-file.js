@@ -272,7 +272,7 @@ export default class MediaFile extends Model {
   }
 
   static getSideRepresentation(isSided) {
-    const valueMap = ['not applicable', 'left side', 'left side']
+    const valueMap = ['not applicable', 'left side', 'right side', 'not entered']
     return valueMap[isSided]
   }
 

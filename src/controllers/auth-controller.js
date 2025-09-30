@@ -60,6 +60,8 @@ async function login(req, res, next) {
         res.cookie('authorization', `Bearer ${accessToken}`, {
           expires: new Date(expiry * 1000),
           httpOnly: true,
+          path: '/',
+          sameSite: 'lax',
         })
 
         // Log user login with session association
@@ -105,7 +107,7 @@ function logout(req, res) {
     )
   }
 
-  res.clearCookie('authorization')
+  res.clearCookie('authorization', { path: '/' })
   res.status(200).json({ message: 'Log out succeeded!' })
 }
 
@@ -372,6 +374,8 @@ async function authenticateORCID(req, res) {
         res.cookie('authorization', `Bearer ${accessToken}`, {
           expires: new Date(expiry * 1000),
           httpOnly: true,
+          path: '/',
+          sameSite: 'lax',
         })
 
         // Log user login with session association for ORCID authentication

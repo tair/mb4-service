@@ -178,12 +178,12 @@ export async function createMediaFiles(req, res) {
     return
   }
 
-  // Validate ZIP file size (max 100MB)
-  const maxZipSize = 100 * 1024 * 1024 // 100MB
+  // Validate ZIP file size (max 1GB)
+  const maxZipSize = 1024 * 1024 * 1024 // 1GB
   if (req.file.size > maxZipSize) {
     res.status(400).json({
       message:
-        'ZIP file is too large. Maximum size is 100MB. Please split your files into smaller archives.',
+        'ZIP file is too large. Maximum size is 1GB. Please split your files into smaller archives.',
     })
     return
   }
@@ -456,6 +456,11 @@ export async function deleteMediaFiles(req, res) {
 export async function editMediaFile(req, res) {
   const projectId = req.project.project_id
   const mediaId = req.params.mediaId
+  
+  // Set extended timeout for large media file uploads
+  req.setTimeout(1800000) // 30 minutes
+  res.setTimeout(1800000)
+  
   const media = await models.MediaFile.findByPk(mediaId)
   if (media == null || media.project_id != projectId) {
     res.status(404).json({ message: 'Media is not found' })
@@ -499,7 +504,33 @@ export async function editMediaFile(req, res) {
   try {
     // First upload the new file if present - this sets media field and triggers old file deletion
     if (req.file) {
-      await mediaUploader.setMedia(media, 'media', req.file)
+      // Detect if this is an image file or non-image file
+      const isImageFile = req.file.mimetype && req.file.mimetype.startsWith('image/')
+      
+      // For non-image files (3D models, videos, etc.), detect by extension if mimetype is not reliable
+      const extension = req.file.originalname.split('.').pop().toLowerCase()
+      const nonImageExtensions = ['ply', 'stl', 'obj', 'glb', 'gltf', 'fbx', 'mp4', 'mov', 'avi', 'webm', 'mkv', 'wmv', 'flv', 'm4v', 'zip']
+      const isNonImageByExtension = nonImageExtensions.includes(extension)
+      
+      if (isImageFile && !isNonImageByExtension) {
+        // Use image processing for actual image files
+        await mediaUploader.setMedia(media, 'media', req.file)
+        // Update media type to image if it was something else before
+        media.set('media_type', MEDIA_TYPES.IMAGE)
+      } else {
+        // Use non-image processing for 3D files, videos, ZIP files, etc.
+        await mediaUploader.setNonImageMedia(media, 'media', req.file)
+        
+        // Update media type based on the new file type
+        let newMediaType = MEDIA_TYPES.IMAGE // Default fallback
+        if (req.file.mimetype) {
+          newMediaType = convertMediaTypeFromMimeType(req.file.mimetype)
+        } else {
+          // Fallback to extension-based detection
+          newMediaType = convertMediaTypeFromExtension(req.file.originalname)
+        }
+        media.set('media_type', newMediaType)
+      }
     }
 
     // Then update all other fields
@@ -810,6 +841,13 @@ export async function editMediaFiles(req, res) {
   const projectId = req.project.project_id
   const mediaIds = req.body.media_ids
   const values = req.body.media
+
+  // Validate media_ids array
+  if (!mediaIds || !Array.isArray(mediaIds) || mediaIds.length === 0) {
+    return res.status(400).json({
+      message: 'media_ids must be a non-empty array',
+    })
+  }
 
   // Validate that we're not accidentally updating the media field
   if (values.media) {
@@ -1405,6 +1443,10 @@ export async function serveBatchMediaFiles(req, res) {
 export async function create3DMediaFile(req, res) {
   const projectId = req.params.projectId
 
+  // Set extended timeout for large 3D file uploads
+  req.setTimeout(1800000) // 30 minutes
+  res.setTimeout(1800000)
+
   const media = models.MediaFile.build(req.body)
 
   // Ensure that the specimen_id is within the same project.
@@ -1500,6 +1542,10 @@ export async function create3DMediaFile(req, res) {
 
 export async function createVideoMediaFile(req, res) {
   const projectId = req.params.projectId
+
+  // Set extended timeout for large video file uploads
+  req.setTimeout(1800000) // 30 minutes
+  res.setTimeout(1800000)
 
   if (!req.file) {
     res.status(400).json({ message: 'No video file provided' })
@@ -1642,6 +1688,10 @@ export async function createStacksMediaFile(req, res) {
   const projectId = req.params.projectId
   const values = req.body
 
+  // Set extended timeout for large stack/ZIP file uploads
+  req.setTimeout(1800000) // 30 minutes
+  res.setTimeout(1800000)
+
   // Don't create media if the zip file is missing.
   if (!req.file) {
     res.status(400).json({ message: 'No zip file in request' })
@@ -1666,12 +1716,12 @@ export async function createStacksMediaFile(req, res) {
     return
   }
 
-  // Validate ZIP file size (max 100MB)
-  const maxZipSize = 100 * 1024 * 1024 // 100MB
+  // Validate ZIP file size (max 1GB)
+  const maxZipSize = 1024 * 1024 * 1024 // 1GB
   if (req.file.size > maxZipSize) {
     res.status(400).json({
       message:
-        'ZIP file is too large. Maximum size is 100MB. Please split your files into smaller archives.',
+        'ZIP file is too large. Maximum size is 1GB. Please split your files into smaller archives.',
     })
     return
   }

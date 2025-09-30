@@ -18,14 +18,14 @@ services:
     #     networks:
     #         - shared_network
 
-    mb4-service-dev:
+    mb4-service-local:
         # depends_on:
         #     - mb4-db-dev
         build: 
             context: .
             target: dev-stage
-        image: mb4-service-dev:1.0
-        container_name: mb4-service-container-dev
+        image: mb4-service-local:1.0
+        container_name: mb4-service-container-local
         volumes:
             # bind volumes to local repository
             - .:/app

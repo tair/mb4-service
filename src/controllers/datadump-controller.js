@@ -116,7 +116,6 @@ async function dataDump(req, res) {
       JSON.stringify(projects, null, 2)
     )
     console.log('Dumped project list data - DONE!')
-
     utilService.createDir(`${dir}/${mediaDir}`)
     utilService.createDir(`${dir}/${detailDir}`)
 
@@ -150,11 +149,26 @@ async function dataDump(req, res) {
     const end = Date.now()
     let timeElapsed = (end - start) / 1000
     console.log(`Dump DONE in ${timeElapsed} seconds!`)
-
     res.status(200).json('done!')
   } catch (err) {
     console.error(`Error while dumping data. `, err.message)
     res.status(500).json({ message: 'Error while running dump process.' })
+  }
+}
+
+async function projectListDump(req, res) {
+  try {
+    console.log('Start dumping project list data...')
+    const projects = await projectsService.getProjects()
+    utilService.writeToFile(
+      `../${dir}/projects.json`,
+      JSON.stringify(projects, null, 2)
+    )
+    console.log('Dumped project list data - DONE!')
+    res.status(200).json('done!')
+  } catch (err) {
+    console.error(`Error while dumping project list data. `, err.message)
+    res.status(500).json({ message: 'Error while running project list dump process.' })
   }
 }
 
@@ -931,6 +945,7 @@ async function getSDDExportTaskStatus(req, res) {
 
 export {
   dataDump,
+  projectListDump,
   statsDump,
   projectStatsDump,
   projectSDDZipDump,

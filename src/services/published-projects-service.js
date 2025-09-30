@@ -1,7 +1,8 @@
 import sequelizeConn from '../util/db.js'
-import axios from 'axios'
 import * as mediaService from './media-service.js'
 import { getProjectStats } from './project-stats-service.js'
+import config from '../config.js'
+import s3Service from './s3-service.js'
 
 export async function getProjects() {
   const start = new Date().getTime()
@@ -45,43 +46,52 @@ async function getContinuousCharDict() {
 }
 
 async function setJournalCoverUrl(project) {
-  project.journal_cover_url = ''
-  const urlByTitle = getCoverUrlByJournalTitle(project.journal_title)
+  console.log('setting journal cover url for project', project.project_id)
+  project.journal_cover_path = ''
+  const pathByTitle = getCoverPathByJournalTitle(project.journal_title)
   delete project.journal_title
-  const urlByCover = getCoverUrlByJournalCover(project.journal_cover)
+  const pathByCover = getCoverUrlPathJournalCover(project.journal_cover)
   delete project.journal_cover
 
-  if (urlByTitle) {
+  if (pathByTitle) {
     try {
-      await axios.get(urlByTitle)
-      project.journal_cover_url = urlByTitle
-      return
+      const exists = await s3Service.objectExists(config.aws.defaultBucket, pathByTitle)
+      if (exists) {
+        project.journal_cover_path = `/s3/${pathByTitle}`
+        return
+      }
     } catch (e) {
+      console.log('error checking S3 object existence for urlByTitle', e)
       // do nothing
     }
   }
 
-  if (urlByCover) {
+  if (pathByCover) {
     try {
-      await axios.get(urlByCover)
-      project.journal_cover_url = urlByCover
-      return
+      const exists = await s3Service.objectExists(config.aws.defaultBucket, pathByCover)
+      if (exists) {
+        project.journal_cover_path = `/s3/${pathByCover}`
+        return
+      }
     } catch (e) {
+      console.log('error checking S3 object existence for urlByCover', e)
       // do nothing
     }
   }
 }
 
-function getCoverUrlByJournalCover(journalCover) {
+function getCoverUrlPathJournalCover(journalCover) {
   if (journalCover) {
-    const preview = journalCover.preview
-    const urlByCover = `https://morphobank.org/media/morphobank3/images/${preview.HASH}/${preview.MAGIC}_${preview.FILENAME}`
-    return urlByCover
+    // Check if it's the new migrated format
+    if (journalCover.filename && journalCover.migrated) {
+      const s3Key = `media_files/journal_covers/uploads/${journalCover.filename}`
+      return s3Key
+    }
   }
   return ''
 }
 
-function getCoverUrlByJournalTitle(journalTitle) {
+function getCoverPathByJournalTitle(journalTitle) {
   if (journalTitle) {
     const cleanTitle = journalTitle
       .replace(/\s/g, '_')
@@ -89,8 +99,8 @@ function getCoverUrlByJournalTitle(journalTitle) {
       .replace(/\./g, '')
       .replace(/&/g, 'and')
       .toLowerCase()
-    const urlByTitle = `https://morphobank.org/themes/default/graphics/journalIcons/${cleanTitle}.jpg`
-    return urlByTitle
+    const s3Key = `media_files/journal_covers/${cleanTitle}.jpg`
+    return s3Key
   }
   return ''
 }
@@ -100,7 +110,7 @@ export async function getProjectTitles() {
     SELECT project_id, name, article_authors, journal_year, journal_title, article_title
     FROM projects 
     WHERE published = 1 AND deleted = 0
-    ORDER BY name ASC`)
+    ORDER BY UPPER(COALESCE(NULLIF(TRIM(article_title), ''), name)) ASC`)
   return rows
 }
 
@@ -237,6 +247,74 @@ export async function getJournalsWithProjects() {
   return {
     chars: chars,
     journals: journals,
+  }
+}
+
+export async function getTitlesWithProjects() {
+  const [rows] = await sequelizeConn.query(`
+    SELECT
+      p.project_id,
+      p.name,
+      p.article_authors,
+      p.journal_year,
+      TRIM(p.journal_title) as journal_title,
+      p.article_title,
+      COALESCE(NULLIF(TRIM(p.article_title), ''), p.name) as display_title
+    FROM projects AS p
+    WHERE p.published = 1 AND p.deleted = 0`)
+
+  // Build array with sanitized sort keys
+  const items = rows.map((row) => {
+    const displayTitle = row.display_title || ''
+    // Remove HTML tags, normalize and strip diacritics, then keep only alphanumerics
+    const noTags = displayTitle.replace(/<[^>]*>/g, '')
+    const nfd = noTags.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    const alnumOnly = nfd.replace(/[^a-zA-Z0-9]/g, '')
+    const upper = alnumOnly.toUpperCase()
+    const sortKeyPrefixLen = 10
+    const sortKey = upper.substring(0, sortKeyPrefixLen)
+
+    return { row, displayTitle, sortKey }
+  })
+
+  // Sort by sanitized key, then by project_id to stabilize
+  items.sort((a, b) => {
+    if (a.sortKey < b.sortKey) return -1
+    if (a.sortKey > b.sortKey) return 1
+    return a.row.project_id - b.row.project_id
+  })
+
+  const titles = {}
+  const chars = []
+
+  for (const item of items) {
+    const row = item.row
+    const displayTitle = item.displayTitle
+    const firstChar = item.sortKey.charAt(0)
+
+    if (/[A-Z0-9]/.test(firstChar) && !chars.includes(firstChar)) {
+      chars.push(firstChar)
+    }
+
+    const project = {
+      id: row.project_id,
+      name: row.name,
+      article_authors: row.article_authors,
+      journal_year: row.journal_year,
+      journal_title: row.journal_title,
+      article_title: row.article_title,
+    }
+
+    if (!titles[displayTitle]) {
+      titles[displayTitle] = [project]
+    } else {
+      titles[displayTitle].push(project)
+    }
+  }
+
+  return {
+    chars: chars,
+    titles: titles,
   }
 }
 

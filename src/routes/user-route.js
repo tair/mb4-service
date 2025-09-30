@@ -26,5 +26,10 @@ userRouter.post(
   authenticateToken,
   userController.createInstitution
 )
+userRouter.get(
+  '/verify-authentication',
+  authenticateToken,
+  userController.verifyAuthentication
+)
 
 export default userRouter
