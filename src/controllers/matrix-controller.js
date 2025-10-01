@@ -78,10 +78,15 @@ export async function getMatrices(req, res) {
       userId > 0
         ? await CipresRequestService.getCipresJobs(matrixIds, userId)
         : null
+    
+    // Check if user has edit permission (handles observers, character annotators, etc.)
+    // Curators and admins will have 'edit' permission from authorizeProject
+    const canEditMatrix = req.project?.permissions?.includes('edit') || false
+    
     const data = {
       matrices,
       partitions,
-      canEditMatrix: true,
+      canEditMatrix,
       jobs,
     }
     res.status(200).json(data)
