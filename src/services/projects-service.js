@@ -90,14 +90,19 @@ export async function validateProjectSDDAccess(
   let hasAccess = project.published === 1
 
   if (!hasAccess && userId) {
-    // Check if user has access to the project
-    const projectUser = await models.ProjectsXUser.findOne({
-      where: {
-        project_id: projectId,
-        user_id: userId,
-      },
-    })
-    hasAccess = !!projectUser
+    // Check if user is the project owner
+    if (project.user_id === userId) {
+      hasAccess = true
+    } else {
+      // Check if user is a member of the project
+      const projectUser = await models.ProjectsXUser.findOne({
+        where: {
+          project_id: projectId,
+          user_id: userId,
+        },
+      })
+      hasAccess = !!projectUser
+    }
   }
 
   if (!hasAccess) {
