@@ -1,6 +1,7 @@
 import express from 'express'
 import * as controller from '../controllers/bibliography-controller.js'
 import fileUpload from 'express-fileupload'
+import { requireEntityEditPermission, EntityType } from '../lib/auth-middleware.js'
 
 const bibliographyRouter = express.Router({ mergeParams: true })
 
@@ -14,15 +15,15 @@ bibliographyRouter.use(
 )
 
 bibliographyRouter.get('/', controller.getBibliographies)
-bibliographyRouter.post('/create', controller.createBibliographies)
-bibliographyRouter.post('/delete', controller.deleteBibliographies)
-bibliographyRouter.post('/edit', controller.editBibliographies)
+bibliographyRouter.post('/create', requireEntityEditPermission(EntityType.BIBLIOGRAPHY), controller.createBibliographies)
+bibliographyRouter.post('/delete', requireEntityEditPermission(EntityType.BIBLIOGRAPHY), controller.deleteBibliographies)
+bibliographyRouter.post('/edit', requireEntityEditPermission(EntityType.BIBLIOGRAPHY), controller.editBibliographies)
 bibliographyRouter.post('/search', controller.search)
 bibliographyRouter.post('/check-citations', controller.checkCitations)
-bibliographyRouter.post('/upload', controller.uploadEndNoteXML)
+bibliographyRouter.post('/upload', requireEntityEditPermission(EntityType.BIBLIOGRAPHY), controller.uploadEndNoteXML)
 bibliographyRouter.get('/export', controller.exportEndNoteAsTabFile)
 
 bibliographyRouter.get('/:referenceId', controller.getBibliography)
-bibliographyRouter.post('/:referenceId/edit', controller.editBibliography)
+bibliographyRouter.post('/:referenceId/edit', requireEntityEditPermission(EntityType.BIBLIOGRAPHY), controller.editBibliography)
 
 export default bibliographyRouter
