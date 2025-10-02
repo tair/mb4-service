@@ -3,6 +3,7 @@ import * as specimenService from '../services/specimen-service.js'
 import * as taxaService from '../services/taxa-service.js'
 import { models } from '../models/init-models.js'
 import { getTaxonHash } from '../models/taxon.js'
+import { TAXA_FIELD_NAMES } from '../util/taxa.js'
 import {
   ModelRefencialMapper,
   ModelReferencialConfig,
@@ -88,6 +89,15 @@ export async function createSpecimens(req, res) {
     // referenced later.
     const hashes = []
     for (const [key, values] of Object.entries(req.body.taxa)) {
+      // Skip taxa that have no taxonomic values at all
+      const hasTaxonomy = TAXA_FIELD_NAMES.some((field) => {
+        const v = values[field]
+        return v !== undefined && String(v).trim() !== ''
+      })
+      if (!hasTaxonomy) {
+        continue
+      }
+
       const taxon = models.Taxon.build(values)
       const hash = getTaxonHash(taxon)
       taxon.set({
@@ -126,6 +136,23 @@ export async function createSpecimens(req, res) {
       }
     }
 
+    // Validate: all specimens must resolve to a taxon hash that exists in taxaMap
+    // (taxaMap only contains taxa that passed taxonomy checks)
+    const invalidSpecimens = []
+    for (const s of req.body.specimens) {
+      if (!s.taxon_hash || !taxaMap.has(s.taxon_hash)) {
+        invalidSpecimens.push(s)
+      }
+    }
+    if (invalidSpecimens.length > 0) {
+      await transaction.rollback()
+      return res.status(400).json({
+        message:
+          'Each specimen must include taxonomic data sufficient to create or match a taxon.',
+        invalid_specimens: invalidSpecimens.length,
+      })
+    }
+
     for (const values of req.body.specimens) {
       const specimen = models.Specimen.build(values)
       specimen.set({
@@ -137,7 +164,7 @@ export async function createSpecimens(req, res) {
         user: req.user,
       })
       let taxonId = undefined
-      if (values.taxon_hash) {
+      if (values.taxon_hash && taxaMap.has(values.taxon_hash)) {
         taxonId = taxaMap.get(values.taxon_hash).taxon_id
         await models.TaxaXSpecimen.create(
           {
