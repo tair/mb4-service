@@ -2,6 +2,7 @@ import { CharacterRulesTextExporter } from '../lib/matrix-export/character-rules
 import { CharacterTextExporter } from '../lib/matrix-export/character-text-exporter.js'
 import { ExportOptions } from '../lib/matrix-export/exporter.js'
 import { NexusExporter } from '../lib/matrix-export/nexus-exporter.js'
+import { NexusCipresExporter } from '../lib/matrix-export/nexus-cipres-exporter.js'
 import { NeXMLExporter } from '../lib/matrix-export/nexml-exporter.js'
 import { TNTExporter } from '../lib/matrix-export/tnt-exporter.js'
 import {
@@ -545,7 +546,7 @@ export async function run(req, res) {
 
   const filename = `mbank_X${matrixId}_${userId}_${req.query.jobName}.zip`
   let fileContent = ''
-  let exporter = new NexusExporter((txt) => (fileContent = fileContent + txt))
+  let exporter = new NexusCipresExporter((txt) => (fileContent = fileContent + txt))
 
   exporter.export(options)
   /*

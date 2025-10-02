@@ -3,7 +3,7 @@ import { getTaxonName } from '../../util/taxa.js'
 
 const SYMBOLS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
-export class NexusExporter extends Exporter {
+export class NexusCipresExporter extends Exporter {
   constructor(writeFunction) {
     super(writeFunction)
   }
@@ -30,11 +30,13 @@ export class NexusExporter extends Exporter {
     let currentTaxaIndex = 0
     for (const taxon of taxa) {
       const taxonId = parseInt(taxon.taxon_id)
-      const name = this.cleanName(getTaxonName(taxon, null, false, false))
+      const name = this
+        .cleanName(getTaxonName(taxon, null, false, false))
+        .replace(/\s+/g, '_')
       taxaIndicesMap.set(taxonId, ++currentTaxaIndex)
       taxaNameMap.set(taxonId, name)
 
-      this.writeLine(`\t\t'${name}'`)
+      this.writeLine(`\t\t${name}`)
       if (maxTaxonNameLength < name.length) {
         maxTaxonNameLength = name.length
       }
@@ -59,63 +61,24 @@ export class NexusExporter extends Exporter {
 
     const statesMap = new Map()
     const characterIndicesMap = new Map()
-    if (useCharacterStateLabels) {
-      this.writeLine('\tCHARSTATELABELS')
-      for (let i = 0, l = characters.length; i < l; ++i) {
-        const character = characters[i]
-        const characterId = parseInt(character.character_id)
-        characterIndicesMap.set(characterId, i + 1)
-        const characterName = this.cleanName(character.name)
-        this.write(`\t\t${i + 1} '${characterName}'`)
-        if (characters.states) {
-          this.write(' /')
-          for (const state of character.states) {
-            const stateId = parseInt(state.state_id)
-            statesMap.set(stateId, state)
-            const stateName = this.cleanText(state.name)
-            this.write(` '${stateName}'`)
-          }
-        }
-        if (i - 1 < l) {
-          this.writeLine(',')
+    // Build indices internally without emitting character/state labels
+    for (let i = 0, l = characters.length; i < l; ++i) {
+      const character = characters[i]
+      const characterId = parseInt(character.character_id)
+      characterIndicesMap.set(characterId, i + 1)
+      if (character.states) {
+        for (const state of character.states) {
+          const stateId = parseInt(state.state_id)
+          statesMap.set(stateId, state)
         }
       }
-      this.writeLine('\t;')
-    } else {
-      this.writeLine('\tCHARLABELS')
-      for (let i = 0, l = characters.length; i < l; ++i) {
-        const character = characters[i]
-        const characterId = parseInt(character.character_id)
-        characterIndicesMap.set(characterId, i + 1)
-        const characterName = this.cleanName(character.name)
-        this.writeLine(`\t\t[${i + 1}] '${characterName}'`)
-      }
-      this.writeLine('\t;')
-
-      this.writeLine('\tSTATELABELS')
-      for (let i = 0, l = characters.length; i < l; ++i) {
-        this.writeLine(`\t\t${i + 1}`)
-        const character = characters[i]
-        if (character.states) {
-          for (const state of character.states) {
-            const stateId = parseInt(state.state_id)
-            statesMap.set(stateId, state)
-            const stateName = this.cleanText(state.name)
-            this.writeLine(`\t\t\t'${stateName}'`)
-          }
-        }
-        if (i - 1 < l) {
-          this.writeLine('\t\t\t,')
-        }
-      }
-      this.writeLine('\t;')
     }
 
     this.writeLine('\tMATRIX')
     for (const taxon of taxa) {
       const taxonId = parseInt(taxon.taxon_id)
       const taxonName = taxaNameMap.get(taxonId)
-      this.write(`\t'${taxonName}' `)
+      this.write(`\t${taxonName} `)
       this.write(' '.repeat(maxTaxonNameLength + 5 - taxonName.length))
       for (const character of characters) {
         if (isMeristic) {
