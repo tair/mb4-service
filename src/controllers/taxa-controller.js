@@ -6,6 +6,7 @@ import * as partitionService from '../services/partition-service.js'
 import * as taxaService from '../services/taxa-service.js'
 import { models } from '../models/init-models.js'
 import { getTaxonHash } from '../models/taxon.js'
+import { TAXA_FIELD_NAMES } from '../util/taxa.js'
 import {
   ModelRefencialMapper,
   ModelReferencialConfig,
@@ -49,6 +50,17 @@ export async function getTaxa(req, res) {
 
 export async function createTaxon(req, res) {
   const values = req.body
+
+  // Validate: require at least one taxonomic field
+  const hasTaxonomicField = TAXA_FIELD_NAMES.some((field) => {
+    const v = values[field]
+    return v !== undefined && String(v).trim() !== ''
+  })
+  if (!hasTaxonomicField) {
+    return res
+      .status(400)
+      .json({ message: 'At least one taxonomic field must be provided.' })
+  }
   const taxon = models.Taxon.build(values)
 
   taxon.set({
@@ -79,6 +91,24 @@ export async function createTaxa(req, res) {
   const projectId = req.project.project_id
 
   try {
+    // Validate each taxon: must have at least one taxonomic field
+    const invalid = Array.isArray(taxa)
+      ? taxa.filter(
+          (values) =>
+            !TAXA_FIELD_NAMES.some((field) => {
+              const v = values[field]
+              return v !== undefined && String(v).trim() !== ''
+            })
+        )
+      : []
+    if (invalid.length > 0) {
+      return res.status(400).json({
+        message:
+          'Each taxon must include at least one taxonomic field. Found entries with no taxonomic data.',
+        invalid_count: invalid.length,
+      })
+    }
+
     const results = []
     const transaction = await sequelizeConn.transaction()
 
