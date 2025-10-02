@@ -19,6 +19,11 @@ export async function getSpecimens(req, res) {
 export async function createSpecimen(req, res) {
   const columnValues = req.body.specimen
   const taxonId = columnValues.taxon_id
+  // Enforce required taxon_id
+  if (!taxonId) {
+    res.status(400).json({ message: 'taxon_id is required' })
+    return
+  }
   if (taxonId) {
     const taxon = await models.Taxon.findByPk(taxonId)
     if (taxon.project_id != req.project.project_id) {
@@ -275,6 +280,11 @@ export async function editSpecimen(req, res) {
   }
 
   const values = req.body.specimen
+  // Enforce required taxon_id on update
+  if (!values.taxon_id) {
+    res.status(400).json({ message: 'taxon_id is required' })
+    return
+  }
   for (const column in values) {
     specimen.set(column, values[column])
   }
