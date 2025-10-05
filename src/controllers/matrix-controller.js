@@ -20,6 +20,9 @@ import fs from 'fs'
 import axios from 'axios'
 import FormData from 'form-data'
 import { getRoles } from '../services/user-roles-service.js'
+import * as taskQueueService from '../services/task-queue-service.js'
+import path from 'path'
+import config from '../config.js'
 
 export async function getMatrices(req, res) {
   const projectId = parseInt(req.params.projectId)
@@ -35,7 +38,7 @@ export async function getMatrices(req, res) {
 
     const userId = req.user?.user_id || 0
     const projectUser =
-      req.project?.user ??
+      req.project?.user ||
       (await models.ProjectsXUser.findOne({
         where: {
           user_id: userId,
@@ -379,28 +382,73 @@ export async function uploadMatrix(req, res) {
 
   try {
     const projectId = req.params.projectId
-    const matrix = JSON.parse(serializedMatrix)
-    const results = matrixId
-      ? await mergeMatrix(
-          matrixId,
-          req.body.notes || '',
-          req.body.itemNotes || '',
-          req.user,
-          matrix,
-          file
-        )
-      : await importMatrix(
-          title,
-          req.body.notes || '',
-          req.body.itemNotes || '',
-          req.body.otu,
-          req.body.published,
-          req.user,
-          projectId,
-          matrix,
-          file
-        )
-    res.status(200).json({ status: true, results })
+    const matrixObj = null // avoid storing huge JSON in task parameters
+
+    // Enqueue async task to avoid proxy timeouts for large uploads
+    const transaction = await sequelizeConn.transaction()
+    try {
+      // Persist uploaded file to a durable temp location for background processing
+      const tmpBaseDir = path.join(
+        config.media.directory,
+        config.app.name,
+        'tmp',
+        'matrix_uploads'
+      )
+      await fs.promises.mkdir(tmpBaseDir, { recursive: true })
+      const timestamp = Date.now()
+      const safeOriginal = (file.originalname || 'upload').replace(/[^a-zA-Z0-9_.-]/g, '_')
+      const destFilePath = path.join(tmpBaseDir, `${timestamp}_${safeOriginal}`)
+      try {
+        await fs.promises.rename(file.path, destFilePath)
+      } catch (renameErr) {
+        await fs.promises.copyFile(file.path, destFilePath)
+      }
+
+      // Persist the large matrix JSON to a temp file as well
+      const jsonPath = path.join(tmpBaseDir, `${timestamp}_${req.user.user_id}.json`)
+      await fs.promises.writeFile(jsonPath, serializedMatrix, 'utf8')
+
+      const task = await models.TaskQueue.create(
+        {
+          user_id: req.user.user_id,
+          priority: 300,
+          completed_on: null,
+          handler: 'MatrixImport',
+          parameters: {
+            projectId: parseInt(projectId),
+            userId: req.user.user_id,
+            title,
+            notes: req.body.notes || '',
+            itemNotes: req.body.itemNotes || '',
+            otu: req.body.otu,
+            published: req.body.published,
+            matrixId: matrixId ? parseInt(matrixId) : null,
+            // Pass paths instead of massive JSON objects
+            matrixJsonPath: jsonPath,
+            filePath: destFilePath,
+            originalname: file.originalname,
+            mimetype: file.mimetype,
+            size: file.size,
+          },
+        },
+        { transaction, user: req.user }
+      )
+      await transaction.commit()
+
+      // Kick off background processing (non-blocking)
+      taskQueueService.processTasks().catch(() => {})
+
+      return res.status(202).json({
+        success: true,
+        message: 'Matrix upload queued',
+        taskId: task.task_id,
+        status: 'queued',
+        statusUrl: `/api/tasks/${task.task_id}/status`,
+      })
+    } catch (err) {
+      await transaction.rollback()
+      throw err
+    }
   } catch (e) {
     console.log('Matrix not imported correctly', e)
     

@@ -156,9 +156,9 @@ export async function bulkInsertCellsOptimized(cells, matrixId, userId) {
       const taxonId = cell.taxon_id || 'NULL'
       const stateId = cell.state_id || 'NULL'
       const uncertain = cell.is_uncertain ? 1 : 0
-      const notes = cell.notes ? `'${cell.notes.replace(/'/g, "''")}'` : 'NULL'
+      // Notes are stored in cell_notes table, not in cells
       
-      return `(${matrixId}, ${charId}, ${taxonId}, ${stateId}, ${uncertain}, ${notes}, ${userId}, 0, ${timestamp}, ${timestamp})`
+      return `(${matrixId}, ${charId}, ${taxonId}, ${stateId}, ${uncertain}, ${userId}, 0, ${timestamp}, ${timestamp})`
     }).join(',')
     
     chunks.push(values)
@@ -169,7 +169,7 @@ export async function bulkInsertCellsOptimized(cells, matrixId, userId) {
     await withBatchedTransaction(async (transaction) => {
       await sequelizeConn.query(
         `INSERT INTO cells 
-         (matrix_id, character_id, taxon_id, state_id, is_uncertain, notes, user_id, access, created_on, last_modified_on)
+         (matrix_id, character_id, taxon_id, state_id, is_uncertain, user_id, access, created_on, last_modified_on)
          VALUES ${valueChunk}
          ON DUPLICATE KEY UPDATE
            state_id = VALUES(state_id),
