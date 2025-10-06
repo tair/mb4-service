@@ -44,6 +44,8 @@ services:
       target: runner           # <-- production runner stage from Dockerfile2
     image: mb4-service:1.0
     container_name: mb4-service-container-prod
+    environment:
+      - MEDIA_DIRECTORY=/home/node/media  # media directory, for prod no root access
     env_file:
       - ./.env                 # prod env vars (or .env.prod)
     ports:

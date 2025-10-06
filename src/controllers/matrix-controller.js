@@ -2,6 +2,7 @@ import { CharacterRulesTextExporter } from '../lib/matrix-export/character-rules
 import { CharacterTextExporter } from '../lib/matrix-export/character-text-exporter.js'
 import { ExportOptions } from '../lib/matrix-export/exporter.js'
 import { NexusExporter } from '../lib/matrix-export/nexus-exporter.js'
+import { NexusCipresExporter } from '../lib/matrix-export/nexus-cipres-exporter.js'
 import { NeXMLExporter } from '../lib/matrix-export/nexml-exporter.js'
 import { TNTExporter } from '../lib/matrix-export/tnt-exporter.js'
 import {
@@ -78,10 +79,15 @@ export async function getMatrices(req, res) {
       userId > 0
         ? await CipresRequestService.getCipresJobs(matrixIds, userId)
         : null
+    
+    // Check if user has edit permission (handles observers, character annotators, etc.)
+    // Curators and admins will have 'edit' permission from authorizeProject
+    const canEditMatrix = req.project?.permissions?.includes('edit') || false
+    
     const data = {
       matrices,
       partitions,
-      canEditMatrix: true,
+      canEditMatrix,
       jobs,
     }
     res.status(200).json(data)
@@ -397,7 +403,33 @@ export async function uploadMatrix(req, res) {
     res.status(200).json({ status: true, results })
   } catch (e) {
     console.log('Matrix not imported correctly', e)
-    res.status(400).json({ message: 'Matrix not imported correctly' })
+    
+    // Provide more specific error messages
+    if (e.code === 'ER_LOCK_WAIT_TIMEOUT' || e.parent?.code === 'ER_LOCK_WAIT_TIMEOUT') {
+      res.status(500).json({ 
+        message: 'The database was busy processing other operations. Please try uploading again.',
+        code: 'DB_LOCK_TIMEOUT',
+        retry: true
+      })
+    } else if (e.code === 'ECONNRESET' || e.parent?.code === 'ECONNRESET') {
+      res.status(500).json({ 
+        message: 'Database connection was lost. Please try again.',
+        code: 'DB_CONNECTION_ERROR',
+        retry: true
+      })
+    } else if (e.name === 'SequelizeDatabaseError') {
+      res.status(500).json({ 
+        message: 'A database error occurred. Please try again or contact support if the issue persists.',
+        code: 'DB_ERROR',
+        retry: true
+      })
+    } else {
+      res.status(400).json({ 
+        message: e.message || 'Matrix not imported correctly',
+        code: 'IMPORT_ERROR',
+        retry: false
+      })
+    }
   }
 }
 
@@ -514,7 +546,7 @@ export async function run(req, res) {
 
   const filename = `mbank_X${matrixId}_${userId}_${req.query.jobName}.zip`
   let fileContent = ''
-  let exporter = new NexusExporter((txt) => (fileContent = fileContent + txt))
+  let exporter = new NexusCipresExporter((txt) => (fileContent = fileContent + txt))
 
   exporter.export(options)
   /*
