@@ -61,6 +61,9 @@ const config = {
     username: process.env.CIPRES_USERNAME,
     password: process.env.CIPRES_PASSWORD,
   },
+  curator: {
+    url: process.env.CURATOR_API_URL || 'http://localhost:8001',
+  },
 }
 
 export default config
