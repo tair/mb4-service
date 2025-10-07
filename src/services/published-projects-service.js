@@ -46,7 +46,7 @@ async function getContinuousCharDict() {
 }
 
 async function setJournalCoverUrl(project) {
-  console.log('setting journal cover url for project', project.project_id)
+  // console.log('setting journal cover url for project', project.project_id)
   project.journal_cover_path = ''
   const pathByTitle = getCoverPathByJournalTitle(project.journal_title)
   delete project.journal_title
@@ -55,7 +55,10 @@ async function setJournalCoverUrl(project) {
 
   if (pathByTitle) {
     try {
-      const exists = await s3Service.objectExists(config.aws.defaultBucket, pathByTitle)
+      const exists = await s3Service.objectExists(
+        config.aws.defaultBucket,
+        pathByTitle
+      )
       if (exists) {
         project.journal_cover_path = `/s3/${pathByTitle}`
         return
@@ -68,7 +71,10 @@ async function setJournalCoverUrl(project) {
 
   if (pathByCover) {
     try {
-      const exists = await s3Service.objectExists(config.aws.defaultBucket, pathByCover)
+      const exists = await s3Service.objectExists(
+        config.aws.defaultBucket,
+        pathByCover
+      )
       if (exists) {
         project.journal_cover_path = `/s3/${pathByCover}`
         return
