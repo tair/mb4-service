@@ -668,6 +668,7 @@ export async function run(req, res) {
     if (req.query.mrbayesblockquery == '0') {
       if (req.query.set_outgroup != null)
         formData2 = {
+          'vparam.datatype_': 'standard',
           'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
           'vparam.set_outgroup_': req.query.set_outgroup,
           'vparam.ngenval_': req.query.ngenval,
@@ -680,6 +681,7 @@ export async function run(req, res) {
         }
       else
         formData2 = {
+          'vparam.datatype_': 'standard',
           'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
           'vparam.ngenval_': req.query.ngenval,
           'vparam.nrunsval_': req.query.nrunsval,
