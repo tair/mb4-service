@@ -6,7 +6,7 @@ Published Media Count: $published_media_count
 
 A project has been successfully published on MorphoBank. Please review and process as needed.
 
-View Project: https://www.morphobank.org/myprojects/$project_id/overview
+View Project: $FRONTEND_URL/myprojects/$project_id/overview
 
 MorphoBank Administration
 
