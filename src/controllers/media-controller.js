@@ -1440,6 +1440,109 @@ export async function serveBatchMediaFiles(req, res) {
   }
 }
 
+/**
+ * Get pre-signed URL for video file from S3
+ * GET /projects/:projectId/video-url/:mediaId?download=true
+ */
+export async function getMediaVideoUrl(req, res) {
+  try {
+    const { projectId, mediaId } = req.params
+    const { download } = req.query // Check if this is for download
+
+    // Get media file info from database
+    const [mediaRows] = await sequelizeConn.query(
+      `SELECT media_id, media FROM media_files WHERE project_id = ? AND media_id = ?`,
+      { replacements: [projectId, mediaId] }
+    )
+
+    if (!mediaRows || mediaRows.length === 0) {
+      return res.status(404).json({
+        error: 'Media not found',
+        message: 'The requested media file does not exist',
+      })
+    }
+
+    const mediaData = mediaRows[0].media
+
+    // Check if this is a video file by looking at the original file's MIMETYPE
+    if (!mediaData || !mediaData.original) {
+      return res.status(404).json({
+        error: 'Media data not found',
+        message: 'The media file does not have original data',
+      })
+    }
+
+    const originalMedia = mediaData.original
+    const mimeType = originalMedia.MIMETYPE || ''
+
+    // Validate that this is a video file
+    if (!mimeType.startsWith('video/')) {
+      return res.status(400).json({
+        error: 'Invalid media type',
+        message: 'This endpoint only supports video files',
+      })
+    }
+
+    // Get original filename for download
+    const originalFilename = mediaData.ORIGINAL_FILENAME || `video_${mediaId}.mp4`
+
+    // Get S3 key for original video
+    let s3Key
+    if (originalMedia.S3_KEY || originalMedia.s3_key) {
+      // New S3-based system - handle both uppercase and lowercase
+      s3Key = originalMedia.S3_KEY || originalMedia.s3_key
+    } else if (originalMedia.FILENAME) {
+      // Legacy local file system - construct S3 key
+      const fileExtension = originalMedia.FILENAME.split('.').pop() || 'mp4'
+      const fileName = `${projectId}_${mediaId}_original.${fileExtension}`
+      s3Key = `media_files/images/${projectId}/${mediaId}/${fileName}`
+    } else {
+      return res.status(404).json({
+        error: 'Invalid media data',
+        message: 'Media data is missing file information',
+      })
+    }
+
+    // Use default bucket from config
+    const bucket = config.aws.defaultBucket
+
+    if (!bucket) {
+      return res.status(500).json({
+        error: 'Configuration error',
+        message: 'Default S3 bucket not configured',
+      })
+    }
+
+    // Generate pre-signed URL options
+    const urlOptions = {}
+    
+    // If download=true, add Content-Disposition header to force download
+    if (download === 'true') {
+      // Sanitize filename for Content-Disposition header
+      const safeFilename = originalFilename.replace(/[^\w\s.-]/g, '_')
+      urlOptions.responseContentDisposition = `attachment; filename="${safeFilename}"`
+    }
+
+    // Generate pre-signed URL (valid for 1 hour)
+    const signedUrl = await s3Service.getSignedUrl(bucket, s3Key, 3600, urlOptions)
+
+    res.json({
+      success: true,
+      url: signedUrl,
+      expiresIn: 3600,
+      mediaId: parseInt(mediaId),
+      projectId: parseInt(projectId),
+      filename: originalFilename,
+    })
+  } catch (error) {
+    console.error('Video URL generation error:', error.message)
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to generate video URL',
+    })
+  }
+}
+
 export async function create3DMediaFile(req, res) {
   const projectId = req.params.projectId
 
