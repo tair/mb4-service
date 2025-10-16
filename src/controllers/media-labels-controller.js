@@ -142,7 +142,10 @@ export async function editMediaLabels(req, res) {
       ty: properties.ty,
       tw: properties.tw,
       th: properties.th,
-      showDefaultText: properties.showDefaultText,
+      showDefaultText: properties.showDefaultText == 1 || 
+                       properties.showDefaultText === true || 
+                       properties.showDefaultText === '1' ||
+                       properties.showDefaultText === 'true' ? 1 : 0,
       locked: 0,
     }
     switch (properties.type) {

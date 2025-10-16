@@ -283,6 +283,14 @@ export async function createMatrix(req, res) {
     return
   }
 
+  // Prevent Matrix Scorers from creating new matrices
+  if (req.project?.user?.membership_type === 2) {
+    res.status(403).json({ 
+      message: 'Matrix Scorers cannot create new matrices. Please contact a project administrator.' 
+    })
+    return
+  }
+
   const projectId = req.params.projectId
   let transaction
 
@@ -365,6 +373,15 @@ export async function uploadMatrix(req, res) {
     res.status(400).json({ message: 'Title was not defined' })
     return
   }
+
+  // Prevent Matrix Scorers from creating new matrices (uploading to existing is OK)
+  if (!matrixId && req.project?.user?.membership_type === 2) {
+    res.status(403).json({ 
+      message: 'Matrix Scorers cannot create new matrices. Please contact a project administrator.' 
+    })
+    return
+  }
+
   const file = req.file
   if (!file) {
     res.status(400).json({ message: 'File must be included' })
