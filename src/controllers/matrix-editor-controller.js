@@ -741,6 +741,7 @@ export async function sync(req, res) {
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Connection', 'keep-alive')
   res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('X-Accel-Buffering', 'no') // Disable nginx buffering for SSE
 
   const matrixId = parseInt(req.params.matrixId)
   const client = {
@@ -753,7 +754,19 @@ export async function sync(req, res) {
   const clientId = clients.add(matrixId, client)
   const data = { client_id: clientId }
   res.write(`event: init\ndata: ${JSON.stringify(data)}\n\n`)
+  
+  // Send keepalive comments every 30 seconds to prevent connection timeout 
+  // and accidentally logout in UI
+  const keepaliveInterval = setInterval(() => {
+    try {
+      res.write(': keepalive\n\n')
+    } catch (e) {
+      clearInterval(keepaliveInterval)
+    }
+  }, 30000) // 30 seconds
+  
   req.on('close', () => {
+    clearInterval(keepaliveInterval)
     clients.remove(matrixId, clientId)
   })
 }
