@@ -7262,4 +7262,5 @@ const CHARACTER_ANNOTATOR_CAPABILITIES = [
   'addTaxonMedia',
   'deleteTaxonMedia',
   'editPartition',
+  'setMatrixOptions',
 ]
