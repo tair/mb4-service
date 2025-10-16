@@ -7258,6 +7258,7 @@ const CHARACTER_ANNOTATOR_CAPABILITIES = [
   'deleteCharacterCitation',
   'editCellData',
   'editTaxon',
+  'addTaxon',
   'addTaxonMedia',
   'deleteTaxonMedia',
   'editPartition',

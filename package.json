@@ -24,6 +24,7 @@
     "@aws-sdk/client-s3": "^3.828.0",
     "@aws-sdk/client-ses": "^3.382.0",
     "@aws-sdk/node-http-handler": "^3.374.0",
+    "@aws-sdk/s3-request-presigner": "^3.911.0",
     "archiver": "^7.0.1",
     "axios": "^1.12.2",
     "bcrypt": "^5.1.1",
