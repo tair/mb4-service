@@ -1,11 +1,13 @@
 import {
   S3Client,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   DeleteObjectCommand,
   CopyObjectCommand,
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import config from '../config.js'
 
 class S3Service {
@@ -50,6 +52,16 @@ class S3Service {
         contentLength: response.ContentLength,
       }
     } catch (error) {
+      // Don't log verbose errors for expected "not found" cases
+      if (
+        error.name === 'NoSuchKey' ||
+        error.name === 'NotFound' ||
+        error.$metadata?.httpStatusCode === 404
+      ) {
+        throw new Error(`Object not found: ${error.message}`)
+      }
+
+      // Log other unexpected errors
       console.error('S3 Service Error:', error)
       throw new Error(`Failed to get object from S3: ${error.message}`)
     }
@@ -63,7 +75,7 @@ class S3Service {
    */
   async objectExists(bucketName, key) {
     try {
-      const command = new GetObjectCommand({
+      const command = new HeadObjectCommand({
         Bucket: bucketName,
         Key: key,
       })
@@ -73,10 +85,12 @@ class S3Service {
     } catch (error) {
       if (
         error.name === 'NoSuchKey' ||
+        error.name === 'NotFound' ||
         error.$metadata?.httpStatusCode === 404
       ) {
         return false
       }
+      // For other errors (permissions, network, etc.), re-throw
       throw error
     }
   }
@@ -139,10 +153,15 @@ class S3Service {
    * @param {string} destinationKey - The destination object key/path
    * @returns {Promise<{key: string, etag: string}>}
    */
-  async copyObject(sourceBucketName, sourceKey, destinationBucketName, destinationKey) {
+  async copyObject(
+    sourceBucketName,
+    sourceKey,
+    destinationBucketName,
+    destinationKey
+  ) {
     try {
       const copySource = `${sourceBucketName}/${sourceKey}`
-      
+
       const command = new CopyObjectCommand({
         CopySource: copySource,
         Bucket: destinationBucketName,
@@ -180,6 +199,40 @@ class S3Service {
     } catch (error) {
       console.error('S3 Service Error:', error)
       throw new Error(`Failed to list objects in S3: ${error.message}`)
+    }
+  }
+
+  /**
+   * Generate a pre-signed URL for accessing an S3 object
+   * @param {string} bucketName - The S3 bucket name
+   * @param {string} key - The object key/path
+   * @param {number} expiresIn - URL expiration time in seconds (default: 3600 = 1 hour)
+   * @param {Object} options - Additional options
+   * @param {string} options.responseContentDisposition - Content-Disposition header (e.g., 'attachment; filename="video.mp4"')
+   * @returns {Promise<string>} - Pre-signed URL
+   */
+  async getSignedUrl(bucketName, key, expiresIn = 3600, options = {}) {
+    try {
+      const commandParams = {
+        Bucket: bucketName,
+        Key: key,
+      }
+
+      // Add Content-Disposition if provided (for forcing download)
+      if (options.responseContentDisposition) {
+        commandParams.ResponseContentDisposition = options.responseContentDisposition
+      }
+
+      const command = new GetObjectCommand(commandParams)
+
+      const signedUrl = await getSignedUrl(this.s3Client, command, {
+        expiresIn,
+      })
+
+      return signedUrl
+    } catch (error) {
+      console.error('S3 Service Error:', error)
+      throw new Error(`Failed to generate signed URL: ${error.message}`)
     }
   }
 }

@@ -17,6 +17,8 @@ import {
 import s3Service from '../services/s3-service.js'
 import config from '../config.js'
 import path from 'path'
+import { getSpecimenName } from '../util/specimen.js'
+import { getTaxonName } from '../util/taxa.js'
 
 /**
  * Validates specimen and view IDs for a given project
@@ -176,12 +178,12 @@ export async function createMediaFiles(req, res) {
     return
   }
 
-  // Validate ZIP file size (max 100MB)
-  const maxZipSize = 100 * 1024 * 1024 // 100MB
+  // Validate ZIP file size (max 1GB)
+  const maxZipSize = 1024 * 1024 * 1024 // 1GB
   if (req.file.size > maxZipSize) {
     res.status(400).json({
       message:
-        'ZIP file is too large. Maximum size is 100MB. Please split your files into smaller archives.',
+        'ZIP file is too large. Maximum size is 1GB. Please split your files into smaller archives.',
     })
     return
   }
@@ -454,6 +456,11 @@ export async function deleteMediaFiles(req, res) {
 export async function editMediaFile(req, res) {
   const projectId = req.project.project_id
   const mediaId = req.params.mediaId
+  
+  // Set extended timeout for large media file uploads
+  req.setTimeout(1800000) // 30 minutes
+  res.setTimeout(1800000)
+  
   const media = await models.MediaFile.findByPk(mediaId)
   if (media == null || media.project_id != projectId) {
     res.status(404).json({ message: 'Media is not found' })
@@ -497,7 +504,33 @@ export async function editMediaFile(req, res) {
   try {
     // First upload the new file if present - this sets media field and triggers old file deletion
     if (req.file) {
-      await mediaUploader.setMedia(media, 'media', req.file)
+      // Detect if this is an image file or non-image file
+      const isImageFile = req.file.mimetype && req.file.mimetype.startsWith('image/')
+      
+      // For non-image files (3D models, videos, etc.), detect by extension if mimetype is not reliable
+      const extension = req.file.originalname.split('.').pop().toLowerCase()
+      const nonImageExtensions = ['ply', 'stl', 'obj', 'glb', 'gltf', 'fbx', 'mp4', 'mov', 'avi', 'webm', 'mkv', 'wmv', 'flv', 'm4v', 'zip']
+      const isNonImageByExtension = nonImageExtensions.includes(extension)
+      
+      if (isImageFile && !isNonImageByExtension) {
+        // Use image processing for actual image files
+        await mediaUploader.setMedia(media, 'media', req.file)
+        // Update media type to image if it was something else before
+        media.set('media_type', MEDIA_TYPES.IMAGE)
+      } else {
+        // Use non-image processing for 3D files, videos, ZIP files, etc.
+        await mediaUploader.setNonImageMedia(media, 'media', req.file)
+        
+        // Update media type based on the new file type
+        let newMediaType = MEDIA_TYPES.IMAGE // Default fallback
+        if (req.file.mimetype) {
+          newMediaType = convertMediaTypeFromMimeType(req.file.mimetype)
+        } else {
+          // Fallback to extension-based detection
+          newMediaType = convertMediaTypeFromExtension(req.file.originalname)
+        }
+        media.set('media_type', newMediaType)
+      }
     }
 
     // Then update all other fields
@@ -539,7 +572,7 @@ export async function getUsage(req, res) {
 export async function getMediaFile(req, res) {
   const projectId = req.project.project_id
   const mediaId = req.params.mediaId
-  const media = models.MediaFile.findByPk(mediaId)
+  const media = await models.MediaFile.findByPk(mediaId)
   if (media == null || media.project_id != projectId) {
     res.status(404).json({ message: 'Media is not found' })
     return
@@ -548,10 +581,273 @@ export async function getMediaFile(req, res) {
   res.status(200).json({ media: convertMediaResponse(media) })
 }
 
+export async function getMediaFileDetails(req, res) {
+  const projectId = req.project.project_id
+  const mediaId = req.params.mediaId
+  const linkId = req.query.link_id
+  
+  try {
+    // Build the comprehensive query with all necessary joins for detailed information
+    let query = `
+      SELECT 
+        mf.media_id,
+        mf.project_id,
+        mf.specimen_id,
+        mf.view_id,
+        mf.is_copyrighted,
+        mf.copyright_info,
+        mf.copyright_permission,
+        mf.copyright_license,
+        mf.media,
+        mf.notes AS media_notes,
+        mf.url,
+        mf.url_description,
+        mf.user_id,
+        mf.created_on AS media_created,
+        mf.last_modified_on,
+        mf.is_sided,
+        
+        -- View details
+        mv.name AS view_name,
+        
+        -- Specimen details  
+        s.specimen_id AS specimen_id_full,
+        s.reference_source,
+        s.institution_code,
+        s.collection_code,
+        s.catalog_number,
+        s.description AS specimen_description,
+        s.occurrence_id,
+        
+        -- User details (for copyright holder)
+        u.fname AS user_fname,
+        u.lname AS user_lname,
+        u.email AS user_email,
+        
+        -- Taxon details (for complete specimen name formatting)
+        t.genus AS specimen_genus,
+        t.specific_epithet AS specimen_specific_epithet,
+        t.subspecific_epithet AS specimen_subspecific_epithet,
+        t.scientific_name_author AS specimen_author,
+        t.scientific_name_year AS specimen_year,
+        t.is_extinct AS specimen_is_extinct,
+        
+        -- Direct taxon association (when media is linked to taxon outside of character context)
+        dt.genus AS direct_taxon_genus,
+        dt.specific_epithet AS direct_taxon_specific_epithet,
+        dt.subspecific_epithet AS direct_taxon_subspecific_epithet,
+        dt.scientific_name_author AS direct_taxon_author,
+        dt.scientific_name_year AS direct_taxon_year,
+        dt.is_extinct AS direct_taxon_is_extinct
+        
+      FROM media_files mf
+      LEFT JOIN media_views mv ON mf.view_id = mv.view_id
+      LEFT JOIN specimens s ON mf.specimen_id = s.specimen_id
+      LEFT JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
+      LEFT JOIN taxa t ON t.taxon_id = ts.taxon_id
+      LEFT JOIN ca_users u ON mf.user_id = u.user_id
+      LEFT JOIN taxa_x_media txm ON mf.media_id = txm.media_id
+      LEFT JOIN taxa dt ON dt.taxon_id = txm.taxon_id
+      WHERE mf.project_id = ? AND mf.media_id = ?
+    `
+    
+    const replacements = [projectId, mediaId]
+    
+    const [rows] = await sequelizeConn.query(query, { replacements })
+    
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ message: 'Media is not found' })
+    }
+    
+    let mediaData = rows[0]
+    
+    // If linkId is provided, get comprehensive character, state, and taxonomic information
+    if (linkId) {
+      const characterQuery = `
+        SELECT 
+          -- Cell and Media relationship data
+          cxm.link_id,
+          cxm.matrix_id,
+          cxm.character_id,
+          cxm.taxon_id,
+          cxm.media_id,
+          cxm.notes AS cell_notes,
+          
+          -- Character information
+          c.name AS character_name,
+          c.description AS character_description,
+          c.num AS character_number,
+          c.type AS character_type,
+          
+          -- Character state information (from actual cell data)
+          cells.state_id,
+          cs.name AS state_name,
+          cs.num AS state_number,
+          cs.description AS state_description
+          
+        FROM cells_x_media cxm
+        LEFT JOIN characters c ON cxm.character_id = c.character_id
+        LEFT JOIN cells ON cells.character_id = cxm.character_id 
+          AND cells.taxon_id = cxm.taxon_id 
+          AND cells.matrix_id = cxm.matrix_id
+        LEFT JOIN character_states cs ON cells.state_id = cs.state_id 
+          AND cs.character_id = cells.character_id
+        WHERE cxm.link_id = ? AND cxm.media_id = ?
+        LIMIT 1
+      `
+      
+      const [characterRows] = await sequelizeConn.query(characterQuery, { 
+        replacements: [linkId, mediaId] 
+      })
+
+      if (characterRows && characterRows.length > 0) {
+        const charData = characterRows[0]
+        
+        // Enhanced character information with formatted display
+        mediaData.character_display = formatCharacterDisplay(charData)
+      }
+    }
+    
+    // Convert and clean up the response
+    const detailedMedia = {
+      ...convertMediaResponse(mediaData),
+      
+      // Enhanced view information
+      view_name: mediaData.view_name,
+      
+      // Enhanced specimen information
+      specimen_display: getSpecimenDisplayName(mediaData),
+      specimen_notes: mediaData.specimen_description || null, // Add specimen description
+      
+      // Enhanced copyright information  
+      copyright_holder: getCopyrightHolderName(mediaData),
+      
+      // Character information (if available)
+      character_display: mediaData.character_display || null,
+      
+      // Direct taxon context (when media is associated with a taxon outside of character context)
+      taxon_display: getDirectTaxonDisplayName(mediaData),
+      
+      // Media notes
+      media_notes: mediaData.media_notes || null,
+    }
+    
+    res.status(200).json({ media: detailedMedia })
+    
+  } catch (error) {
+    console.error('Error fetching media details:', error)
+    res.status(500).json({ message: 'Error while fetching media details.' })
+  }
+}
+
+// Helper function to build specimen display name using utility functions
+function getSpecimenDisplayName(mediaData) {
+  if (!mediaData.specimen_id) return null
+  
+  // Create a record object with the expected field names for the utility functions
+  const specimenRecord = {
+    // Specimen fields
+    specimen_id: mediaData.specimen_id,
+    reference_source: mediaData.reference_source,
+    institution_code: mediaData.institution_code,
+    collection_code: mediaData.collection_code,
+    catalog_number: mediaData.catalog_number,
+    
+    // Taxon fields (using the specimen-associated taxon data)
+    genus: mediaData.specimen_genus,
+    specific_epithet: mediaData.specimen_specific_epithet,
+    subspecific_epithet: mediaData.specimen_subspecific_epithet,
+    scientific_name_author: mediaData.specimen_author,
+    scientific_name_year: mediaData.specimen_year,
+    is_extinct: mediaData.specimen_is_extinct
+  }
+  
+  // Use the utility function to get the specimen name
+  // showExtinctMarker=true, showAuthor=false, skipSubgenus=false
+  return getSpecimenName(specimenRecord, null, true, false, false)
+}
+
+// Helper function to format complete character display with state information
+function formatCharacterDisplay(charData) {
+  if (!charData) return null
+  
+  // Start with the basic character display (number + cleaned name)
+  let fullDisplay
+  if (charData.character_name) {
+    // Clean character name by removing trailing colon
+    let characterName = charData.character_name.trim()
+    if (characterName.endsWith(':')) {
+      characterName = characterName.slice(0, -1).trim()
+    }
+    fullDisplay = characterName
+  }
+  if (!fullDisplay) return null
+  
+  // Add state information if available
+  if (charData.state_name) {
+    fullDisplay += ` :: ${charData.state_name} (${charData.state_number})`
+  }
+  
+  return fullDisplay
+}
+
+// Helper function to get copyright holder name
+function getCopyrightHolderName(mediaData) {
+  if (mediaData.copyright_info) {
+    return mediaData.copyright_info
+  }
+  
+  if (mediaData.user_fname || mediaData.user_lname) {
+    const parts = []
+    if (mediaData.user_fname) parts.push(mediaData.user_fname)
+    if (mediaData.user_lname) parts.push(mediaData.user_lname)
+    return parts.join(' ')
+  }
+  
+  return null
+}
+
+// Helper function to get direct taxon display name (when media is associated with taxon)
+function getDirectTaxonDisplayName(mediaData) {
+  // Only show direct taxon association if we have direct taxon data
+  // and it's different from specimen taxon (to avoid duplication)
+  if (!mediaData.direct_taxon_genus) return null
+  
+  // Check if this is the same taxon as the specimen's taxon
+  if (mediaData.specimen_genus === mediaData.direct_taxon_genus &&
+      mediaData.specimen_specific_epithet === mediaData.direct_taxon_specific_epithet &&
+      mediaData.specimen_author === mediaData.direct_taxon_author &&
+      mediaData.specimen_year === mediaData.direct_taxon_year) {
+    // Don't show duplicate taxon information
+    return null
+  }
+  
+  // Create a record object for the getTaxonName utility
+  const taxonRecord = {
+    genus: mediaData.direct_taxon_genus,
+    specific_epithet: mediaData.direct_taxon_specific_epithet,
+    subspecific_epithet: mediaData.direct_taxon_subspecific_epithet,
+    scientific_name_author: mediaData.direct_taxon_author,
+    scientific_name_year: mediaData.direct_taxon_year,
+    is_extinct: mediaData.direct_taxon_is_extinct
+  }
+  
+  // Use the utility function to get the taxon name
+  // showExtinctMarker=true, showAuthor=true, skipSubgenus=false
+  return getTaxonName(taxonRecord, null, true, true, false)
+}
+
 export async function editMediaFiles(req, res) {
   const projectId = req.project.project_id
   const mediaIds = req.body.media_ids
   const values = req.body.media
+
+  // Validate media_ids array
+  if (!mediaIds || !Array.isArray(mediaIds) || mediaIds.length === 0) {
+    return res.status(400).json({
+      message: 'media_ids must be a non-empty array',
+    })
+  }
 
   // Validate that we're not accidentally updating the media field
   if (values.media) {
@@ -1144,8 +1440,115 @@ export async function serveBatchMediaFiles(req, res) {
   }
 }
 
+/**
+ * Get pre-signed URL for video file from S3
+ * GET /projects/:projectId/video-url/:mediaId?download=true
+ */
+export async function getMediaVideoUrl(req, res) {
+  try {
+    const { projectId, mediaId } = req.params
+    const { download } = req.query // Check if this is for download
+
+    // Get media file info from database
+    const [mediaRows] = await sequelizeConn.query(
+      `SELECT media_id, media FROM media_files WHERE project_id = ? AND media_id = ?`,
+      { replacements: [projectId, mediaId] }
+    )
+
+    if (!mediaRows || mediaRows.length === 0) {
+      return res.status(404).json({
+        error: 'Media not found',
+        message: 'The requested media file does not exist',
+      })
+    }
+
+    const mediaData = mediaRows[0].media
+
+    // Check if this is a video file by looking at the original file's MIMETYPE
+    if (!mediaData || !mediaData.original) {
+      return res.status(404).json({
+        error: 'Media data not found',
+        message: 'The media file does not have original data',
+      })
+    }
+
+    const originalMedia = mediaData.original
+    const mimeType = originalMedia.MIMETYPE || ''
+
+    // Validate that this is a video file
+    if (!mimeType.startsWith('video/')) {
+      return res.status(400).json({
+        error: 'Invalid media type',
+        message: 'This endpoint only supports video files',
+      })
+    }
+
+    // Get original filename for download
+    const originalFilename = mediaData.ORIGINAL_FILENAME || `video_${mediaId}.mp4`
+
+    // Get S3 key for original video
+    let s3Key
+    if (originalMedia.S3_KEY || originalMedia.s3_key) {
+      // New S3-based system - handle both uppercase and lowercase
+      s3Key = originalMedia.S3_KEY || originalMedia.s3_key
+    } else if (originalMedia.FILENAME) {
+      // Legacy local file system - construct S3 key
+      const fileExtension = originalMedia.FILENAME.split('.').pop() || 'mp4'
+      const fileName = `${projectId}_${mediaId}_original.${fileExtension}`
+      s3Key = `media_files/images/${projectId}/${mediaId}/${fileName}`
+    } else {
+      return res.status(404).json({
+        error: 'Invalid media data',
+        message: 'Media data is missing file information',
+      })
+    }
+
+    // Use default bucket from config
+    const bucket = config.aws.defaultBucket
+
+    if (!bucket) {
+      return res.status(500).json({
+        error: 'Configuration error',
+        message: 'Default S3 bucket not configured',
+      })
+    }
+
+    // Generate pre-signed URL options
+    const urlOptions = {}
+    
+    // If download=true, add Content-Disposition header to force download
+    if (download === 'true') {
+      // Sanitize filename for Content-Disposition header
+      const safeFilename = originalFilename.replace(/[^\w\s.-]/g, '_')
+      urlOptions.responseContentDisposition = `attachment; filename="${safeFilename}"`
+    }
+
+    // Generate pre-signed URL (valid for 1 hour)
+    const signedUrl = await s3Service.getSignedUrl(bucket, s3Key, 3600, urlOptions)
+
+    res.json({
+      success: true,
+      url: signedUrl,
+      expiresIn: 3600,
+      mediaId: parseInt(mediaId),
+      projectId: parseInt(projectId),
+      filename: originalFilename,
+    })
+  } catch (error) {
+    console.error('Video URL generation error:', error.message)
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to generate video URL',
+    })
+  }
+}
+
 export async function create3DMediaFile(req, res) {
   const projectId = req.params.projectId
+
+  // Set extended timeout for large 3D file uploads
+  req.setTimeout(1800000) // 30 minutes
+  res.setTimeout(1800000)
 
   const media = models.MediaFile.build(req.body)
 
@@ -1242,6 +1645,10 @@ export async function create3DMediaFile(req, res) {
 
 export async function createVideoMediaFile(req, res) {
   const projectId = req.params.projectId
+
+  // Set extended timeout for large video file uploads
+  req.setTimeout(1800000) // 30 minutes
+  res.setTimeout(1800000)
 
   if (!req.file) {
     res.status(400).json({ message: 'No video file provided' })
@@ -1384,6 +1791,10 @@ export async function createStacksMediaFile(req, res) {
   const projectId = req.params.projectId
   const values = req.body
 
+  // Set extended timeout for large stack/ZIP file uploads
+  req.setTimeout(1800000) // 30 minutes
+  res.setTimeout(1800000)
+
   // Don't create media if the zip file is missing.
   if (!req.file) {
     res.status(400).json({ message: 'No zip file in request' })
@@ -1408,12 +1819,12 @@ export async function createStacksMediaFile(req, res) {
     return
   }
 
-  // Validate ZIP file size (max 100MB)
-  const maxZipSize = 100 * 1024 * 1024 // 100MB
+  // Validate ZIP file size (max 1GB)
+  const maxZipSize = 1024 * 1024 * 1024 // 1GB
   if (req.file.size > maxZipSize) {
     res.status(400).json({
       message:
-        'ZIP file is too large. Maximum size is 100MB. Please split your files into smaller archives.',
+        'ZIP file is too large. Maximum size is 1GB. Please split your files into smaller archives.',
     })
     return
   }

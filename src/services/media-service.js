@@ -231,6 +231,10 @@ export async function getImageProps(projectId, type, exemplarMediaId) {
   try {
     if (rows && rows.length) {
       let obj = { media: rows[0].media[type] }
+      // Include media_id so frontend can use it directly
+      if (rows[0].media_id) {
+        obj['media_id'] = rows[0].media_id
+      }
       let specimenName = getSpecimenNameForPublishedProject(rows[0])
       if (specimenName) {
         obj['specimen_name'] = specimenName
@@ -248,6 +252,20 @@ export async function getImageProps(projectId, type, exemplarMediaId) {
 }
 
 export async function getMediaFileDump(projectId) {
+  // Copyright license descriptions mapping
+  const copyrightLicenseDescriptions = {
+    0: "Media reuse policy not set",
+    1: "CC0 - relinquish copyright",
+    2: "Attribution CC BY - reuse with attribution",
+    3: "Attribution-NonCommercial CC BY-NC - reuse but noncommercial",
+    4: "Attribution-ShareAlike CC BY-SA - reuse here and applied to future uses",
+    5: "Attribution- CC BY-NC-SA - reuse here and applied to future uses but noncommercial",
+    6: "Attribution-NoDerivs CC BY-ND - reuse but no changes",
+    7: "Attribution-NonCommercial-NoDerivs CC BY-NC-ND - reuse noncommerical no changes",
+    8: "Media released for onetime use, no reuse without permission",
+    20: "Unknown - Will set before project publication"
+  };
+
   const [rows] = await sequelizeConn.query(
     `
       SELECT m.media_id, m.media, s.specimen_id, s.description, s.reference_source,
@@ -284,6 +302,7 @@ export async function getMediaFileDump(projectId) {
       mediaObj.media
     let obj = {
       media_id: mediaObj.media_id,
+      specimen_id: mediaObj.specimen_id,
       media: { original, large, medium, thumbnail, ORIGINAL_FILENAME },
     }
     let simpleTextFields = ['view_name', 'url', 'url_description']
@@ -315,6 +334,10 @@ export async function getMediaFileDump(projectId) {
       mediaObj.copyright_permission,
       mediaObj.copyright_license
     )
+    
+    // Add license description
+    obj['license']['description'] = copyrightLicenseDescriptions[mediaObj.copyright_license] || copyrightLicenseDescriptions[0]
+    obj['taxon_id'] = mediaObj.taxon_id
     obj['taxon_name'] = getTaxonNameForPublishedProject(mediaObj)
     // provided for js sorting & searching
     obj['taxon_sort_fields'] = getMediaTaxaSortFieldValues(mediaObj)
@@ -338,6 +361,7 @@ export async function getMediaFileDump(projectId) {
     if (referenceTexts) {
       obj['references'] = referenceTexts
     }
+
     if (mediaObj.publish_media_notes && mediaObj.notes) {
       obj['notes'] = mediaObj.notes.trim()
     }

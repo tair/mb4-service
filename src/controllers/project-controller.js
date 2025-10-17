@@ -9,9 +9,11 @@ import * as projectService from '../services/projects-service.js'
 import * as projectStatsService from '../services/project-stats-service.js'
 import * as projectUserService from '../services/project-user-service.js'
 import * as mediaService from '../services/media-service.js'
-import { FileUploader } from '../lib/file-uploader.js'
 import { S3MediaUploader } from '../lib/s3-media-uploader.js'
+import { S3JournalCoverUploader } from '../lib/s3-journal-cover-uploader.js'
 import { SDDExporter } from '../lib/project-export/sdd-exporter.js'
+import s3Service from '../services/s3-service.js'
+import config from '../config.js'
 import axios from 'axios'
 import { MembershipType } from '../models/projects-x-user.js'
 import { EmailManager } from '../lib/email-manager.js'
@@ -64,7 +66,12 @@ export async function getProjects(req, res) {
       if (row.media) {
         const project = resultMap.get(row.project_id)
         if (project) {
-          project.media = getMedia(row.media, 'thumbnail')
+          project.media = getMedia(
+            row.media,
+            'thumbnail',
+            row.project_id,
+            row.media_id
+          )
         }
       }
     }
@@ -94,7 +101,8 @@ export async function getProjects(req, res) {
 
 export async function getOverview(req, res) {
   const projectId = req.params.projectId
-  const userId = req.user?.user_id
+  const userId = req.credential?.user_id
+
   const summary = await projectService.getProject(projectId)
   // TODO(kenzley): Change this to output the media with the util/media.ts:getMedia method.
   const image_props = await mediaService.getImageProps(
@@ -119,6 +127,56 @@ export async function getOverview(req, res) {
     members,
   }
   res.status(200).json({ overview })
+}
+
+export async function refreshProjectStats(req, res) {
+  try {
+    const projectId = req.params.projectId
+    const userId = req.user?.user_id
+
+    // Import the required classes
+    const { ProjectOverviewGenerator } = await import(
+      '../lib/project-overview-generator.js'
+    )
+    const { ProjectRecencyStatisticsGenerator } = await import(
+      '../lib/project-recency-generator.js'
+    )
+
+    // Get project info
+    const [projects] = await sequelizeConn.query(
+      `SELECT project_id, user_id, published, publish_matrix_media_only, publish_inactive_members
+       FROM projects WHERE project_id = ?`,
+      { replacements: [projectId] }
+    )
+
+    if (projects.length === 0) {
+      return res.status(404).json({ error: 'Project not found' })
+    }
+
+    const project = projects[0]
+
+    // Regenerate project overview stats
+    const overviewGenerator = new ProjectOverviewGenerator()
+    await overviewGenerator.generateStats(project)
+
+    // Regenerate recent changes stats if user is provided
+    if (userId) {
+      const recencyGenerator = new ProjectRecencyStatisticsGenerator()
+      await recencyGenerator.generateStats(projectId)
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Project statistics refreshed successfully',
+      project_id: projectId,
+    })
+  } catch (error) {
+    console.error('Error refreshing project stats:', error)
+    res.status(500).json({
+      error: 'Failed to refresh project statistics',
+      message: error.message,
+    })
+  }
 }
 
 export async function setCopyright(req, res) {
@@ -237,7 +295,16 @@ export async function updateProject(req, res) {
 
     for (const field of updatableFields) {
       if (req.body[field] !== undefined) {
-        project[field] = req.body[field]
+        if (field === 'reviewer_login_password') {
+          // Hash the reviewer login password if provided and reviewer login is enabled
+          if (req.body.allow_reviewer_login && req.body[field]) {
+            project[field] = await models.User.hashPassword(req.body[field])
+          } else {
+            project[field] = null
+          }
+        } else {
+          project[field] = req.body[field]
+        }
       }
     }
 
@@ -300,6 +367,7 @@ export async function editProject(req, res, next) {
       disk_space_usage,
       publication_status,
       exemplar_media_id,
+      removeJournalCover,
     } = projectData
 
     // Only validate required fields if this is a full project update (not just exemplar media update)
@@ -382,7 +450,14 @@ export async function editProject(req, res, next) {
         project.name = name
         project.nsf_funded = nsf_funded
         project.allow_reviewer_login = allow_reviewer_login
-        project.reviewer_login_password = reviewer_login_password
+        // Hash the reviewer login password if provided
+        if (allow_reviewer_login && reviewer_login_password) {
+          project.reviewer_login_password = await models.User.hashPassword(
+            reviewer_login_password
+          )
+        } else if (!allow_reviewer_login) {
+          project.reviewer_login_password = null
+        }
         project.journal_title = journal_title_other || journal_title
         project.article_authors = article_authors
         project.article_title = article_title
@@ -440,46 +515,39 @@ export async function editProject(req, res, next) {
 
       // Handle journal cover upload
       if (journalCoverFile) {
-        mediaUploader = new S3MediaUploader(transaction, req.user)
-
-        // Create a new media file record for journal cover
-        const journalCoverMedia = await models.MediaFile.create(
-          {
-            project_id: project.project_id,
-            user_id: req.user.user_id,
-            notes: 'Journal cover image',
-            published: 0,
-            access: 0,
-            cataloguing_status: 0, // Journal covers should NOT go to curation
-            media_type: 'image',
-          },
-          {
-            transaction,
-            user: req.user,
-          }
-        )
-
-        // Process and upload the journal cover image
-        await mediaUploader.setMedia(
-          journalCoverMedia,
-          'media',
-          journalCoverFile
-        )
-
-        await journalCoverMedia.save({
+        const journalCoverUploader = new S3JournalCoverUploader(
           transaction,
-          user: req.user,
-          shouldSkipLogChange: true,
-        })
+          req.user
+        )
 
-        // Update the project's journal_cover field (JSON field)
-        project.journal_cover = {
-          media_id: journalCoverMedia.media_id,
-          filename: journalCoverFile.originalname,
+        try {
+          // Upload journal cover using new format
+          const journalCoverData =
+            await journalCoverUploader.uploadJournalCover(
+              project.project_id,
+              journalCoverFile
+            )
+
+          // Update the project's journal_cover field with new format
+          project.journal_cover = {
+            filename: journalCoverData.filename,
+            ORIGINAL_FILENAME: journalCoverData.ORIGINAL_FILENAME,
+            migrated: journalCoverData.migrated,
+            migrated_at: journalCoverData.migrated_at,
+          }
+
+          // Commit the journal cover uploader
+          journalCoverUploader.commit()
+        } catch (error) {
+          // Rollback journal cover upload on error
+          await journalCoverUploader.rollback()
+          throw error
         }
+      }
 
-        // Commit the media uploader
-        mediaUploader.commit()
+      // Handle journal cover removal
+      if (removeJournalCover && !journalCoverFile) {
+        project.journal_cover = null
       }
 
       // Handle exemplar media upload
@@ -851,6 +919,7 @@ export async function createProject(req, res, next) {
       description,
       disk_space_usage,
       publication_status,
+      removeJournalCover,
     } = projectData
 
     // Validate required fields
@@ -922,13 +991,19 @@ export async function createProject(req, res, next) {
     let mediaUploader = null
 
     try {
+      // Hash the reviewer login password if provided
+      const hashedReviewerPassword =
+        allow_reviewer_login && reviewer_login_password
+          ? await models.User.hashPassword(reviewer_login_password)
+          : null
+
       // Create the project first
       const project = await models.Project.create(
         {
           name,
           nsf_funded,
           allow_reviewer_login,
-          reviewer_login_password,
+          reviewer_login_password: hashedReviewerPassword,
           journal_title: journal_title_other || journal_title,
           article_authors,
           article_title,
@@ -979,46 +1054,39 @@ export async function createProject(req, res, next) {
 
       // Handle journal cover upload
       if (journalCoverFile) {
-        mediaUploader = new S3MediaUploader(transaction, req.user)
-
-        // Create a new media file record for journal cover
-        const journalCoverMedia = await models.MediaFile.create(
-          {
-            project_id: project.project_id,
-            user_id: req.user.user_id,
-            notes: 'Journal cover image',
-            published: 0,
-            access: 0,
-            cataloguing_status: 0, // Journal covers should NOT go to curation
-            media_type: 'image',
-          },
-          {
-            transaction,
-            user: req.user,
-          }
-        )
-
-        // Process and upload the journal cover image
-        await mediaUploader.setMedia(
-          journalCoverMedia,
-          'media',
-          journalCoverFile
-        )
-
-        await journalCoverMedia.save({
+        const journalCoverUploader = new S3JournalCoverUploader(
           transaction,
-          user: req.user,
-          shouldSkipLogChange: true,
-        })
+          req.user
+        )
 
-        // Update the project's journal_cover field (JSON field)
-        project.journal_cover = {
-          media_id: journalCoverMedia.media_id,
-          filename: journalCoverFile.originalname,
+        try {
+          // Upload journal cover using new format
+          const journalCoverData =
+            await journalCoverUploader.uploadJournalCover(
+              project.project_id,
+              journalCoverFile
+            )
+
+          // Update the project's journal_cover field with new format
+          project.journal_cover = {
+            filename: journalCoverData.filename,
+            ORIGINAL_FILENAME: journalCoverData.ORIGINAL_FILENAME,
+            migrated: journalCoverData.migrated,
+            migrated_at: journalCoverData.migrated_at,
+          }
+
+          // Commit the journal cover uploader
+          journalCoverUploader.commit()
+        } catch (error) {
+          // Rollback journal cover upload on error
+          await journalCoverUploader.rollback()
+          throw error
         }
+      }
 
-        // Commit the media uploader
-        mediaUploader.commit()
+      // Handle journal cover removal
+      if (removeJournalCover && !journalCoverFile) {
+        project.journal_cover = null
       }
 
       // Handle exemplar media upload
@@ -1150,6 +1218,7 @@ export async function retrieveDOI(req, res, next) {
       journal_number: data.issue || '',
       article_pp: data.page || '',
       journal_url: data.URL || `https://doi.org/${article_doi}`,
+      abstract: data.abstract || '',
     }
 
     res.json({
@@ -1228,59 +1297,94 @@ export async function createBulkMediaViews(req, res) {
 }
 
 /**
+ * Helper function to check and serve preprocessed SDD file from S3
+ * @param {string} projectId - The project ID
+ * @param {Object} res - Express response object
+ * @returns {Promise<boolean>} - Returns true if S3 file was served, false otherwise
+ */
+async function tryServeFromS3(projectId, res) {
+  try {
+    // Construct S3 key for preprocessed file (only support full project exports)
+    const s3Key = `sdd_exports/${projectId}_morphobank.zip`
+    const bucketName = config.aws.defaultBucket || 'mb4-data'
+
+    // Check if the preprocessed file exists in S3
+    const exists = await s3Service.objectExists(bucketName, s3Key)
+
+    if (!exists) {
+      return false
+    }
+
+    // Get the file from S3
+    const s3Object = await s3Service.getObject(bucketName, s3Key)
+
+    // Set appropriate headers for ZIP download
+    const filename = `project_${projectId}_sdd.zip`
+
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.setHeader('Content-Length', s3Object.contentLength)
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+
+    // Send the file data
+    res.send(s3Object.data)
+    return true
+  } catch (error) {
+    console.error('Error serving from S3:', error)
+    return false
+  }
+}
+
+/**
  * Download project as SDD (Structured Descriptive Data) XML or ZIP with media
  */
 export async function downloadProjectSDD(req, res) {
   try {
     const { projectId } = req.params
     const { partitionId, format = 'xml' } = req.query
+    const userId = req.user?.user_id
 
-    // Validate project exists
-    const project = await models.Project.findByPk(projectId)
+    // Validate access using service function
+    const { hasAccess, project, partition } =
+      await projectService.validateProjectSDDAccess(
+        projectId,
+        userId,
+        partitionId
+      )
+
     if (!project) {
       return res.status(404).json({ message: 'Project not found' })
-    }
-
-    // Check if project is published or user has access
-    const userId = req.user?.user_id
-    let hasAccess = project.published === 1
-
-    if (!hasAccess && userId) {
-      // Check if user has access to the project
-      const projectUser = await models.ProjectsXUser.findOne({
-        where: {
-          project_id: projectId,
-          user_id: userId,
-        },
-      })
-      hasAccess = !!projectUser
     }
 
     if (!hasAccess) {
       return res.status(403).json({ message: 'Access denied' })
     }
 
-    // Validate partition if specified
-    if (partitionId) {
-      const partition = await models.Partition.findOne({
-        where: {
-          partition_id: partitionId,
-          project_id: projectId,
-        },
-      })
-      if (!partition) {
-        return res.status(404).json({ message: 'Partition not found' })
-      }
+    if (partitionId && !partition) {
+      return res.status(404).json({ message: 'Partition not found' })
     }
 
-    console.log(
-      `Starting SDD export for project ${projectId}${
-        partitionId ? ` with partition ${partitionId}` : ''
-      } in ${format} format`
-    )
+    // For ZIP format, first try to serve from S3 preprocessed files
+    // Note: Only full project exports are supported in S3 (no partition support)
+    // Only serve from S3 if project is published
+    if (format === 'zip' && !partitionId && project.published == 1) {
+      try {
+        const servedFromS3 = await tryServeFromS3(projectId, res)
 
-    // Create SDD exporter
-    const exporter = new SDDExporter(projectId, partitionId)
+        if (servedFromS3) {
+          return // Response already sent
+        }
+      } catch (s3Error) {
+        console.log(`S3 check failed for project ${projectId}`)
+      }
+    }
+    console.log(
+      `falling back to live export for project ${projectId} download: ${project.published}`
+    )
+    // Fallback to live export using SDDExporter
+
     const projectName = project.name.replace(/[^a-zA-Z0-9]/g, '_')
 
     if (format === 'zip') {
@@ -1298,12 +1402,22 @@ export async function downloadProjectSDD(req, res) {
       req.setTimeout(1800000) // 30 minutes
       res.setTimeout(1800000)
 
-      // Stream ZIP directly to response
-      await exporter.exportAsZip(res)
+      // Use the service function for fallback download
+      const result = await projectService.generateProjectSDDFallback(
+        projectId,
+        partitionId,
+        projectName,
+        res
+      )
 
-      console.log(`SDD ZIP export completed for project ${projectId}`)
+      if (!result.success) {
+        throw new Error(
+          result.error || 'Failed to generate SDD fallback export'
+        )
+      }
     } else {
-      // Generate XML only
+      // Generate XML only (no S3 preprocessing for XML format)
+      const exporter = new SDDExporter(projectId, partitionId)
       const sddXml = await exporter.export()
       const filename = `${projectName}_sdd.xml`
 
@@ -1311,8 +1425,6 @@ export async function downloadProjectSDD(req, res) {
       res.setHeader('Content-Type', 'application/xml')
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
       res.setHeader('Cache-Control', 'no-cache')
-
-      console.log(`SDD XML export completed for project ${projectId}`)
 
       // Send the XML content
       res.send(sddXml)

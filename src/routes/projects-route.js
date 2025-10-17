@@ -18,6 +18,7 @@ import specimensRouter from './specimens-route.js'
 import taxaRouter from './taxa-route.js'
 import * as controller from '../controllers/project-controller.js'
 import * as publishingController from '../controllers/publishing-controller.js'
+import * as dataDumpController from '../controllers/datadump-controller.js'
 import {
   authenticateToken,
   maybeAuthenticateToken,
@@ -44,10 +45,36 @@ const upload = multer({
 
 // This route focuses on /projects
 const projectsRouter = express.Router({ mergeParams: true })
+
+// Routes that don't require authentication (must be before authenticateToken middleware)
+// Overview endpoint with optional authentication
+projectsRouter.get(
+  '/:projectId/overview',
+  maybeAuthenticateToken,
+  authorizeUser,
+  controller.getOverview
+)
+
+// SDD download endpoint with optional authentication
+projectsRouter.get(
+  '/:projectId/download/sdd',
+  maybeAuthenticateToken,
+  authorizeUser,
+  controller.downloadProjectSDD
+)
+
+// Apply authentication to all other routes
 projectsRouter.use(authenticateToken)
 projectsRouter.use(authorizeUser)
 
 projectsRouter.get('/', controller.getProjects)
+
+// Refresh project statistics endpoint (requires authentication and project access)
+projectsRouter.post(
+  '/:projectId/refresh-stats',
+  authorizeProject,
+  controller.refreshProjectStats
+)
 
 // Add a new route for retrieving curator projects
 projectsRouter.get('/curator-projects', controller.getCuratorProjects)
@@ -57,20 +84,6 @@ projectsRouter.get('/journals', controller.getJournalList)
 
 // Add a new route for retrieving journal cover
 projectsRouter.get('/journal-cover', controller.getJournalCover)
-
-// Overview endpoint with optional authentication (must be before /:projectId middleware)
-projectsRouter.get(
-  '/:projectId/overview',
-  maybeAuthenticateToken,
-  controller.getOverview
-)
-
-// SDD download endpoint with optional authentication (must be before /:projectId middleware)
-projectsRouter.get(
-  '/:projectId/download/sdd',
-  maybeAuthenticateToken,
-  controller.downloadProjectSDD
-)
 
 // Project creation and DOI retrieval routes
 projectsRouter.post(
@@ -157,6 +170,18 @@ projectRouter.get(
   publishingController.getUnpublishedItems
 )
 projectRouter.post('/publishing/publish', publishingController.publishProject)
-projectRouter.post('/publishing/test-doi', publishingController.testDOICreation)
+projectRouter.post('/publishing/dump', publishingController.dumpProjectById)
+
+// SDD export to S3 route (synchronous - may timeout for large projects)
+projectRouter.post('/export/sdd', dataDumpController.exportProjectSDDToS3)
+
+// SDD export as background task (recommended for large projects)
+projectRouter.post('/export/sdd/async', dataDumpController.queueSDDExportTask)
+
+// Bulk SDD export for all published projects (admin-only, no auth required for local use)
+projectRouter.post(
+  '/export/sdd/bulk',
+  dataDumpController.queueBulkSDDExportTask
+)
 
 export default projectsRouter

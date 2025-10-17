@@ -259,6 +259,17 @@ export async function validateMediaForPublishing(req, res) {
   }
 }
 
+export async function dumpProjectById(req, res) {
+  try {
+    const projectId = req.params.projectId
+    const result = await publishingService.dumpSingleProject(projectId)
+    return res.status(200).json(result)
+  } catch (error) {
+    console.error('Error in dumpProjectById:', error)
+    res.status(500).json({ message: 'Error dumping project' })
+  }
+}
+
 /**
  * Publish project
  * Main function to publish a project with all validation and side effects
@@ -267,7 +278,6 @@ export async function publishProject(req, res) {
   try {
     const projectId = req.params.projectId
     const userId = req.user.user_id
-    console.log('publishProject: projectId', projectId)
 
     const project = await models.Project.findByPk(projectId)
     if (!project) {
@@ -307,12 +317,11 @@ export async function publishProject(req, res) {
 
     // Schedule asynchronous tasks after successful publication
     try {
-      //   // Get the updated project with author info
+      // Get the updated project with author info
       const publishedProject = await models.Project.findByPk(projectId)
-      // console.log('publishedProject', publishedProject)
       const user = await models.User.findByPk(userId)
 
-      //   // Determine authors for DOI creation
+      // Determine authors for DOI creation
       let authors = publishedProject.article_authors?.trim()
       if (!authors) {
         const projectOwner = await models.User.findByPk(
@@ -384,9 +393,6 @@ export async function publishProject(req, res) {
         }
       )
 
-      // Process the email task immediately
-      await processTasks()
-
       // Schedule media screenshot notification if needed (>27 media)
       if (publishedMediaCount > 27) {
         await models.TaskQueue.create(
@@ -404,6 +410,8 @@ export async function publishProject(req, res) {
           }
         )
       }
+
+      processTasks()
     } catch (taskError) {
       // Log task scheduling errors but don't fail the publication
       console.error('Error scheduling post-publication tasks:', taskError)

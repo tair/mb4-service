@@ -78,9 +78,10 @@ export async function authorizeProject(req, res, next) {
     }
     switch (projectUser.membership_type) {
       case 0: // Full User
+      case 2: // Matrix Scorer
         permissions.push('edit', 'view')
         break
-      default: // Observer, Character Annonator, Bibliography maintainer
+      default: // Observer, Bibliography maintainer
         permissions.push('view')
     }
 
@@ -123,6 +124,9 @@ export async function authorizePublishedProject(req, res, next) {
       .status(404)
       .json({ message: 'This project is not yet publicly available.' })
   }
+
+  // Set the project so that it's accessible in the controllers
+  req.project = project
 
   next()
 }

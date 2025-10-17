@@ -10,4 +10,10 @@ mediaServeRouter.get(
 )
 mediaServeRouter.get('/:projectId/serve/batch', controller.serveBatchMediaFiles)
 
+// Get pre-signed URL for video files (avoids proxy overhead and enables streaming)
+mediaServeRouter.get(
+  '/:projectId/video-url/:mediaId',
+  controller.getMediaVideoUrl
+)
+
 export default mediaServeRouter

@@ -5,11 +5,13 @@ import * as dataDumpController from '../../controllers/datadump-controller.js'
 import * as matrixController from '../../controllers/matrix-controller.js'
 import { getPublishedFolio } from '../../controllers/folios-controller.js'
 import matrixEditorRouter from '../matrix-editor-route.js'
+import mediaLabelsRouter from '../media-labels-route.js'
 import { authorizePublishedProject } from '../project-interceptor.js'
 
 const projectsRouter = express.Router({ mergeParams: true })
 
 projectsRouter.get('/data_dump', dataDumpController.dataDump)
+projectsRouter.get('/project_list_dump', dataDumpController.projectListDump)
 
 projectsRouter.get('/', projectsController.getProjects)
 projectsRouter.get(
@@ -19,6 +21,10 @@ projectsRouter.get(
 projectsRouter.get(
   '/journals_projects',
   projectsController.getJournalsWithProjects
+)
+projectsRouter.get(
+  '/titles_projects',
+  projectsController.getTitlesWithProjects
 )
 projectsRouter.get(
   '/institutions',
@@ -43,6 +49,9 @@ projectRouter.use(authorizePublishedProject)
 projectRouter.get('/', projectsController.getProjectsById)
 
 projectRouter.get('/media', mediaController.getMediaFiles)
+projectRouter.get('/media/:mediaId', mediaController.getMediaFile)
+projectRouter.get('/media/:mediaId/details', mediaController.getMediaFileDetails)
+projectRouter.use('/media/:mediaId/labels', mediaLabelsRouter)
 
 projectRouter.use('/matrices/:matrixId/view', matrixEditorRouter)
 
@@ -56,5 +65,8 @@ projectRouter.get(
   '/matrices/:matrixId/download/ontology',
   matrixController.downloadCharacterRules
 )
+
+// SDD ZIP dump endpoint for published projects
+projectRouter.get('/download/sdd', dataDumpController.projectSDDZipDump)
 
 export default projectsRouter

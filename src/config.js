@@ -14,6 +14,7 @@ const config = {
     domain: process.env.MEDIA_DOMAIN,
     port: process.env.MEDIA_PORT,
     directory: process.env.MEDIA_DIRECTORY,
+    newDomain: process.env.NEW_MEDIA_DOMAIN,
   },
   db: {
     host: process.env.DB_HOST,
@@ -59,6 +60,9 @@ const config = {
     key: process.env.CIPRES_KEY,
     username: process.env.CIPRES_USERNAME,
     password: process.env.CIPRES_PASSWORD,
+  },
+  curator: {
+    url: process.env.CURATOR_API_URL || 'http://localhost:8001',
   },
 }
 

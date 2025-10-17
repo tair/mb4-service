@@ -3,6 +3,7 @@ import { DataCiteDOICreator } from '../data-cite-doi-creator.js'
 import { Handler, HandlerErrors } from './handler.js'
 import { QueryTypes } from 'sequelize'
 import { models } from '../../models/init-models.js'
+import { updateProjectDoiAndRedump } from '../../services/publishing-service.js'
 
 const BASE_URL = `${process.env.FRONTEND_URL}/project`
 
@@ -14,11 +15,6 @@ export class DOICreationHandler extends Handler {
   }
 
   async process(parameters) {
-    console.log(
-      'DOICreationHandler: Starting process with parameters:',
-      parameters
-    )
-
     const projectId = parseInt(parameters.project_id)
     if (!projectId) {
       console.log(
@@ -76,29 +72,18 @@ export class DOICreationHandler extends Handler {
           resource: projectResource,
         })
         if (!result.success) {
-          console.log(
-            'DOICreationHandler: Failed to create project DOI:',
-            projectDoiId
-          )
           return this.createError(
             HandlerErrors.HTTP_CLIENT_ERROR,
             `Error creating DOI: ${projectDoiId}`
           )
         } else {
           projectDoiToUpdate = result.doi
-          console.log(
-            'DOICreationHandler: Project DOI created:',
-            projectDoiToUpdate
-          )
         }
       } else {
         // DOI exists but database is null, construct full DOI for update
         projectDoiToUpdate = `${this.doiCreator.shoulder}/${projectDoiId}`
       }
     } else {
-      console.log(
-        'DOICreationHandler: Skipping project DOI - already set in database'
-      )
     }
 
     const matrixDois = new Map()
@@ -136,7 +121,6 @@ export class DOICreationHandler extends Handler {
             `Error creating DOI: ${matrixDoiId}`
           )
         } else {
-          console.log('DOICreationHandler: Matrix DOI created:', result.doi)
           matrixDois.set(matrixId, result.doi)
         }
       } else {
@@ -147,19 +131,8 @@ export class DOICreationHandler extends Handler {
     }
 
     const transaction = await sequelizeConn.transaction()
-    if (project.project_doi == null && projectDoiToUpdate) {
-      await sequelizeConn.query(
-        `
-        UPDATE projects
-        SET project_doi = ?
-        WHERE project_id = ? AND project_doi IS NULL`,
-        {
-          replacements: [projectDoiToUpdate, projectId],
-          type: QueryTypes.UPDATE,
-          transaction: transaction,
-        }
-      )
-    }
+
+    // Update matrix DOIs first
     for (const [matrixId, matrixDoi] of matrixDois.entries()) {
       await sequelizeConn.query(
         `
@@ -174,6 +147,17 @@ export class DOICreationHandler extends Handler {
       )
     }
     await transaction.commit()
+
+    // Handle project DOI update and re-dump separately
+    if (project.project_doi == null && projectDoiToUpdate) {
+      const updateResult = await updateProjectDoiAndRedump(
+        projectId,
+        projectDoiToUpdate
+      )
+      if (!updateResult.success) {
+        console.warn(`DOICreationHandler: ${updateResult.message}`)
+      }
+    }
 
     // Count actual DOIs created (not just attempted)
     let createdCount = 0

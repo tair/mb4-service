@@ -6,7 +6,14 @@ import { models } from '../../models/init-models.js'
 import { getCells, getCellNotes } from '../../services/matrix-service.js'
 import { getMaxCharacterPositionForMatrix } from '../../services/matrix-character-order-service.js'
 import { getMaxTaxonPositionForMatrix } from '../../services/matrix-taxa-order-service.js'
+import Sequelize from 'sequelize'
 import sequelizeConn from '../../util/db.js'
+import { 
+  bulkInsertCellsOptimized, 
+  withBatchedTransaction,
+  shouldUseBatchedProcessing,
+  getOptimalBatchSize 
+} from './matrix-import-patch.js'
 
 /**
  * This creates a blank matrix in the database based on the parameters.
@@ -71,16 +78,26 @@ export async function importMatrix(
     transaction: transaction,
   })
 
-  await importIntoMatrix(
-    matrix,
-    notes,
-    itemNotes,
-    user,
-    matrixObj,
-    file,
-    transaction
-  )
-  await transaction.commit()
+  try {
+    await importIntoMatrix(
+      matrix,
+      notes,
+      itemNotes,
+      user,
+      matrixObj,
+      file,
+      transaction
+    )
+    // Transaction may have been committed inside importIntoMatrix for batched processing
+    if (!transaction.finished) {
+      await transaction.commit()
+    }
+  } catch (error) {
+    if (!transaction.finished) {
+      await transaction.rollback()
+    }
+    throw error
+  }
 }
 
 /**
@@ -108,16 +125,26 @@ export async function mergeMatrix(
   }
 
   const transaction = await sequelizeConn.transaction()
-  await importIntoMatrix(
-    matrix,
-    notes,
-    itemNotes,
-    user,
-    matrixObj,
-    file,
-    transaction
-  )
-  await transaction.commit()
+  try {
+    await importIntoMatrix(
+      matrix,
+      notes,
+      itemNotes,
+      user,
+      matrixObj,
+      file,
+      transaction
+    )
+    // Transaction may have been committed inside importIntoMatrix for batched processing
+    if (!transaction.finished) {
+      await transaction.commit()
+    }
+  } catch (error) {
+    if (!transaction.finished) {
+      await transaction.rollback()
+    }
+    throw error
+  }
 }
 
 /**
@@ -385,6 +412,95 @@ async function importIntoMatrix(
   const gapSymbol = matrixObj.parameters?.GAP || '?'
   const symbols = parseSymbols(matrixObj.parameters?.SYMBOLS)
 
+  // Check if we should use batched processing for large matrices
+  const taxaCount = matrixObj.taxa?.length || 0
+  const charCount = matrixObj.characters?.length || 0
+  const useBatchedProcessing = shouldUseBatchedProcessing(taxaCount, charCount)
+  
+  if (useBatchedProcessing) {
+    console.log(`Using batched processing for large matrix: ${taxaCount} taxa, ${charCount} characters`)
+    
+    // Commit the current transaction for taxa/character setup
+    await transaction.commit()
+    
+    // Process cells in batches with separate transactions
+    const batchSize = getOptimalBatchSize(taxaCount, charCount)
+    const allCellsInsertions = []
+    const notesInsertions = []
+    
+    // Collect all cells first
+    for (let x = 0, l = matrixObj.cells.length; x < l; ++x) {
+      const cellRow = matrixObj.cells[x]
+      const taxonId = matrixObj.taxa[x].taxonId
+      
+      for (let y = 0, l = cellRow.length; y < l; ++y) {
+        const characterId = matrixObj.characters[y].characterId
+        const character = projectCharactersMap.get(characterId)
+        if (!character) continue
+        
+        const cellValue = cellRow[y]
+        const cellsToInsert = processCellValue(cellValue, {
+          matrixId,
+          taxonId,
+          characterId,
+          character,
+          userId: user.user_id,
+          missingSymbol,
+          gapSymbol,
+          symbols
+        })
+        
+        allCellsInsertions.push(...cellsToInsert)
+
+        // Collect notes for batched path
+        if (typeof cellValue === 'object' && cellValue !== null && cellValue.note) {
+          let note = cellValue.note
+          const existingNote = cellNotesTable.get(taxonId, characterId)
+          if (existingNote && !contains(existingNote, note)) {
+            note = existingNote + '\n' + note
+          }
+
+          // Merge duplicates across same taxon/character within this upload
+          const existingIdx = notesInsertions.findIndex(
+            (n) => n.taxon_id === taxonId && n.character_id === characterId
+          )
+          if (existingIdx >= 0) {
+            const current = notesInsertions[existingIdx].notes || ''
+            if (!contains(current, note)) {
+              notesInsertions[existingIdx].notes = current ? current + '\n' + note : note
+            }
+          } else {
+            notesInsertions.push({
+              matrix_id: matrixId,
+              taxon_id: taxonId,
+              character_id: characterId,
+              user_id: user.user_id,
+              notes: note,
+              source: 'IMPORT',
+            })
+          }
+        }
+      }
+    }
+    
+    // Use optimized bulk insert
+    console.log(`Inserting ${allCellsInsertions.length} cells using optimized bulk insert...`)
+    await bulkInsertCellsOptimized(allCellsInsertions, matrixId, user.user_id)
+    
+    // Insert/Update cell notes in batch if present
+    if (notesInsertions.length) {
+      await withBatchedTransaction(async (transaction) => {
+        await models.CellNote.bulkCreate(notesInsertions, {
+          transaction,
+          updateOnDuplicate: true,
+        })
+      })
+    }
+    
+    return // Exit early, we've handled the import
+  }
+  
+  // Original processing for small matrices
   for (let x = 0, l = matrixObj.cells.length; x < l; ++x) {
     const cellsInsertions = []
     const notesInsertions = []
@@ -394,16 +510,24 @@ async function importIntoMatrix(
       const characterId = matrixObj.characters[y].characterId
       const character = projectCharactersMap.get(characterId)
 
-      let note
-      let isUncertain = 0
-      let cell = cellRow[y]
-      if (typeof cell === 'object' || cell instanceof Object) {
-        isUncertain = !!cell.uncertain
-        note = cell.note
-        cell = cell.scores
-      }
-
-      if (note) {
+      const cellValue = cellRow[y]
+      
+      // Process cell value using the common function
+      const potentialCells = processCellValue(cellValue, {
+        matrixId,
+        taxonId,
+        characterId,
+        character,
+        userId: user.user_id,
+        missingSymbol,
+        gapSymbol,
+        symbols
+      })
+      
+      // Handle notes separately for non-batched processing
+      let note = null
+      if (typeof cellValue === 'object' && cellValue !== null && cellValue.note) {
+        note = cellValue.note
         const existingNote = cellNotesTable.get(taxonId, characterId)
         if (existingNote && !contains(existingNote, note)) {
           note = existingNote + '\n' + note
@@ -417,157 +541,56 @@ async function importIntoMatrix(
           source: 'IMPORT',
         })
       }
-
-      const isContinuous = character.type > 0
-      if (isContinuous) {
-        const values = cell.split(/[,;\-–]/g)
-        if (values.length == 0) {
-          continue
-        }
-        if (values[0] == '?') {
-          continue
-        }
-        for (let i = 0; i < values.length; ++i) {
-          const trimmedValue = values[i].trim()
-          // Handle empty strings, missing data markers, and invalid values
-          if (trimmedValue === '' || trimmedValue === '?' || trimmedValue === '-') {
-            values[i] = null
+      
+      // Check existing cells to avoid duplicates
+      const existingCell = cellsTable.get(taxonId, characterId)
+      
+      for (const cellToInsert of potentialCells) {
+        let shouldInsert = true
+        
+        if (existingCell) {
+          if (character.type > 0) {
+            // Continuous character - check for duplicate values
+            shouldInsert = !existingCell.some(
+              (cell) =>
+                cell.start_value === cellToInsert.start_value &&
+                (cell.end_value === cellToInsert.end_value ||
+                  (cell.end_value == null && cellToInsert.end_value == null))
+            )
           } else {
-            const parsedValue = parseFloat(trimmedValue)
-            values[i] = isNaN(parsedValue) ? null : parsedValue
-          }
-        }
-
-        if (values[0] == undefined || values[0] == null) {
-          continue
-        }
-
-        // Check if continuous cell already exists with same values
-        const existingCell = cellsTable.get(taxonId, characterId)
-        const startValue = values[0]
-        const endValue = values[1]
-
-        if (
-          existingCell &&
-          existingCell.some(
-            (cell) =>
-              cell.start_value === startValue &&
-              (cell.end_value === endValue ||
-                (cell.end_value == null && endValue == null))
-          )
-        ) {
-          continue
-        }
-
-        cellsInsertions.push({
-          matrix_id: matrixId,
-          taxon_id: taxonId,
-          character_id: characterId,
-          user_id: user.user_id,
-          start_value: startValue,
-          end_value: endValue,
-        })
-      } else {
-        const existingCell = cellsTable.get(taxonId, characterId)
-        const scores = cell.toUpperCase().split('')
-        for (const score of scores) {
-          if (score == missingSymbol) {
-            continue
-          }
-
-          if (score == gapSymbol || score == '-' || score == '–') {
-            if (
-              !existingCell ||
-              !existingCell.some((score) => score.state_id == null)
-            ) {
-              cellsInsertions.push({
-                matrix_id: matrixId,
-                taxon_id: taxonId,
-                character_id: characterId,
-                user_id: user.user_id,
-              })
+            // Discrete character - check for duplicate states
+            if (cellToInsert.state_id === null) {
+              shouldInsert = !existingCell.some((cell) => cell.state_id == null)
+            } else {
+              shouldInsert = !existingCell.some(
+                (cell) => cell.state_id == cellToInsert.state_id
+              )
             }
-            continue
           }
-
-          let index
-          if (symbols && Object.keys(symbols).length > 0) {
-            index = symbols[score]
-          } else if (score >= '0' && score <= '9') {
-            index = parseInt(score)
-          } else {
-            index = score.toUpperCase().charCodeAt(0) - 65 // A
-          }
-
-          if (index == undefined || index < 0) {
-            console.error(
-              `ERROR: Could not parse cell value at position [${x}, ${y}]`
-            )
-            console.error(
-              `  - Taxon: ${matrixObj.taxa[x].name} (ID: ${taxonId})`
-            )
-            console.error(
-              `  - Character: ${
-                character.name || 'unnamed'
-              } (ID: ${characterId})`
-            )
-            console.error(`  - Cell value: "${score}" (type: ${typeof score})`)
-            console.error(
-              `  - Symbols available: ${
-                Object.keys(symbols).length > 0
-                  ? JSON.stringify(symbols)
-                  : 'none (using numeric/alpha parsing)'
-              }`
-            )
-            console.error(`  - Parsed index: ${index}`)
-            throw `Undefined cell state ${score} at position [${x}, ${y}] for character ${
-              character.name || characterId
-            }`
-          }
-
-          const state = character.states[index]
-          if (!state) {
-            console.error(
-              `ERROR: Undefined cell state at position [${x}, ${y}]`
-            )
-            console.error(
-              `  - Taxon: ${matrixObj.taxa[x].name} (ID: ${taxonId})`
-            )
-            console.error(
-              `  - Character: ${
-                character.name || 'unnamed'
-              } (ID: ${characterId})`
-            )
-            console.error(`  - Cell value: "${score}" -> index: ${index}`)
-            console.error(
-              `  - Available states: [${character.states
-                .map((s, i) => `${i}:${s.name}`)
-                .join(', ')}]`
-            )
-            console.error(`  - Character has ${character.states.length} states`)
-            throw `Undefined cell state ${score} (index ${index}) for character ${
-              character.name || characterId
-            } at position [${x}, ${y}]`
-          }
-
-          const stateId = parseInt(state.state_id)
-          if (
-            existingCell &&
-            existingCell.some(
-              (existingScore) => existingScore.state_id == stateId
-            )
-          ) {
-            continue
-          }
-
-          cellsInsertions.push({
-            matrix_id: matrixId,
-            taxon_id: taxonId,
-            character_id: characterId,
-            user_id: user.user_id,
-            state_id: stateId,
-            is_uncertain: isUncertain,
-          })
+        }
+        
+        if (shouldInsert) {
+          // Remove notes from cell insertion (handled separately)
+          const { notes, ...cellWithoutNotes } = cellToInsert
+          cellsInsertions.push(cellWithoutNotes)
+        }
+      }
+      
+      // Error handling for invalid cell values
+      if (potentialCells.length === 0 && cellValue && cellValue !== '?') {
+        const cellStr = typeof cellValue === 'object' ? cellValue.scores : cellValue
+        // Only throw error for non-empty, non-missing values that produced no cells
+        if (cellStr && cellStr.trim() && !cellStr.split('').every(c => c === missingSymbol)) {
+          console.error(
+            `WARNING: No valid cell states found at position [${x}, ${y}]`
+          )
+          console.error(
+            `  - Taxon: ${matrixObj.taxa[x].name} (ID: ${taxonId})`
+          )
+          console.error(
+            `  - Character: ${character.name || 'unnamed'} (ID: ${characterId})`
+          )
+          console.error(`  - Cell value: "${cellStr}"`)
         }
       }
     }
@@ -759,6 +782,135 @@ function parseSymbols(symbols) {
     }
   }
   return map
+}
+
+/**
+ * Process a single cell value and return cell insertion objects
+ * @param {*} cellValue - The cell value (string, object, or array)
+ * @param {Object} params - Processing parameters
+ * @param {number} params.matrixId - Matrix ID
+ * @param {number} params.taxonId - Taxon ID
+ * @param {number} params.characterId - Character ID
+ * @param {Object} params.character - Character object with type and states
+ * @param {number} params.userId - User ID
+ * @param {string} params.missingSymbol - Symbol for missing data
+ * @param {string} params.gapSymbol - Symbol for gap
+ * @param {Object} params.symbols - Symbol mapping
+ * @returns {Array} Array of cell objects to insert
+ */
+function processCellValue(cellValue, params) {
+  const {
+    matrixId,
+    taxonId,
+    characterId,
+    character,
+    userId,
+    missingSymbol = '?',
+    gapSymbol = '?',
+    symbols = {}
+  } = params
+
+  const cells = []
+  
+  // Extract note and uncertainty if cell is an object
+  let note = null
+  let isUncertain = 0
+  let scores = cellValue
+  
+  if (typeof cellValue === 'object' && cellValue !== null) {
+    isUncertain = !!cellValue.uncertain
+    note = cellValue.note
+    scores = cellValue.scores
+  }
+  
+  const isContinuous = character.type > 0
+  
+  if (isContinuous) {
+    // Process continuous character
+    const values = scores.split(/[,;\-–]/g)
+    if (values.length === 0 || values[0] === '?') {
+      return cells
+    }
+    
+    // Parse numeric values
+    for (let i = 0; i < values.length; ++i) {
+      const trimmedValue = values[i].trim()
+      if (trimmedValue === '' || trimmedValue === '?' || trimmedValue === '-') {
+        values[i] = null
+      } else {
+        const parsedValue = parseFloat(trimmedValue)
+        values[i] = isNaN(parsedValue) ? null : parsedValue
+      }
+    }
+    
+    if (values[0] == undefined || values[0] == null) {
+      return cells
+    }
+    
+    cells.push({
+      matrix_id: matrixId,
+      taxon_id: taxonId,
+      character_id: characterId,
+      user_id: userId,
+      start_value: values[0],
+      end_value: values[1] || null,
+      is_uncertain: isUncertain,
+      notes: note
+    })
+  } else {
+    // Process discrete character
+    const scoreArray = scores.toUpperCase().split('')
+    
+    for (const score of scoreArray) {
+      if (score === missingSymbol) {
+        continue
+      }
+      
+      if (score === gapSymbol || score === '-' || score === '–') {
+        cells.push({
+          matrix_id: matrixId,
+          taxon_id: taxonId,
+          character_id: characterId,
+          user_id: userId,
+          state_id: null,
+          is_uncertain: isUncertain,
+          notes: note
+        })
+        continue
+      }
+      
+      // Map score to state index
+      let index
+      if (symbols && Object.keys(symbols).length > 0) {
+        index = symbols[score]
+      } else if (score >= '0' && score <= '9') {
+        index = parseInt(score)
+      } else {
+        index = score.toUpperCase().charCodeAt(0) - 65 // A = 0, B = 1, etc.
+      }
+      
+      if (index == undefined || index < 0) {
+        continue
+      }
+      
+      const state = character.states[index]
+      if (!state) {
+        continue
+      }
+      
+      cells.push({
+        matrix_id: matrixId,
+        taxon_id: taxonId,
+        character_id: characterId,
+        user_id: userId,
+        state_id: parseInt(state.state_id),
+        is_uncertain: isUncertain,
+        notes: note
+      })
+    }
+  }
+  
+  return cells
 }
 
 /**

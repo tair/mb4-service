@@ -13,7 +13,9 @@
     "lint": "eslint . --ext .js",
     "pretty": "prettier --write \"./**/*.{js,js,json,vue}\"",
     "generate-model": "sequelize-auto -o \"./models\" -d morphobank -h mb4-db-dev -u morphobank -p 3306 -x {password} -e mysql -l esm --cf k --cp o --cm p --sg",
-    "generate-model-ts": "sequelize-auto -o \"./models\" -d morphobank -h mb4-db-dev -u morphobank -p 3306 -x {password} -e mysql -l ts --cf k --cp o --cm p --sg"
+    "generate-model-ts": "sequelize-auto -o \"./models\" -d morphobank -h mb4-db-dev -u morphobank -p 3306 -x {password} -e mysql -l ts --cf k --cp o --cm p --sg",
+    "migrate:hp-media": "node scripts/migrate-hp-media-to-s3.js",
+    "upload:sdd": "node scripts/upload-project-sdd-to-s3.js"
   },
   "keywords": [],
   "author": "",
@@ -22,8 +24,9 @@
     "@aws-sdk/client-s3": "^3.828.0",
     "@aws-sdk/client-ses": "^3.382.0",
     "@aws-sdk/node-http-handler": "^3.374.0",
+    "@aws-sdk/s3-request-presigner": "^3.911.0",
     "archiver": "^7.0.1",
-    "axios": "^1.7.4",
+    "axios": "^1.12.2",
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",

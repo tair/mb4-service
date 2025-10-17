@@ -231,6 +231,15 @@ function signup(req, res, next) {
 
 async function checkProfileConfirmation(req, res, next) {
   try {
+    // Anonymous reviewers don't need profile confirmation
+    if (req.credential && req.credential.is_anonymous) {
+      return res.json({
+        profile_confirmation_required: false,
+        is_anonymous: true,
+        message: 'Anonymous reviewers do not require profile confirmation'
+      })
+    }
+    
     const user = await models.User.findByPk(req.credential.user_id)
     
     if (!user) {
@@ -293,4 +302,49 @@ async function createInstitution(req, res, next) {
   }
 }
 
-export { getUsers, signup, getProfile, updateProfile, searchInstitutions, checkProfileConfirmation, createInstitution }
+async function verifyAuthentication(req, res, next) {
+  try {
+    // If we reach this point, the authenticateToken middleware has validated the token
+    
+    // Handle anonymous reviewers - they have valid tokens but no user record in the users table
+    if (req.credential && req.credential.is_anonymous) {
+      return res.status(200).json({
+        authenticated: true,
+        is_anonymous: true,
+        user_id: req.credential.user_id,
+        project_id: req.credential.project_id,
+        name: 'Anonymous Reviewer',
+        message: 'Anonymous reviewer authentication verified'
+      })
+    }
+    
+    // For regular users, verify the user exists in the database
+    const user = await models.User.findByPk(req.credential.user_id, {
+      attributes: ['user_id', 'email', 'fname', 'lname', 'active', 'userclass']
+    })
+    
+    if (!user) {
+      return res.status(401).json({ message: 'User not found.' })
+    }
+
+    if (user.userclass == 255 /* deleted */ || user.active == false) {
+      return res.status(401).json({ message: 'User account is inactive.' })
+    }
+
+    res.status(200).json({
+      authenticated: true,
+      user_id: user.user_id,
+      email: user.email,
+      name: `${user.fname} ${user.lname}`.trim(),
+      message: 'Authentication verified'
+    })
+  } catch (error) {
+    console.error('Error verifying authentication:', error)
+    return res.status(500).json({ 
+      message: 'Error verifying authentication.',
+      error: error.message 
+    })
+  }
+}
+
+export { getUsers, signup, getProfile, updateProfile, searchInstitutions, checkProfileConfirmation, createInstitution, verifyAuthentication }

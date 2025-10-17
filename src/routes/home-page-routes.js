@@ -88,6 +88,7 @@ router.get('/', async (req, res) => {
         project_id: fp.project_id,
         name: fp.name,
         description: fp.description,
+        media_id: fp.media_files?.[0]?.media_id,
         media: fp.media_files?.[0]?.media,
       })),
       matrixImages: matrixImages.map((mi) => ({

@@ -159,6 +159,10 @@ export async function getPbdbInfo(projectId) {
 }
 
 export async function getTaxonIdsByHash(projectId, hashes) {
+  // Avoid SQL syntax error: "IN ()"
+  if (!hashes || hashes.length === 0) {
+    return []
+  }
   const [rows] = await sequelizeConn.query(
     `
       SELECT taxon_id, taxon_hash

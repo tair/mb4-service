@@ -361,6 +361,7 @@ export default class Taxon extends Model {
 }
 
 export function getTaxonHash(record) {
+  // Classification/hash uses taxonomic rank fields + scientific_name_author; if multiple years exist upstream, only the first year value is stored.
   const columns = []
   for (const fieldName of TAXA_FIELD_NAMES) {
     if (record[fieldName]) {
