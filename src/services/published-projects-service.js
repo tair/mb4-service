@@ -23,7 +23,7 @@ export async function getProjects() {
     }
 
     row.project_stats = await getProjectStats(projectId)
-    row.image_props = await mediaService.getImageProps(projectId, 'preview')
+    row.image_props = await mediaService.getImageProps(projectId, 'thumbnail')
     await setJournalCoverUrl(row)
   }
 
