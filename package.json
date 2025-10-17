@@ -14,6 +14,9 @@
     "pretty": "prettier --write \"./**/*.{js,js,json,vue}\"",
     "generate-model": "sequelize-auto -o \"./models\" -d morphobank -h mb4-db-dev -u morphobank -p 3306 -x {password} -e mysql -l esm --cf k --cp o --cm p --sg",
     "generate-model-ts": "sequelize-auto -o \"./models\" -d morphobank -h mb4-db-dev -u morphobank -p 3306 -x {password} -e mysql -l ts --cf k --cp o --cm p --sg",
+    "migrate": "npx sequelize-cli db:migrate",
+    "migrate:undo": "npx sequelize-cli db:migrate:undo",
+    "migrate:status": "npx sequelize-cli db:migrate:status",
     "migrate:hp-media": "node scripts/migrate-hp-media-to-s3.js",
     "upload:sdd": "node scripts/upload-project-sdd-to-s3.js"
   },
@@ -44,6 +47,7 @@
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.13",
     "sequelize": "^6.23.1",
+    "sequelize-cli": "^6.6.0",
     "sharp": "^0.33.2",
     "xml-writer": "^1.7.0"
   },
@@ -54,7 +58,6 @@
     "nodemon": "^3.1.3",
     "prettier": "2.6.2",
     "sequelize-auto": "^0.8.8",
-    "sequelize-cli": "^6.6.0",
     "tedious": "^18.3.0"
   }
 }
