@@ -41,8 +41,9 @@ export async function createSpecimen(req, res) {
     user_id: req.user.user_id,
   })
 
+  let transaction
   try {
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
     await specimen.save({
       transaction,
       user: req.user,
@@ -63,28 +64,31 @@ export async function createSpecimen(req, res) {
     }
 
     await transaction.commit()
+    
+    res.status(200).json({
+      specimen: convertSpecimenResponse(specimen, taxonId),
+    })
   } catch (e) {
-    console.log(e)
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error creating specimen:', e)
     res
       .status(500)
       .json({ message: 'Failed to create specimen with server error' })
-    return
   }
-
-  res.status(200).json({
-    specimen: convertSpecimenResponse(specimen, taxonId),
-  })
 }
 
 export async function createSpecimens(req, res) {
   const projectId = req.project.project_id
   const taxaMap = new Map()
+  let transaction
   try {
     const results = {
       taxa: [],
       specimens: [],
     }
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
     // Create the values from the user and store the hash so that they can be
     // referenced later.
     const hashes = []
@@ -183,10 +187,13 @@ export async function createSpecimens(req, res) {
     await transaction.commit()
     res.status(200).json(results)
   } catch (e) {
-    console.log(e)
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error creating specimens:', e)
     res
       .status(500)
-      .json({ message: 'Failed to create taxon with server error' })
+      .json({ message: 'Failed to create specimen with server error' })
   }
 }
 
@@ -329,8 +336,10 @@ export async function editSpecimen(req, res) {
       return
     }
   }
+  
+  let transaction
   try {
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
     if (taxonId) {
       const taxaSpecimen = await models.TaxaXSpecimen.findAll({
         where: { specimen_id: specimenId },
@@ -364,17 +373,19 @@ export async function editSpecimen(req, res) {
       user: req.user,
     })
     await transaction.commit()
+    
+    res.status(200).json({
+      specimen: convertSpecimenResponse(specimen, taxonId),
+    })
   } catch (e) {
-    console.log(e)
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error updating specimen:', e)
     res
       .status(500)
       .json({ message: 'Failed to update specimen with server error' })
-    return
   }
-
-  res.status(200).json({
-    specimen: convertSpecimenResponse(specimen, taxonId),
-  })
 }
 
 export async function getCitations(req, res) {
