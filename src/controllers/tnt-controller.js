@@ -160,8 +160,8 @@ async function analyzeTntFile(req, res) {
     if (req.body.outgroup) {
       formData.append('outgroup', req.body.outgroup)
     }
-    if (req.body.hold_value) {
-      formData.append('hold_value', req.body.hold_value)
+    if (req.body.hold) {
+      formData.append('hold', req.body.hold) // Forward hold parameter to TNT service
     }
     if (req.body.search_type) {
       formData.append('search_type', req.body.search_type)
@@ -170,14 +170,17 @@ async function analyzeTntFile(req, res) {
     // Add search-specific parameters
     if (req.body.search_type === 'traditional') {
       if (req.body.replications) {
-        formData.append('replications', req.body.replications)
+        formData.append('replicates', req.body.replications) // Map replications to replicates for TNT service
       }
       if (req.body.trees_per_replication) {
-        formData.append('trees_per_replication', req.body.trees_per_replication)
+        formData.append('trees_per_replication', req.body.trees_per_replication) // Forward trees_per_replication parameter
+      }
+      if (req.body.swapAlgorithm) {
+        formData.append('swapAlgorithm', req.body.swapAlgorithm) // Forward swap algorithm parameter
       }
     } else if (req.body.search_type === 'new_technology') {
       if (req.body.iterations) {
-        formData.append('iterations', req.body.iterations)
+        formData.append('hits', req.body.iterations) // Map iterations to hits for TNT service
       }
     }
 
@@ -474,8 +477,8 @@ async function analyzeMatrixTnt(req, res) {
 
     // Add analysis parameters from request body
     formData.append('outgroup', req.body.outgroup)
-    if (req.body.hold_value) {
-      formData.append('hold_value', req.body.hold_value)
+    if (req.body.hold) {
+      formData.append('hold', req.body.hold) // Forward hold parameter to TNT service
     }
     if (req.body.search_type) {
       formData.append('search_type', req.body.search_type)
@@ -484,14 +487,17 @@ async function analyzeMatrixTnt(req, res) {
     // Add search-specific parameters
     if (req.body.search_type === 'traditional') {
       if (req.body.replications) {
-        formData.append('replications', req.body.replications)
+        formData.append('replicates', req.body.replications) // Map replications to replicates for TNT service
       }
       if (req.body.trees_per_replication) {
-        formData.append('trees_per_replication', req.body.trees_per_replication)
+        formData.append('trees_per_replication', req.body.trees_per_replication) // Forward trees_per_replication parameter
+      }
+      if (req.body.swapAlgorithm) {
+        formData.append('swapAlgorithm', req.body.swapAlgorithm) // Forward swap algorithm parameter
       }
     } else if (req.body.search_type === 'new_technology') {
       if (req.body.iterations) {
-        formData.append('iterations', req.body.iterations)
+        formData.append('hits', req.body.iterations) // Map iterations to hits for TNT service
       }
     }
 
