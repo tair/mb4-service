@@ -35,7 +35,22 @@ const app = express()
 app.set('trust proxy', true)
 
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*')
+  // Get the origin from the request
+  const origin = req.headers.origin
+  // Allow specific origins - morphobank domains
+  const allowedOrigins = [
+    'https://morphobank.org',              // Production proxy
+    'https://beta-proxy.morphobank.org',   // Dev proxy
+    'https://beta.morphobank.org',         // Beta environment
+    'https://mb4-uat.morphobank.org',      // UAT environment
+    config.app.frontendDomain,
+    process.env.FRONTEND_URL
+  ].filter(Boolean)
+  
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+  }
+  
   res.setHeader(
     'Access-Control-Allow-Methods',
     'OPTIONS, GET, POST, PUT, PATCH, DELETE'

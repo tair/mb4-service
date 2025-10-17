@@ -61,7 +61,9 @@ async function login(req, res, next) {
           expires: new Date(expiry * 1000),
           httpOnly: true,
           path: '/',
-          sameSite: 'lax',
+          sameSite: 'none',
+          secure: true,
+          domain: process.env.COOKIE_DOMAIN || '.morphobank.org',
         })
 
         // Log user login with session association
@@ -375,7 +377,9 @@ async function authenticateORCID(req, res) {
           expires: new Date(expiry * 1000),
           httpOnly: true,
           path: '/',
-          sameSite: 'lax',
+          sameSite: 'none',
+          secure: true,
+          domain: process.env.COOKIE_DOMAIN || '.morphobank.org',
         })
 
         // Log user login with session association for ORCID authentication
