@@ -15,7 +15,7 @@ services:
     volumes:
       - .:/app                 # bind mount code for hot reload
       - /app/node_modules      # anonymous volume to keep container's node_modules
-      - ./data:/data
+      - ./data:/app/data       # data persistence - mount to /app/data to match code path
     env_file:
       - ./.env                 # dev env vars
     ports:
@@ -50,7 +50,7 @@ services:
       - "8080:8080"
     command: ["node", "src/server.js"]  # Override to use correct entry point
     volumes:
-      - ./data:/data          # data persistence
+      - ./data:/app/data          # data persistence - mount to /app/data to match code path
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get({host:'127.0.0.1',port:8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
@@ -78,7 +78,7 @@ services:
     volumes:
       - .:/app                 # bind mount code for hot reload
       - /app/node_modules      # anonymous volume to keep container's node_modules
-      - ./data:/data
+      - ./data:/app/data       # data persistence - mount to /app/data to match code path
     env_file:
       - ./.env                 # local env vars
     ports:

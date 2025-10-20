@@ -25,7 +25,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/src ./src
 COPY package.json ./
 
-# security: don’t run as root
+# Create data directory with proper permissions before switching to node user
+RUN mkdir -p /app/data/project_stats && chown -R node:node /app/data
+
+# security: don't run as root
 USER node
 
 EXPOSE 8080
