@@ -1,4 +1,5 @@
 import fs from 'fs'
+import path from 'path'
 
 // function buildImageProps(mediaObj, type) {
 //   try {
@@ -32,9 +33,16 @@ export async function readFile(fileName) {
 
 export async function writeToFile(fileName, content) {
   try {
+    // Ensure directory exists before writing
+    const dir = path.dirname(fileName)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+      console.log(`Created directory: ${dir}`)
+    }
     fs.writeFileSync(fileName, content)
   } catch (err) {
-    console.error(err)
+    console.error(`Error writing to file ${fileName}:`, err)
+    throw err
   }
 }
 
