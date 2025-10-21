@@ -2,6 +2,7 @@ import { CharacterRulesTextExporter } from '../lib/matrix-export/character-rules
 import { CharacterTextExporter } from '../lib/matrix-export/character-text-exporter.js'
 import { ExportOptions } from '../lib/matrix-export/exporter.js'
 import { NexusExporter } from '../lib/matrix-export/nexus-exporter.js'
+import { NexusCipresExporter } from '../lib/matrix-export/nexus-cipres-exporter.js'
 import { NeXMLExporter } from '../lib/matrix-export/nexml-exporter.js'
 import { TNTExporter } from '../lib/matrix-export/tnt-exporter.js'
 import {
@@ -19,6 +20,13 @@ import fs from 'fs'
 import axios from 'axios'
 import FormData from 'form-data'
 import { getRoles } from '../services/user-roles-service.js'
+import * as taskQueueService from '../services/task-queue-service.js'
+import path from 'path'
+import config from '../config.js'
+import stream from 'stream'
+import { promisify } from 'util'
+
+const pipeline = promisify(stream.pipeline)
 
 export async function getMatrices(req, res) {
   const projectId = parseInt(req.params.projectId)
@@ -34,7 +42,7 @@ export async function getMatrices(req, res) {
 
     const userId = req.user?.user_id || 0
     const projectUser =
-      req.project?.user ??
+      req.project?.user ||
       (await models.ProjectsXUser.findOne({
         where: {
           user_id: userId,
@@ -78,11 +86,11 @@ export async function getMatrices(req, res) {
       userId > 0
         ? await CipresRequestService.getCipresJobs(matrixIds, userId)
         : null
-    
+
     // Check if user has edit permission (handles observers, character annotators, etc.)
     // Curators and admins will have 'edit' permission from authorizeProject
     const canEditMatrix = req.project?.permissions?.includes('edit') || false
-    
+
     const data = {
       matrices,
       partitions,
@@ -395,55 +403,111 @@ export async function uploadMatrix(req, res) {
 
   try {
     const projectId = req.params.projectId
-    const matrix = JSON.parse(serializedMatrix)
-    const results = matrixId
-      ? await mergeMatrix(
-          matrixId,
-          req.body.notes || '',
-          req.body.itemNotes || '',
-          req.user,
-          matrix,
-          file
-        )
-      : await importMatrix(
-          title,
-          req.body.notes || '',
-          req.body.itemNotes || '',
-          req.body.otu,
-          req.body.published,
-          req.user,
-          projectId,
-          matrix,
-          file
-        )
-    res.status(200).json({ status: true, results })
+    const matrixObj = null // avoid storing huge JSON in task parameters
+
+    // Enqueue async task to avoid proxy timeouts for large uploads
+    const transaction = await sequelizeConn.transaction()
+    try {
+      // Persist uploaded file to a durable temp location for background processing
+      const tmpBaseDir = path.join(
+        config.media.directory,
+        config.app.name,
+        'tmp',
+        'matrix_uploads'
+      )
+      await fs.promises.mkdir(tmpBaseDir, { recursive: true })
+      const timestamp = Date.now()
+      const safeOriginal = (file.originalname || 'upload').replace(
+        /[^a-zA-Z0-9_.-]/g,
+        '_'
+      )
+      const destFilePath = path.join(tmpBaseDir, `${timestamp}_${safeOriginal}`)
+      try {
+        await fs.promises.rename(file.path, destFilePath)
+      } catch (renameErr) {
+        await fs.promises.copyFile(file.path, destFilePath)
+      }
+
+      // Persist the large matrix JSON to a temp file as well
+      const jsonPath = path.join(
+        tmpBaseDir,
+        `${timestamp}_${req.user.user_id}.json`
+      )
+      await fs.promises.writeFile(jsonPath, serializedMatrix, 'utf8')
+
+      const task = await models.TaskQueue.create(
+        {
+          user_id: req.user.user_id,
+          priority: 300,
+          completed_on: null,
+          handler: 'MatrixImport',
+          parameters: {
+            projectId: parseInt(projectId),
+            userId: req.user.user_id,
+            title,
+            notes: req.body.notes || '',
+            itemNotes: req.body.itemNotes || '',
+            otu: req.body.otu,
+            published: req.body.published,
+            matrixId: matrixId ? parseInt(matrixId) : null,
+            // Pass paths instead of massive JSON objects
+            matrixJsonPath: jsonPath,
+            filePath: destFilePath,
+            originalname: file.originalname,
+            mimetype: file.mimetype,
+            size: file.size,
+          },
+        },
+        { transaction, user: req.user }
+      )
+      await transaction.commit()
+
+      // Kick off background processing (non-blocking)
+      taskQueueService.processTasks().catch(() => {})
+
+      return res.status(202).json({
+        success: true,
+        message: 'Matrix upload queued',
+        taskId: task.task_id,
+        status: 'queued',
+        statusUrl: `/api/tasks/${task.task_id}/status`,
+      })
+    } catch (err) {
+      await transaction.rollback()
+      throw err
+    }
   } catch (e) {
     console.log('Matrix not imported correctly', e)
-    
+
     // Provide more specific error messages
-    if (e.code === 'ER_LOCK_WAIT_TIMEOUT' || e.parent?.code === 'ER_LOCK_WAIT_TIMEOUT') {
-      res.status(500).json({ 
-        message: 'The database was busy processing other operations. Please try uploading again.',
+    if (
+      e.code === 'ER_LOCK_WAIT_TIMEOUT' ||
+      e.parent?.code === 'ER_LOCK_WAIT_TIMEOUT'
+    ) {
+      res.status(500).json({
+        message:
+          'The database was busy processing other operations. Please try uploading again.',
         code: 'DB_LOCK_TIMEOUT',
-        retry: true
+        retry: true,
       })
     } else if (e.code === 'ECONNRESET' || e.parent?.code === 'ECONNRESET') {
-      res.status(500).json({ 
+      res.status(500).json({
         message: 'Database connection was lost. Please try again.',
         code: 'DB_CONNECTION_ERROR',
-        retry: true
+        retry: true,
       })
     } else if (e.name === 'SequelizeDatabaseError') {
-      res.status(500).json({ 
-        message: 'A database error occurred. Please try again or contact support if the issue persists.',
+      res.status(500).json({
+        message:
+          'A database error occurred. Please try again or contact support if the issue persists.',
         code: 'DB_ERROR',
-        retry: true
+        retry: true,
       })
     } else {
-      res.status(400).json({ 
+      res.status(400).json({
         message: e.message || 'Matrix not imported correctly',
         code: 'IMPORT_ERROR',
-        retry: false
+        retry: false,
       })
     }
   }
@@ -562,7 +626,9 @@ export async function run(req, res) {
 
   const filename = `mbank_X${matrixId}_${userId}_${req.query.jobName}.zip`
   let fileContent = ''
-  let exporter = new NexusExporter((txt) => (fileContent = fileContent + txt))
+  let exporter = new NexusCipresExporter(
+    (txt) => (fileContent = fileContent + txt)
+  )
 
   exporter.export(options)
   /*
@@ -576,7 +642,7 @@ export async function run(req, res) {
     jobChar = 'vparam.specify_pct_'
   }*/
 
-  console.info("Received tool = " + req.query.tool + " in the request")
+  console.info('Received tool = ' + req.query.tool + ' in the request')
   /* const formData1 = {
     tool: req.query.tool,
     'input.infile_': fileContent,
@@ -622,20 +688,20 @@ export async function run(req, res) {
             'vparam.nchains_specified_': req.query.nchains_specified,
             'vparam.runtime_': 1,
           }
-        fileContent += "\n" + req.query.mrbayesblock
+        fileContent += '\n' + req.query.mrbayesblock
         console.info(fileContent)
-      }
-      else
-          formData2 = {
-            'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
-            'vparam.nruns_specified_': req.query.nruns_specified,
-            'vparam.nchains_specified_': req.query.nchains_specified,
-            'vparam.runtime_': req.query.runtime,
-          }
+      } else
+        formData2 = {
+          'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
+          'vparam.nruns_specified_': req.query.nruns_specified,
+          'vparam.nchains_specified_': req.query.nchains_specified,
+          'vparam.runtime_': req.query.runtime,
+        }
     }
     if (req.query.mrbayesblockquery == '0') {
       if (req.query.set_outgroup != null)
         formData2 = {
+          'vparam.datatype_': 'standard',
           'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
           'vparam.set_outgroup_': req.query.set_outgroup,
           'vparam.ngenval_': req.query.ngenval,
@@ -648,6 +714,7 @@ export async function run(req, res) {
         }
       else
         formData2 = {
+          'vparam.datatype_': 'standard',
           'vparam.mrbayesblockquery_': req.query.mrbayesblockquery,
           'vparam.ngenval_': req.query.ngenval,
           'vparam.nrunsval_': req.query.nrunsval,
@@ -864,5 +931,116 @@ export async function checkDeletePermission(req, res) {
     res.status(500).json({
       message: e.message || 'Error while checking delete permission.',
     })
+  }
+}
+
+/**
+ * Convert CSV/Excel file to NEXUS/TNT format via mb4-curator API
+ * This acts as a proxy to the curator service for better security and architecture
+ */
+export async function convertCsvToMatrix(req, res) {
+  try {
+    const file = req.file
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: 'CSV or Excel file is required',
+      })
+    }
+
+    // Validate file type
+    const validExtensions = ['.csv', '.xlsx']
+    const fileExt = path.extname(file.originalname).toLowerCase()
+    if (!validExtensions.includes(fileExt)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid file type. Only CSV and Excel files are supported.',
+      })
+    }
+
+    // Prepare form data for curator API
+    const formData = new FormData()
+    formData.append('csv_file', fs.createReadStream(file.path), {
+      filename: file.originalname,
+      contentType: file.mimetype,
+    })
+
+    // Call the curator API
+    const curatorUrl = config.curator.url || 'http://localhost:8001'
+    console.log(`Calling curator API at ${curatorUrl}/api/upload-csv`)
+
+    const response = await axios.post(
+      `${curatorUrl}/api/upload-csv`,
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders(),
+        },
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+        timeout: 60000, // 60 second timeout
+      }
+    )
+
+    // Clean up uploaded file
+    try {
+      await fs.promises.unlink(file.path)
+    } catch (unlinkError) {
+      console.warn('Failed to clean up temporary file:', unlinkError)
+    }
+
+    // Return curator API response
+    res.json(response.data)
+  } catch (error) {
+    // Clean up uploaded file on error
+    if (req.file?.path) {
+      try {
+        await fs.promises.unlink(req.file.path)
+      } catch (unlinkError) {
+        console.warn('Failed to clean up temporary file:', unlinkError.message)
+      }
+    }
+
+    // Log error concisely
+    const curatorUrl = config.curator.url || 'http://localhost:8001'
+    console.error(
+      `CSV/Excel conversion failed: ${error.code || 'ERROR'} - ${
+        error.message
+      }`,
+      `[Curator URL: ${curatorUrl}]`
+    )
+
+    // Handle different types of errors
+    if (error.response) {
+      // Curator API returned an error
+      console.error(
+        `Curator API error: ${error.response.status} - ${
+          error.response.data?.detail || error.response.data?.message
+        }`
+      )
+      return res.status(error.response.status).json({
+        success: false,
+        message:
+          error.response.data?.detail ||
+          error.response.data?.message ||
+          'Curator API error',
+        detail: error.response.data,
+      })
+    } else if (error.code === 'ECONNREFUSED') {
+      return res.status(503).json({
+        success: false,
+        message: `Curator service is unavailable at ${curatorUrl}. Please ensure the service is running.`,
+      })
+    } else if (error.code === 'ETIMEDOUT') {
+      return res.status(504).json({
+        success: false,
+        message: 'Curator service request timed out. Please try again.',
+      })
+    } else {
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to convert CSV/Excel file',
+      })
+    }
   }
 }

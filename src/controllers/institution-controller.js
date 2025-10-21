@@ -31,8 +31,9 @@ export async function addInstitutionToProject(req, res) {
     ? await models.Institution.findByPk(institutionId)
     : await models.Institution.findOne({ where: { name: name } })
 
+  let transaction
   try {
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
 
     if (institution == null) {
       institution = await models.Institution.create(
@@ -61,7 +62,10 @@ export async function addInstitutionToProject(req, res) {
     await transaction.commit()
     res.status(200).json({ institution })
   } catch (e) {
-    console.error(e)
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error adding institution to project:', e)
     res
       .status(500)
       .json({ message: 'Error adding the institution to the project.' })
@@ -94,9 +98,10 @@ export async function editInstitution(req, res) {
 
   const institutionInUse = dupeProjectInstitutionIds.length != 0
 
-  const transaction = await sequelizeConn.transaction()
-
+  let transaction
   try {
+    transaction = await sequelizeConn.transaction()
+
     if (!institutionInUse) {
       // If the previous institution is not is use outside of this project and
       // the new instituion does not already exist, let's update the current
@@ -105,8 +110,9 @@ export async function editInstitution(req, res) {
         institution.name = name
         await institution.save({
           user: req.user,
+          transaction: transaction,
         })
-
+        await transaction.commit()
         return res.status(200).json({ institution })
       }
 
@@ -160,8 +166,11 @@ export async function editInstitution(req, res) {
     await transaction.commit()
     return res.status(200).json({ institution: newInstitution })
   } catch (e) {
-    res.status(500)
+    if (transaction) {
+      await transaction.rollback()
+    }
     console.error('Could not change Institution', e)
+    res.status(500).json({ message: 'Failed to edit institution with server error' })
   }
 }
 
@@ -174,6 +183,7 @@ export async function removeInstitutionFromProject(req, res) {
     return
   }
 
+  let transaction
   try {
     const dupeProjectInstitutionIds =
       await institutionService.getInstitutionIdsReferencedOutsideProject(
@@ -185,7 +195,7 @@ export async function removeInstitutionFromProject(req, res) {
       return !dupeProjectInstitutionIds.includes(institutionId)
     })
 
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
 
     await models.InstitutionsXProject.destroy({
       where: {
@@ -210,10 +220,13 @@ export async function removeInstitutionFromProject(req, res) {
 
     res.status(200).json({ institutionIds })
   } catch (e) {
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Could not remove institution from the project:', e)
     res
       .status(500)
       .json({ message: 'Could not remove institution from the project.' })
-    console.log('Could not remove institution from the project.', e)
   }
 }
 

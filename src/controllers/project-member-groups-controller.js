@@ -17,17 +17,26 @@ export async function getProjectGroups(req, res) {
 
 export async function deleteGroup(req, res) {
   const group_id = req.body.group_id
-  const transaction = await sequelizeConn.transaction()
-  await models.ProjectMemberGroup.destroy({
-    where: {
-      group_id: group_id,
-    },
-    transaction: transaction,
-    individualHooks: true,
-    user: req.user,
-  })
-  await transaction.commit()
-  res.status(200).json({ group_id: group_id })
+  let transaction
+  try {
+    transaction = await sequelizeConn.transaction()
+    await models.ProjectMemberGroup.destroy({
+      where: {
+        group_id: group_id,
+      },
+      transaction: transaction,
+      individualHooks: true,
+      user: req.user,
+    })
+    await transaction.commit()
+    res.status(200).json({ group_id: group_id })
+  } catch (e) {
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error deleting group:', e)
+    res.status(500).json({ message: 'Failed to delete group with server error' })
+  }
 }
 
 export async function editGroup(req, res) {

@@ -231,6 +231,10 @@ export async function getImageProps(projectId, type, exemplarMediaId) {
   try {
     if (rows && rows.length) {
       let obj = { media: rows[0].media[type] }
+      // Include media_id so frontend can use it directly
+      if (rows[0].media_id) {
+        obj['media_id'] = rows[0].media_id
+      }
       let specimenName = getSpecimenNameForPublishedProject(rows[0])
       if (specimenName) {
         obj['specimen_name'] = specimenName

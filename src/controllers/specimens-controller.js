@@ -3,6 +3,7 @@ import * as specimenService from '../services/specimen-service.js'
 import * as taxaService from '../services/taxa-service.js'
 import { models } from '../models/init-models.js'
 import { getTaxonHash } from '../models/taxon.js'
+import { TAXA_FIELD_NAMES } from '../util/taxa.js'
 import {
   ModelRefencialMapper,
   ModelReferencialConfig,
@@ -19,6 +20,11 @@ export async function getSpecimens(req, res) {
 export async function createSpecimen(req, res) {
   const columnValues = req.body.specimen
   const taxonId = columnValues.taxon_id
+  // Enforce required taxon_id
+  if (!taxonId) {
+    res.status(400).json({ message: 'taxon_id is required' })
+    return
+  }
   if (taxonId) {
     const taxon = await models.Taxon.findByPk(taxonId)
     if (taxon.project_id != req.project.project_id) {
@@ -35,8 +41,9 @@ export async function createSpecimen(req, res) {
     user_id: req.user.user_id,
   })
 
+  let transaction
   try {
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
     await specimen.save({
       transaction,
       user: req.user,
@@ -57,32 +64,44 @@ export async function createSpecimen(req, res) {
     }
 
     await transaction.commit()
+    
+    res.status(200).json({
+      specimen: convertSpecimenResponse(specimen, taxonId),
+    })
   } catch (e) {
-    console.log(e)
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error creating specimen:', e)
     res
       .status(500)
       .json({ message: 'Failed to create specimen with server error' })
-    return
   }
-
-  res.status(200).json({
-    specimen: convertSpecimenResponse(specimen, taxonId),
-  })
 }
 
 export async function createSpecimens(req, res) {
   const projectId = req.project.project_id
   const taxaMap = new Map()
+  let transaction
   try {
     const results = {
       taxa: [],
       specimens: [],
     }
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
     // Create the values from the user and store the hash so that they can be
     // referenced later.
     const hashes = []
     for (const [key, values] of Object.entries(req.body.taxa)) {
+      // Skip taxa that have no taxonomic values at all
+      const hasTaxonomy = TAXA_FIELD_NAMES.some((field) => {
+        const v = values[field]
+        return v !== undefined && String(v).trim() !== ''
+      })
+      if (!hasTaxonomy) {
+        continue
+      }
+
       const taxon = models.Taxon.build(values)
       const hash = getTaxonHash(taxon)
       taxon.set({
@@ -121,6 +140,23 @@ export async function createSpecimens(req, res) {
       }
     }
 
+    // Validate: all specimens must resolve to a taxon hash that exists in taxaMap
+    // (taxaMap only contains taxa that passed taxonomy checks)
+    const invalidSpecimens = []
+    for (const s of req.body.specimens) {
+      if (!s.taxon_hash || !taxaMap.has(s.taxon_hash)) {
+        invalidSpecimens.push(s)
+      }
+    }
+    if (invalidSpecimens.length > 0) {
+      await transaction.rollback()
+      return res.status(400).json({
+        message:
+          'Each specimen must include taxonomic data sufficient to create or match a taxon.',
+        invalid_specimens: invalidSpecimens.length,
+      })
+    }
+
     for (const values of req.body.specimens) {
       const specimen = models.Specimen.build(values)
       specimen.set({
@@ -132,7 +168,7 @@ export async function createSpecimens(req, res) {
         user: req.user,
       })
       let taxonId = undefined
-      if (values.taxon_hash) {
+      if (values.taxon_hash && taxaMap.has(values.taxon_hash)) {
         taxonId = taxaMap.get(values.taxon_hash).taxon_id
         await models.TaxaXSpecimen.create(
           {
@@ -151,10 +187,13 @@ export async function createSpecimens(req, res) {
     await transaction.commit()
     res.status(200).json(results)
   } catch (e) {
-    console.log(e)
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error creating specimens:', e)
     res
       .status(500)
-      .json({ message: 'Failed to create taxon with server error' })
+      .json({ message: 'Failed to create specimen with server error' })
   }
 }
 
@@ -275,6 +314,11 @@ export async function editSpecimen(req, res) {
   }
 
   const values = req.body.specimen
+  // Enforce required taxon_id on update
+  if (!values.taxon_id) {
+    res.status(400).json({ message: 'taxon_id is required' })
+    return
+  }
   for (const column in values) {
     specimen.set(column, values[column])
   }
@@ -292,8 +336,10 @@ export async function editSpecimen(req, res) {
       return
     }
   }
+  
+  let transaction
   try {
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
     if (taxonId) {
       const taxaSpecimen = await models.TaxaXSpecimen.findAll({
         where: { specimen_id: specimenId },
@@ -327,17 +373,19 @@ export async function editSpecimen(req, res) {
       user: req.user,
     })
     await transaction.commit()
+    
+    res.status(200).json({
+      specimen: convertSpecimenResponse(specimen, taxonId),
+    })
   } catch (e) {
-    console.log(e)
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error updating specimen:', e)
     res
       .status(500)
       .json({ message: 'Failed to update specimen with server error' })
-    return
   }
-
-  res.status(200).json({
-    specimen: convertSpecimenResponse(specimen, taxonId),
-  })
 }
 
 export async function getCitations(req, res) {

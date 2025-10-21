@@ -426,6 +426,7 @@ async function importIntoMatrix(
     // Process cells in batches with separate transactions
     const batchSize = getOptimalBatchSize(taxaCount, charCount)
     const allCellsInsertions = []
+    const notesInsertions = []
     
     // Collect all cells first
     for (let x = 0, l = matrixObj.cells.length; x < l; ++x) {
@@ -450,12 +451,51 @@ async function importIntoMatrix(
         })
         
         allCellsInsertions.push(...cellsToInsert)
+
+        // Collect notes for batched path
+        if (typeof cellValue === 'object' && cellValue !== null && cellValue.note) {
+          let note = cellValue.note
+          const existingNote = cellNotesTable.get(taxonId, characterId)
+          if (existingNote && !contains(existingNote, note)) {
+            note = existingNote + '\n' + note
+          }
+
+          // Merge duplicates across same taxon/character within this upload
+          const existingIdx = notesInsertions.findIndex(
+            (n) => n.taxon_id === taxonId && n.character_id === characterId
+          )
+          if (existingIdx >= 0) {
+            const current = notesInsertions[existingIdx].notes || ''
+            if (!contains(current, note)) {
+              notesInsertions[existingIdx].notes = current ? current + '\n' + note : note
+            }
+          } else {
+            notesInsertions.push({
+              matrix_id: matrixId,
+              taxon_id: taxonId,
+              character_id: characterId,
+              user_id: user.user_id,
+              notes: note,
+              source: 'IMPORT',
+            })
+          }
+        }
       }
     }
     
     // Use optimized bulk insert
     console.log(`Inserting ${allCellsInsertions.length} cells using optimized bulk insert...`)
     await bulkInsertCellsOptimized(allCellsInsertions, matrixId, user.user_id)
+    
+    // Insert/Update cell notes in batch if present
+    if (notesInsertions.length) {
+      await withBatchedTransaction(async (transaction) => {
+        await models.CellNote.bulkCreate(notesInsertions, {
+          transaction,
+          updateOnDuplicate: true,
+        })
+      })
+    }
     
     return // Exit early, we've handled the import
   }
