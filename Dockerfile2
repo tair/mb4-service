@@ -29,6 +29,9 @@ COPY --from=build /app/.sequelizerc ./.sequelizerc
 COPY --from=build /app/docker-entrypoint.sh ./docker-entrypoint.sh
 COPY package.json ./
 
+# Create data directory with proper permissions before switching to node user
+RUN mkdir -p /app/data/project_stats && chown -R node:node /app/data
+
 # Make entrypoint executable (as root before switching to node user)
 RUN chmod +x ./docker-entrypoint.sh
 
