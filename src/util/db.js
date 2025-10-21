@@ -12,8 +12,8 @@ const sequelizeConn = new Sequelize(
     dialect: dbConfig.dialect,
     host: dbConfig.host,
     pool: {
-      max: 10,
-      min: 5,
+      max: 100,
+      min: 10,
       acquire: 60000,  // Increased from 30s to 60s
       idle: 10000,
     },
