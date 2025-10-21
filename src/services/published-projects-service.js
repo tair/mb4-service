@@ -4,6 +4,20 @@ import { getProjectStats } from './project-stats-service.js'
 import config from '../config.js'
 import s3Service from './s3-service.js'
 
+/**
+ * Get published project IDs without enrichment
+ * Lightweight function for operations that only need project_id
+ * @returns {Promise<Array>} Array of objects with project_id
+ */
+export async function getPublishedProjectIds() {
+  const [rows] = await sequelizeConn.query(`
+    SELECT project_id
+    FROM projects
+    WHERE published = 1 AND deleted = 0
+    ORDER BY published_on DESC`)
+  return rows
+}
+
 export async function getProjects() {
   const start = new Date().getTime()
   const [rows] = await sequelizeConn.query(`
