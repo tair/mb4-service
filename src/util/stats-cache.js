@@ -8,270 +8,36 @@ let statsCache = {
 
 // Function to fetch fresh stats from database
 const fetchFreshStats = async () => {
-  try {
-    // Get unique logins in last 30 days
-    const uniqueLoginsQuery = `
-      SELECT COUNT(DISTINCT user_id) as count 
-      FROM stats_login_log 
-      WHERE datetime_started >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-      AND datetime_started <= UNIX_TIMESTAMP(NOW())
-    `
+  // Return static numbers (temporary override)
+  return {
+    // Recent activity stats (last 30 days)
+    numUniqueLogins: 167, // Scientists Working
+    numAnonymousSessions: 22358, // Site Visitors
+    numCells: 453373, // Cells Scored
+    numMedia: 518, // Media Files Uploaded
+    numProjectViews: 28523, // Project Views
+    numProjectDownloads: 96, // Project Downloads
+    numMatrixViews: 16686, // Matrix Views
+    numMatrixDownloads: 138, // Matrix Downloads
+    numMediaViews: 59563, // Media Views
+    numMediaDownloads: 172, // Media Downloads
 
-    // Get anonymous sessions in last 30 days
-    const anonymousSessionsQuery = `
-      WITH login_sessions AS (
-        SELECT DISTINCT session_key
-        FROM stats_login_log
-        WHERE (datetime_started >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY) AND datetime_started <= UNIX_TIMESTAMP(NOW()))
-        OR (datetime_ended >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY) AND datetime_ended <= UNIX_TIMESTAMP(NOW()))
-        OR (datetime_started <= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY) AND datetime_ended >= UNIX_TIMESTAMP(NOW()))
-      )
-      SELECT COUNT(DISTINCT sl.session_key) as count 
-      FROM stats_session_log sl
-      WHERE ((sl.datetime_started >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY) AND sl.datetime_started <= UNIX_TIMESTAMP(NOW()))
-         OR (sl.datetime_ended >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY) AND sl.datetime_ended <= UNIX_TIMESTAMP(NOW()))
-         OR (sl.datetime_started <= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY) AND sl.datetime_ended >= UNIX_TIMESTAMP(NOW())))
-         AND sl.session_key NOT IN (SELECT session_key FROM login_sessions)
-    `
-
-    // Get total cells scored in last 30 days
-    const cellsQuery = `
-      SELECT count(*) as count
-      FROM cells c
-      INNER JOIN matrices m ON c.matrix_id = m.matrix_id
-      INNER JOIN projects p ON m.project_id = p.project_id
-      WHERE m.deleted = 0 AND p.deleted = 0
-      AND c.created_on >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `
-
-    // Get total media uploaded in last 30 days
-    const mediaQuery = `
-      SELECT COUNT(*) as count 
-      FROM media_files m
-      INNER JOIN projects p ON m.project_id = p.project_id
-      WHERE p.deleted = 0
-      AND m.created_on >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `
-
-    // Get project views/downloads in last 30 days
-    const projectViewsQuery = `
-      SELECT COUNT(*) as views
-      FROM stats_pub_hit_log
-      WHERE hit_type = 'P'
-      AND hit_datetime >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `
-
-    const projectDownloadsQuery = `
-      SELECT COUNT(*) as downloads
-      FROM stats_pub_download_log
-      WHERE download_type = 'P'
-      AND download_datetime >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `
-
-    // Get matrix views/downloads in last 30 days
-    const matrixViewsQuery = `
-      SELECT COUNT(*) as views
-      FROM stats_pub_hit_log
-      WHERE hit_type = 'X'
-      AND hit_datetime >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `
-
-    const matrixDownloadsQuery = `
-      SELECT COUNT(*) as downloads
-      FROM stats_pub_download_log
-      WHERE download_type = 'X'
-      AND download_datetime >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `
-
-    // Get media views/downloads in last 30 days
-    const mediaViewsQuery = `
-      SELECT COUNT(*) as views
-      FROM stats_pub_hit_log
-      WHERE hit_type = 'M'
-      AND hit_datetime >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `
-
-    const mediaDownloadsQuery = `
-      SELECT COUNT(*) as downloads
-      FROM stats_pub_download_log
-      WHERE download_type = 'M'
-      AND download_datetime >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-    `
-
-    // MorphoBank Overall Statistics Queries
-    const publicProjectsQuery = `
-      SELECT COUNT(*) as count
-      FROM projects p
-      WHERE p.published = 1 AND p.deleted = 0
-    `
-
-    const publicImagesQuery = `
-      SELECT COUNT(*) as count
-      FROM media_files mf
-      INNER JOIN projects p ON mf.project_id = p.project_id
-      WHERE p.published = 1 AND p.deleted = 0
-    `
-
-    const publicMatricesQuery = `
-      SELECT COUNT(*) as count
-      FROM matrices m
-      INNER JOIN projects p ON m.project_id = p.project_id
-      WHERE p.published = 1 AND p.deleted = 0 AND m.deleted = 0
-    `
-
-    const inProgressProjectsQuery = `
-      SELECT COUNT(*) as count
-      FROM projects p
-      WHERE p.published = 0 AND p.deleted = 0
-    `
-
-    const inProgressImagesQuery = `
-      SELECT COUNT(*) as count
-      FROM media_files mf
-      INNER JOIN projects p ON mf.project_id = p.project_id
-      WHERE p.published = 0 AND p.deleted = 0
-    `
-
-    const inProgressMatricesQuery = `
-      SELECT COUNT(*) as count
-      FROM matrices m
-      INNER JOIN projects p ON m.project_id = p.project_id
-      WHERE p.published = 0 AND p.deleted = 0 AND m.deleted = 0
-    `
-
-    const userCountQuery = `
-      SELECT COUNT(*) as count
-      FROM ca_users u
-      WHERE u.active = 1
-    `
-
-    // Get total unique visitors (logged in users + anonymous sessions) in last 30 days
-    const totalVisitorsQuery = `
-      SELECT (
-        (SELECT COUNT(DISTINCT user_id) 
-         FROM stats_login_log 
-         WHERE datetime_started >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)) +
-        (SELECT COUNT(DISTINCT sl.session_key)
-         FROM stats_session_log sl
-         WHERE sl.datetime_started >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-         AND sl.session_key NOT IN (
-           SELECT DISTINCT session_key FROM stats_login_log 
-           WHERE datetime_started >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
-         ))
-      ) as count
-    `
-
-    // Execute all queries in parallel
-    const [
-      uniqueLoginsResult,
-      anonymousSessionsResult,
-      cellsResult,
-      mediaResult,
-      projectViewsResult,
-      projectDownloadsResult,
-      matrixViewsResult,
-      matrixDownloadsResult,
-      mediaViewsResult,
-      mediaDownloadsResult,
-      publicProjectsResult,
-      publicImagesResult,
-      publicMatricesResult,
-      inProgressProjectsResult,
-      inProgressImagesResult,
-      inProgressMatricesResult,
-      userCountResult,
-      totalVisitorsResult,
-    ] = await Promise.all([
-      sequelizeConn.query(uniqueLoginsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
+    // MorphoBank overall statistics (leave unchanged or zeroed while static mode is active)
+    morphoBank: {
+      publicProjectCount: 0,
+      publicImageCount: 0,
+      publicMatrixCount: 0,
+      inProgressProjectCount: 0,
+      inProgressImageCount: 0,
+      inProgressMatrixCount: 0,
+      userCount: 0,
+      recentVisitorCount: 22358, // mirror site visitors if desired
+      asOfDate: new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
       }),
-      sequelizeConn.query(anonymousSessionsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(cellsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(mediaQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(projectViewsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(projectDownloadsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(matrixViewsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(matrixDownloadsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(mediaViewsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(mediaDownloadsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(publicProjectsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(publicImagesQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(publicMatricesQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(inProgressProjectsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(inProgressImagesQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(inProgressMatricesQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(userCountQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(totalVisitorsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-    ])
-
-    // Format the response
-    return {
-      // Recent activity stats (last 30 days)
-      numUniqueLogins: parseInt(uniqueLoginsResult[0].count || 0),
-      numAnonymousSessions: parseInt(anonymousSessionsResult[0].count || 0),
-      numCells: parseInt(cellsResult[0].count || 0),
-      numMedia: parseInt(mediaResult[0].count || 0),
-      numProjectViews: parseInt(projectViewsResult[0].views || 0),
-      numProjectDownloads: parseInt(projectDownloadsResult[0].downloads || 0),
-      numMatrixViews: parseInt(matrixViewsResult[0].views || 0),
-      numMatrixDownloads: parseInt(matrixDownloadsResult[0].downloads || 0),
-      numMediaViews: parseInt(mediaViewsResult[0].views || 0),
-      numMediaDownloads: parseInt(mediaDownloadsResult[0].downloads || 0),
-      
-      // MorphoBank overall statistics
-      morphoBank: {
-        publicProjectCount: parseInt(publicProjectsResult[0].count || 0),
-        publicImageCount: parseInt(publicImagesResult[0].count || 0), // Note: This is total media count, not just images
-        publicMatrixCount: parseInt(publicMatricesResult[0].count || 0),
-        inProgressProjectCount: parseInt(inProgressProjectsResult[0].count || 0),
-        inProgressImageCount: parseInt(inProgressImagesResult[0].count || 0), // Note: This is total media count, not just images
-        inProgressMatrixCount: parseInt(inProgressMatricesResult[0].count || 0),
-        userCount: parseInt(userCountResult[0].count || 0),
-        recentVisitorCount: parseInt(totalVisitorsResult[0].count || 0),
-        asOfDate: new Date().toLocaleDateString('en-US', { 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
-        }),
-      },
-    }
-  } catch (error) {
-    console.error('Error fetching fresh stats:', error)
-    throw error
+    },
   }
 }
 
