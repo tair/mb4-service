@@ -133,44 +133,48 @@ export async function refreshProjectStats(req, res) {
   try {
     const projectId = req.params.projectId
     const userId = req.user?.user_id
-    
+
     // Import the required classes
-    const { ProjectOverviewGenerator } = await import('../lib/project-overview-generator.js')
-    const { ProjectRecencyStatisticsGenerator } = await import('../lib/project-recency-generator.js')
-    
+    const { ProjectOverviewGenerator } = await import(
+      '../lib/project-overview-generator.js'
+    )
+    const { ProjectRecencyStatisticsGenerator } = await import(
+      '../lib/project-recency-generator.js'
+    )
+
     // Get project info
     const [projects] = await sequelizeConn.query(
       `SELECT project_id, user_id, published, publish_matrix_media_only, publish_inactive_members
        FROM projects WHERE project_id = ?`,
       { replacements: [projectId] }
     )
-    
+
     if (projects.length === 0) {
       return res.status(404).json({ error: 'Project not found' })
     }
-    
+
     const project = projects[0]
-    
+
     // Regenerate project overview stats
     const overviewGenerator = new ProjectOverviewGenerator()
     await overviewGenerator.generateStats(project)
-    
+
     // Regenerate recent changes stats if user is provided
     if (userId) {
       const recencyGenerator = new ProjectRecencyStatisticsGenerator()
       await recencyGenerator.generateStats(projectId)
     }
-    
-    res.status(200).json({ 
-      success: true, 
+
+    res.status(200).json({
+      success: true,
       message: 'Project statistics refreshed successfully',
-      project_id: projectId
+      project_id: projectId,
     })
   } catch (error) {
     console.error('Error refreshing project stats:', error)
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to refresh project statistics',
-      message: error.message 
+      message: error.message,
     })
   }
 }
@@ -511,21 +515,25 @@ export async function editProject(req, res, next) {
 
       // Handle journal cover upload
       if (journalCoverFile) {
-        const journalCoverUploader = new S3JournalCoverUploader(transaction, req.user)
+        const journalCoverUploader = new S3JournalCoverUploader(
+          transaction,
+          req.user
+        )
 
         try {
           // Upload journal cover using new format
-          const journalCoverData = await journalCoverUploader.uploadJournalCover(
-            project.project_id,
-            journalCoverFile
-          )
+          const journalCoverData =
+            await journalCoverUploader.uploadJournalCover(
+              project.project_id,
+              journalCoverFile
+            )
 
           // Update the project's journal_cover field with new format
           project.journal_cover = {
             filename: journalCoverData.filename,
             ORIGINAL_FILENAME: journalCoverData.ORIGINAL_FILENAME,
             migrated: journalCoverData.migrated,
-            migrated_at: journalCoverData.migrated_at
+            migrated_at: journalCoverData.migrated_at,
           }
 
           // Commit the journal cover uploader
@@ -1046,21 +1054,25 @@ export async function createProject(req, res, next) {
 
       // Handle journal cover upload
       if (journalCoverFile) {
-        const journalCoverUploader = new S3JournalCoverUploader(transaction, req.user)
+        const journalCoverUploader = new S3JournalCoverUploader(
+          transaction,
+          req.user
+        )
 
         try {
           // Upload journal cover using new format
-          const journalCoverData = await journalCoverUploader.uploadJournalCover(
-            project.project_id,
-            journalCoverFile
-          )
+          const journalCoverData =
+            await journalCoverUploader.uploadJournalCover(
+              project.project_id,
+              journalCoverFile
+            )
 
           // Update the project's journal_cover field with new format
           project.journal_cover = {
             filename: journalCoverData.filename,
             ORIGINAL_FILENAME: journalCoverData.ORIGINAL_FILENAME,
             migrated: journalCoverData.migrated,
-            migrated_at: journalCoverData.migrated_at
+            migrated_at: journalCoverData.migrated_at,
           }
 
           // Commit the journal cover uploader
@@ -1356,7 +1368,8 @@ export async function downloadProjectSDD(req, res) {
 
     // For ZIP format, first try to serve from S3 preprocessed files
     // Note: Only full project exports are supported in S3 (no partition support)
-    if (format === 'zip' && !partitionId) {
+    // Only serve from S3 if project is published
+    if (format === 'zip' && !partitionId && project.published == 1) {
       try {
         const servedFromS3 = await tryServeFromS3(projectId, res)
 
@@ -1367,18 +1380,11 @@ export async function downloadProjectSDD(req, res) {
         console.log(`S3 check failed for project ${projectId}`)
       }
     }
-
+    console.log(
+      `falling back to live export for project ${projectId} download: ${project.published}`
+    )
     // Fallback to live export using SDDExporter
 
-    // Create progress callback for logging
-    const progressCallback = (progress) => {
-      // console.log(
-      //   `[Project ${projectId}] ${progress.stage}: ${progress.message} (${progress.overallProgress}%)`
-      // )
-    }
-
-    // Create SDD exporter with progress tracking
-    const exporter = new SDDExporter(projectId, partitionId, progressCallback)
     const projectName = project.name.replace(/[^a-zA-Z0-9]/g, '_')
 
     if (format === 'zip') {
@@ -1396,51 +1402,22 @@ export async function downloadProjectSDD(req, res) {
       req.setTimeout(1800000) // 30 minutes
       res.setTimeout(1800000)
 
-      // For full project exports (no partition), capture the ZIP data to upload to S3
-      if (!partitionId) {
-        // Create a PassThrough stream to capture the data
-        const { PassThrough } = await import('stream')
-        const captureStream = new PassThrough()
-        const chunks = []
+      // Use the service function for fallback download
+      const result = await projectService.generateProjectSDDFallback(
+        projectId,
+        partitionId,
+        projectName,
+        res
+      )
 
-        // Capture data as it flows through
-        captureStream.on('data', (chunk) => {
-          chunks.push(chunk)
-        })
-
-        // Handle completion
-        captureStream.on('end', async () => {
-          try {
-            const zipBuffer = Buffer.concat(chunks)
-            const s3Key = `sdd_exports/${projectId}_morphobank.zip`
-            const bucketName = config.aws.defaultBucket || 'mb4-data'
-
-            const uploadResult = await s3Service.putObject(
-              bucketName,
-              s3Key,
-              zipBuffer,
-              'application/zip'
-            )
-          } catch (s3UploadError) {
-            console.error(
-              `Failed to upload ZIP to S3 for project ${projectId}:`,
-              s3UploadError
-            )
-            // Don't fail the user download if S3 upload fails
-          }
-        })
-
-        // Pipe to both the response and our capture stream
-        captureStream.pipe(res)
-
-        // Stream ZIP to the capture stream (which pipes to response)
-        await exporter.exportAsZip(captureStream)
-      } else {
-        // For partition exports, stream directly (no S3 upload)
-        await exporter.exportAsZip(res)
+      if (!result.success) {
+        throw new Error(
+          result.error || 'Failed to generate SDD fallback export'
+        )
       }
     } else {
       // Generate XML only (no S3 preprocessing for XML format)
+      const exporter = new SDDExporter(projectId, partitionId)
       const sddXml = await exporter.export()
       const filename = `${projectName}_sdd.xml`
 

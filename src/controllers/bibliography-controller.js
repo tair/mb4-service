@@ -31,39 +31,51 @@ export async function createBibliographies(req, res) {
     author_address: '',
   })
 
+  let transaction
   try {
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
     await bibliography.save({
       transaction,
       user: req.user,
     })
     await transaction.commit()
+    
+    res.status(200).json({
+      bibliography: convertBibliographicResponse(bibliography),
+    })
   } catch (e) {
-    console.log(e)
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error creating bibliography:', e)
     res
       .status(500)
-      .json({ message: 'Failed to update bibliography with server error' })
-    return
+      .json({ message: 'Failed to create bibliography with server error' })
   }
-
-  res.status(200).json({
-    bibliography: convertBibliographicResponse(bibliography),
-  })
 }
 
 export async function deleteBibliographies(req, res) {
   const referenceIds = req.body.reference_ids
-  const transaction = await sequelizeConn.transaction()
-  await models.BibliographicReference.destroy({
-    where: {
-      reference_id: referenceIds,
-    },
-    transaction: transaction,
-    individualHooks: true,
-    user: req.user,
-  })
-  await transaction.commit()
-  res.status(200).json({ reference_ids: referenceIds })
+  let transaction
+  try {
+    transaction = await sequelizeConn.transaction()
+    await models.BibliographicReference.destroy({
+      where: {
+        reference_id: referenceIds,
+      },
+      transaction: transaction,
+      individualHooks: true,
+      user: req.user,
+    })
+    await transaction.commit()
+    res.status(200).json({ reference_ids: referenceIds })
+  } catch (e) {
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error deleting bibliographies:', e)
+    res.status(500).json({ message: 'Failed to delete bibliographies with server error' })
+  }
 }
 
 export async function editBibliographies(req, res) {
@@ -71,21 +83,30 @@ export async function editBibliographies(req, res) {
   const projectId = req.project.project_id
   const values = sanitizeBibliographyRequest(req.body.changes)
 
-  const transaction = await sequelizeConn.transaction()
-  await models.BibliographicReference.update(values, {
-    where: {
-      reference_id: referenceIds,
-      project_id: projectId,
-    },
-    transaction: transaction,
-    individualHooks: true,
-    user: req.user,
-  })
-  await transaction.commit()
-  const bibliographies = service.getBibliographiesByIds(referenceIds)
-  res.status(200).json({
-    bibliographies: bibliographies.map(convertBibliographicResponse),
-  })
+  let transaction
+  try {
+    transaction = await sequelizeConn.transaction()
+    await models.BibliographicReference.update(values, {
+      where: {
+        reference_id: referenceIds,
+        project_id: projectId,
+      },
+      transaction: transaction,
+      individualHooks: true,
+      user: req.user,
+    })
+    await transaction.commit()
+    const bibliographies = await service.getBibliographiesByIds(referenceIds)
+    res.status(200).json({
+      bibliographies: bibliographies.map(convertBibliographicResponse),
+    })
+  } catch (e) {
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error editing bibliographies:', e)
+    res.status(500).json({ message: 'Failed to edit bibliographies with server error' })
+  }
 }
 
 export async function getBibliography(req, res) {
@@ -121,24 +142,27 @@ export async function editBibliography(req, res) {
     bibliography.set(column, values[column])
   }
 
+  let transaction
   try {
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
     await bibliography.save({
       transaction,
       user: req.user,
     })
     await transaction.commit()
+    
+    res.status(200).json({
+      bibliography: convertBibliographicResponse(bibliography),
+    })
   } catch (e) {
-    console.log(e)
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error updating bibliography:', e)
     res
       .status(500)
       .json({ message: 'Failed to update bibliography with server error' })
-    return
   }
-
-  res.status(200).json({
-    bibliography: convertBibliographicResponse(bibliography),
-  })
 }
 
 export async function search(req, res) {
@@ -313,11 +337,13 @@ export async function uploadEndNoteXML(req, res) {
       ? xmlObj.records.record
       : [xmlObj.records.record]
 
-    const transaction = await sequelizeConn.transaction()
+    let transaction
     let importCount = 0
     let updateCount = 0
     let errorCount = 0
     const errors = []
+
+    transaction = await sequelizeConn.transaction()
 
     for (const record of records) {
       try {
@@ -484,7 +510,22 @@ export async function uploadEndNoteXML(req, res) {
       },
     })
   } catch (error) {
+    if (transaction) {
+      try {
+        await transaction.rollback()
+      } catch (rollbackError) {
+        console.error('Error rolling back transaction:', rollbackError)
+      }
+    }
     console.error('Error processing EndNote XML:', error)
+    
+    // Clean up temp file on error
+    try {
+      await fs.unlink(tempFilePath)
+    } catch (unlinkError) {
+      console.error('Error cleaning up temp file:', unlinkError)
+    }
+    
     res.status(500).json({
       message: 'Error processing EndNote XML file',
       error: error.message,

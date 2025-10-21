@@ -508,8 +508,8 @@ export async function updateProjectDoiAndRedump(
 }
 
 /**
- * Dumps all projects list locally and uploads to S3
- * @returns {Object} { success: boolean, localFile: string, s3Result: Object, timeElapsed: number }
+ * Dumps all projects list to S3
+ * @returns {Object} { success: boolean, s3Result: Object, timeElapsed: number }
  */
 export async function dumpAndUploadProjectsList() {
   const start = Date.now()
@@ -519,13 +519,6 @@ export async function dumpAndUploadProjectsList() {
 
   // Prepare file content
   const projectsContent = JSON.stringify(projects, null, 2)
-
-  // Write file locally
-  const dir = 'data'
-  utilService.createDir(`${dir}`)
-
-  const projectsFile = `../${dir}/projects.json`
-  await utilService.writeToFile(projectsFile, projectsContent)
 
   // Upload to S3 (at root of bucket)
   let s3Result = { success: false, type: 'projects' }
@@ -546,16 +539,15 @@ export async function dumpAndUploadProjectsList() {
 
   return {
     success: true,
-    localFile: projectsFile,
     s3Result: s3Result,
     timeElapsed: timeElapsed,
   }
 }
 
 /**
- * Dumps project details locally and uploads to S3
+ * Dumps project details to S3
  * @param {number} projectId - Project ID to dump
- * @returns {Object} { success: boolean, localFile: string, s3Result: Object, timeElapsed: number }
+ * @returns {Object} { success: boolean, s3Result: Object, timeElapsed: number }
  */
 export async function dumpAndUploadProjectDetails(projectId) {
   const start = Date.now()
@@ -583,15 +575,6 @@ export async function dumpAndUploadProjectDetails(projectId) {
   // Prepare file content
   const detailsContent = JSON.stringify(project_details, null, 2)
 
-  // Write file locally
-  const dir = 'data'
-  const detailDir = 'prj_details'
-  utilService.createDir(`${dir}`)
-  utilService.createDir(`${dir}/${detailDir}`)
-
-  const detailsFile = `../${dir}/${detailDir}/prj_${projectId}.json`
-  await utilService.writeToFile(detailsFile, detailsContent)
-
   // Upload to S3
   let s3Result = { success: false, type: 'details' }
   if (config.aws.accessKeyId && config.aws.secretAccessKey) {
@@ -611,16 +594,15 @@ export async function dumpAndUploadProjectDetails(projectId) {
 
   return {
     success: true,
-    localFile: detailsFile,
     s3Result: s3Result,
     timeElapsed: timeElapsed,
   }
 }
 
 /**
- * Dumps media files locally and uploads to S3
+ * Dumps media files to S3
  * @param {number} projectId - Project ID to dump
- * @returns {Object} { success: boolean, localFile: string, s3Result: Object, timeElapsed: number }
+ * @returns {Object} { success: boolean, s3Result: Object, timeElapsed: number }
  */
 export async function dumpAndUploadMediaFiles(projectId) {
   const start = Date.now()
@@ -630,15 +612,6 @@ export async function dumpAndUploadMediaFiles(projectId) {
 
   // Prepare file content
   const mediaContent = JSON.stringify(media_files, null, 2)
-
-  // Write file locally
-  const dir = 'data'
-  const mediaDir = 'media_files'
-  utilService.createDir(`${dir}`)
-  utilService.createDir(`${dir}/${mediaDir}`)
-
-  const mediaFile = `../${dir}/${mediaDir}/prj_${projectId}.json`
-  await utilService.writeToFile(mediaFile, mediaContent)
 
   // Upload to S3
   let s3Result = { success: false, type: 'media' }
@@ -659,16 +632,15 @@ export async function dumpAndUploadMediaFiles(projectId) {
 
   return {
     success: true,
-    localFile: mediaFile,
     s3Result: s3Result,
     timeElapsed: timeElapsed,
   }
 }
 
 /**
- * Dumps project stats locally and uploads to S3
+ * Dumps project stats to S3
  * @param {number} projectId - Project ID to dump
- * @returns {Object} { success: boolean, localFile: string, s3Result: Object, timeElapsed: number }
+ * @returns {Object} { success: boolean, s3Result: Object, timeElapsed: number }
  */
 export async function dumpAndUploadProjectStats(projectId) {
   const start = Date.now()
@@ -700,14 +672,6 @@ export async function dumpAndUploadProjectStats(projectId) {
   // Prepare file content
   const statsContent = JSON.stringify(projectStats, null, 2)
 
-  // Write file locally
-  const dir = 'data'
-  utilService.createDir(`${dir}`)
-  utilService.createDir(`${dir}/project_stats`)
-
-  const statsFile = `../${dir}/project_stats/prj_${projectId}.json`
-  await utilService.writeToFile(statsFile, statsContent)
-
   // Upload to S3
   let s3Result = { success: false, type: 'stats' }
   if (config.aws.accessKeyId && config.aws.secretAccessKey) {
@@ -727,17 +691,15 @@ export async function dumpAndUploadProjectStats(projectId) {
 
   return {
     success: true,
-    localFile: statsFile,
     s3Result: s3Result,
     timeElapsed: timeElapsed,
   }
 }
 
 /**
- * Dumps project details and media files to JSON files for a single project
- * Also uploads the files to S3 for backup and accessibility
+ * Dumps project details and media files to S3 for a single project
  * @param {number} projectId - Project ID to dump
- * @returns {Object} { success: boolean, message?: string, files?: Array, s3Results?: Array }
+ * @returns {Object} { success: boolean, message?: string, s3Paths?: Array, s3Results?: Array }
  */
 export async function dumpSingleProject(projectId) {
   try {
@@ -788,16 +750,13 @@ export async function dumpSingleProject(projectId) {
     return {
       success: true,
       message: `Project ${projectId} dumped successfully`,
-      files: [
-        detailsResult.localFile,
-        mediaResult.localFile,
-        statsResult.localFile,
-      ],
       timeElapsed: totalTimeElapsed,
       detailsTimeElapsed: detailsResult.timeElapsed,
       mediaTimeElapsed: mediaResult.timeElapsed,
       statsTimeElapsed: statsResult.timeElapsed,
       s3Paths: s3Paths,
+      s3SuccessCount: s3SuccessCount,
+      s3FailureCount: s3FailureCount,
       s3Results: s3Results,
     }
   } catch (error) {
