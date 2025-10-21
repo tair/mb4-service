@@ -96,12 +96,12 @@ export function startScheduler() {
   }
 
   // Run every day at 10:01 PM (change to 10 for 10:01 AM if needed)
-  cron.schedule('1 22 * * *', runProjectStatsDump, {
+  cron.schedule('00 22 * * *', runProjectStatsDump, {
     scheduled: true,
     timezone: 'America/Chicago',
   })
 
-  console.log('Project stats dump scheduler started - will run daily at 10:01 PM Chicago time')
+  console.log('Project stats dump scheduler started - will run daily at `10:00` PM Chicago time')
   console.log('Generated files will be saved locally in data/project_stats/ and uploaded to s3://mb4-data/prj_stats/')
 }
 

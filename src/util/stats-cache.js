@@ -35,13 +35,18 @@ const fetchFreshStats = async () => {
     `
 
     // Get total cells scored in last 30 days
+    // const cellsQuery = `
+    //   SELECT count(*) as count
+    //   FROM cells c
+    //   INNER JOIN matrices m ON c.matrix_id = m.matrix_id
+    //   INNER JOIN projects p ON m.project_id = p.project_id
+    //   WHERE m.deleted = 0 AND p.deleted = 0
+    //   AND c.created_on >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
+    // `
+
     const cellsQuery = `
-      SELECT count(*) as count
-      FROM cells c
-      INNER JOIN matrices m ON c.matrix_id = m.matrix_id
-      INNER JOIN projects p ON m.project_id = p.project_id
-      WHERE m.deleted = 0 AND p.deleted = 0
-      AND c.created_on >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
+      SELECT count(*) as count from cells 
+      where created_on >= UNIX_TIMESTAMP(NOW() - INTERVAL 30 DAY)
     `
 
     // Get total media uploaded in last 30 days
@@ -161,82 +166,65 @@ const fetchFreshStats = async () => {
       ) as count
     `
 
-    // Execute all queries in parallel
-    const [
-      uniqueLoginsResult,
-      anonymousSessionsResult,
-      cellsResult,
-      mediaResult,
-      projectViewsResult,
-      projectDownloadsResult,
-      matrixViewsResult,
-      matrixDownloadsResult,
-      mediaViewsResult,
-      mediaDownloadsResult,
-      publicProjectsResult,
-      publicImagesResult,
-      publicMatricesResult,
-      inProgressProjectsResult,
-      inProgressImagesResult,
-      inProgressMatricesResult,
-      userCountResult,
-      totalVisitorsResult,
-    ] = await Promise.all([
-      sequelizeConn.query(uniqueLoginsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(anonymousSessionsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(cellsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(mediaQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(projectViewsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(projectDownloadsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(matrixViewsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(matrixDownloadsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(mediaViewsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(mediaDownloadsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(publicProjectsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(publicImagesQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(publicMatricesQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(inProgressProjectsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(inProgressImagesQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(inProgressMatricesQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(userCountQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-      sequelizeConn.query(totalVisitorsQuery, {
-        type: sequelizeConn.QueryTypes.SELECT,
-      }),
-    ])
+    // Execute queries in batches to avoid exhausting connection pool
+    // Run 6 queries at a time instead of all 18 simultaneously
+    const batchSize = 6
+    const queries = [
+      { name: 'uniqueLogins', query: uniqueLoginsQuery },
+      { name: 'anonymousSessions', query: anonymousSessionsQuery },
+      { name: 'cells', query: cellsQuery },
+      { name: 'media', query: mediaQuery },
+      { name: 'projectViews', query: projectViewsQuery },
+      { name: 'projectDownloads', query: projectDownloadsQuery },
+      { name: 'matrixViews', query: matrixViewsQuery },
+      { name: 'matrixDownloads', query: matrixDownloadsQuery },
+      { name: 'mediaViews', query: mediaViewsQuery },
+      { name: 'mediaDownloads', query: mediaDownloadsQuery },
+      { name: 'publicProjects', query: publicProjectsQuery },
+      { name: 'publicImages', query: publicImagesQuery },
+      { name: 'publicMatrices', query: publicMatricesQuery },
+      { name: 'inProgressProjects', query: inProgressProjectsQuery },
+      { name: 'inProgressImages', query: inProgressImagesQuery },
+      { name: 'inProgressMatrices', query: inProgressMatricesQuery },
+      { name: 'userCount', query: userCountQuery },
+      { name: 'totalVisitors', query: totalVisitorsQuery },
+    ]
+
+    const results = {}
+    
+    // Run queries in batches
+    for (let i = 0; i < queries.length; i += batchSize) {
+      const batch = queries.slice(i, i + batchSize)
+      const batchResults = await Promise.all(
+        batch.map(({ name, query }) =>
+          sequelizeConn.query(query, {
+            type: sequelizeConn.QueryTypes.SELECT,
+          }).then(result => ({ name, result }))
+        )
+      )
+      batchResults.forEach(({ name, result }) => {
+        results[name] = result
+      })
+    }
+    
+    const uniqueLoginsResult = results.uniqueLogins
+    const anonymousSessionsResult = results.anonymousSessions
+    const cellsResult = results.cells
+    const mediaResult = results.media
+    const projectViewsResult = results.projectViews
+    const projectDownloadsResult = results.projectDownloads
+    const matrixViewsResult = results.matrixViews
+    const matrixDownloadsResult = results.matrixDownloads
+    const mediaViewsResult = results.mediaViews
+    const mediaDownloadsResult = results.mediaDownloads
+    const publicProjectsResult = results.publicProjects
+    const publicImagesResult = results.publicImages
+    const publicMatricesResult = results.publicMatrices
+    const inProgressProjectsResult = results.inProgressProjects
+    const inProgressImagesResult = results.inProgressImages
+    const inProgressMatricesResult = results.inProgressMatrices
+    const userCountResult = results.userCount
+    const totalVisitorsResult = results.totalVisitors
 
     // Format the response
     return {
@@ -278,13 +266,13 @@ const fetchFreshStats = async () => {
 // Function to get stats (either from cache or fresh)
 export const getStats = async () => {
   const now = Date.now()
-  const oneHour = 60 * 60 * 1000 // 1 hour in milliseconds
+  const oneDay = 24 * 60 * 60 * 1000 // 24 hours in milliseconds (changed from 1 hour)
 
-  // If cache is empty or older than 1 hour, fetch fresh data
+  // If cache is empty or older than 24 hours, fetch fresh data
   if (
     !statsCache.data ||
     !statsCache.lastUpdated ||
-    now - statsCache.lastUpdated > oneHour
+    now - statsCache.lastUpdated > oneDay
   ) {
     try {
       statsCache.data = await fetchFreshStats()
@@ -304,10 +292,15 @@ export const getStats = async () => {
 // Initialize the cache on startup
 export const initializeCache = async () => {
   try {
+    console.log('Fetching fresh stats for cache initialization...')
+    const startTime = Date.now()
     statsCache.data = await fetchFreshStats()
     statsCache.lastUpdated = Date.now()
-    console.log('Stats cache initialized')
+    const duration = Date.now() - startTime
+    console.log(`Stats cache initialized successfully in ${duration}ms`)
   } catch (error) {
-    console.error('Error initializing stats cache:', error)
+    console.error('Error initializing stats cache:', error.message)
+    console.error('Stack:', error.stack)
+    throw error // Re-throw to let caller handle it
   }
 }
