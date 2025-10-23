@@ -335,20 +335,15 @@ function normalizeIpAddress(ipAddr) {
     return 'invalid'
   }
 
-  // Convert IPv4-mapped IPv6 addresses to IPv4
+  // Convert IPv4-mapped IPv6 addresses to IPv4 for consistency
   if (ipAddr.startsWith('::ffff:')) {
     const ipv4Part = ipAddr.substring(7)
     if (isValidIpAddress(ipv4Part)) {
-      return ipv4Part.substring(0, 15)
+      return ipv4Part
     }
   }
 
-  // For IPv6, store first 15 chars but log truncation
-  if (ipAddr.length > 15) {
-    console.warn('IP address truncated for database storage:', ipAddr)
-    return ipAddr.substring(0, 15)
-  }
-
+  // Return full IPv6 address (database now supports up to 45 chars)
   return ipAddr
 }
 
