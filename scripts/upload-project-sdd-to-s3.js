@@ -3,7 +3,7 @@
 //   node scripts/upload-project-sdd-to-s3.js --project-id=1234       # Single project
 //   node scripts/upload-project-sdd-to-s3.js --project-id=1234,5678  # Multiple projects
 //   node scripts/upload-project-sdd-to-s3.js --all --partition-id=5678 # All projects with partition
-//
+// docker cp scripts/ mb4-service-container-prod:/app/
 // Env expected (already set in container):
 //   DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 //   AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_DEFAULT_BUCKET
@@ -107,6 +107,20 @@ async function main() {
         const projectSizeMB = project.disk_usage
           ? Math.round(project.disk_usage / 1024 / 1024)
           : 0
+
+        // Skip projects larger than 1GB (1024MB) to prevent server crashes
+        if (projectSizeMB > 1024) {
+          console.log(
+            `⚠️  Skipping project ${projectId} - size ${projectSizeMB}MB exceeds 1GB limit`
+          )
+          resolve({
+            success: false,
+            error: 'Project too large (>1GB)',
+            skipped: true,
+          })
+          return
+        }
+
         console.log(
           `📤 Uploading project ${projectId} of size ${projectSizeMB}MB`
         )
@@ -185,6 +199,7 @@ async function main() {
     const results = []
     let successCount = 0
     let failureCount = 0
+    let skippedCount = 0
 
     for (let i = 0; i < PROJECT_IDS.length; i++) {
       const projectId = PROJECT_IDS[i]
@@ -193,6 +208,8 @@ async function main() {
 
       if (result.success) {
         successCount++
+      } else if (result.skipped) {
+        skippedCount++
       } else {
         failureCount++
       }
@@ -200,13 +217,22 @@ async function main() {
 
     // Summary
     console.log(
-      `\n📊 Summary: ${successCount} successful, ${failureCount} failed`
+      `\n📊 Summary: ${successCount} successful, ${skippedCount} skipped (too large), ${failureCount} failed`
     )
+
+    if (skippedCount > 0) {
+      console.log(
+        `⚠️  Skipped (too large): ${results
+          .filter((r) => r.skipped)
+          .map((r) => r.projectId)
+          .join(', ')}`
+      )
+    }
 
     if (failureCount > 0) {
       console.log(
         `❌ Failed: ${results
-          .filter((r) => !r.success)
+          .filter((r) => !r.success && !r.skipped)
           .map((r) => r.projectId)
           .join(', ')}`
       )
