@@ -763,15 +763,17 @@ export async function sync(req, res) {
   const data = { client_id: clientId }
   res.write(`event: init\ndata: ${JSON.stringify(data)}\n\n`)
   
-  // Send keepalive comments every 30 seconds to prevent connection timeout 
-  // and accidentally logout in UI
+  // Send keepalive comments every 15 seconds to prevent connection timeout 
+  // Increased frequency to be more aggressive than proxy timeout
   const keepaliveInterval = setInterval(() => {
     try {
       res.write(': keepalive\n\n')
+      console.log(`${logPrefix} - Keepalive sent for client ${clientId}`)
     } catch (e) {
+      console.error(`${logPrefix} - Keepalive failed for client ${clientId}, connection likely dropped`)
       clearInterval(keepaliveInterval)
     }
-  }, 30000) // 30 seconds
+  }, 15000) // 15 seconds (more frequent than before)
   
   req.on('close', () => {
     console.log(`${logPrefix} - Client disconnected: ID=${clientId}, Matrix=${matrixId}, User=${userId}`)
