@@ -732,6 +732,8 @@ export async function setPreferences(req, res) {
 }
 
 export async function sync(req, res) {
+  const logPrefix = '[MATRIX-EDITOR-DEBUG] sync'
+  console.log(`${logPrefix} - Sync request received for matrix ${req.params.matrixId}, user ${req.params.userId}`)
   const userId = parseInt(req.params.userId)
   if (!userId) {
     res.status(401).json({ ok: false, errors: ['User invalid'] })
@@ -752,6 +754,10 @@ export async function sync(req, res) {
   }
 
   const clientId = clients.add(matrixId, client)
+  
+  console.log(`${logPrefix} - ✅ Client registered: ID=${clientId}, Matrix=${matrixId}, User=${userId}`)
+  console.log(`${logPrefix} - Total clients for matrix ${matrixId}:`, clients.getClients(matrixId).length)
+  
   const data = { client_id: clientId }
   res.write(`event: init\ndata: ${JSON.stringify(data)}\n\n`)
   
@@ -766,20 +772,39 @@ export async function sync(req, res) {
   }, 30000) // 30 seconds
   
   req.on('close', () => {
+    console.log(`${logPrefix} - Client disconnected: ID=${clientId}, Matrix=${matrixId}, User=${userId}`)
     clearInterval(keepaliveInterval)
     clients.remove(matrixId, clientId)
+    console.log(`${logPrefix} - Total clients remaining for matrix ${matrixId}:`, clients.getClients(matrixId).length)
   })
 }
 
 export async function sendEvent(req, res) {
+  const logPrefix = '[MATRIX-EDITOR-DEBUG] sendEvent'
+  
   const matrixId = parseInt(req.params.matrixId)
   const clientId = req.body.client_id
   const userId = req.user ? req.user.user_id : 0
+  
+  console.log(`${logPrefix} - Matrix ID: ${matrixId}, Client ID: ${clientId}, User ID: ${userId}`)
+  
   const client = clients.getClient(matrixId, clientId)
+  
+  console.log(`${logPrefix} - Client found:`, !!client)
+  if (client) {
+    console.log(`${logPrefix} - Client user ID: ${client.userId}`)
+    console.log(`${logPrefix} - Request user ID: ${userId}`)
+    console.log(`${logPrefix} - User IDs match:`, client.userId === userId)
+  }
+  
   if (client == null || client.userId != userId) {
+    console.error(`${logPrefix} - ❌ FAILED: Client validation failed`)
+    console.error(`${logPrefix} - Reason: ${client == null ? 'Client not found (no sync connection)' : `User ID mismatch (client: ${client.userId}, request: ${userId})`}`)
     res.status(401).json({ ok: false, errors: ['User invalid'] })
     return
   }
+  
+  console.log(`${logPrefix} - ✅ SUCCESS: Client validated`)
 
   const event = req.body.event
   switch (event.type) {
@@ -819,14 +844,30 @@ export async function sendEvent(req, res) {
 }
 
 export async function fetchChanges(req, res) {
+  const logPrefix = '[MATRIX-EDITOR-DEBUG] fetchChanges'
+  
   const matrixId = parseInt(req.params.matrixId)
   const clientId = req.body.client_id
   const userId = req.user ? req.user.user_id : 0
+  
+  console.log(`${logPrefix} - Matrix ID: ${matrixId}, Client ID: ${clientId}, User ID: ${userId}`)
+  
   const client = clients.getClient(matrixId, clientId)
+  
+  console.log(`${logPrefix} - Client found:`, !!client)
+  if (client) {
+    console.log(`${logPrefix} - Client user ID: ${client.userId}`)
+    console.log(`${logPrefix} - User IDs match:`, client.userId === userId)
+  }
+  
   if (client == null || client.userId != userId) {
+    console.error(`${logPrefix} - ❌ FAILED: Client validation failed`)
+    console.error(`${logPrefix} - Reason: ${client == null ? 'Client not found (no sync connection)' : `User ID mismatch (client: ${client.userId}, request: ${userId})`}`)
     res.status(401).json({ ok: false, errors: ['User invalid'] })
     return
   }
+  
+  console.log(`${logPrefix} - ✅ SUCCESS: Client validated`)
 
   await applyMatrix(req, res, (service) => {
     const syncTime = time()
