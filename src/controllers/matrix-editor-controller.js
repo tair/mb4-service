@@ -736,7 +736,9 @@ export async function sync(req, res) {
   console.log(`${logPrefix} - Sync request received for matrix ${req.params.matrixId}, user ${req.params.userId}`)
   const userId = parseInt(req.params.userId)
   if (!userId) {
-    res.status(401).json({ ok: false, errors: ['User invalid'] })
+    console.error(`${logPrefix} - ❌ FAILED: No user ID provided`)
+    // Use 400 Bad Request for missing user ID (not 401 which triggers logout)
+    res.status(400).json({ ok: false, errors: ['User ID required'] })
     return
   }
 
@@ -800,7 +802,14 @@ export async function sendEvent(req, res) {
   if (client == null || client.userId != userId) {
     console.error(`${logPrefix} - ❌ FAILED: Client validation failed`)
     console.error(`${logPrefix} - Reason: ${client == null ? 'Client not found (no sync connection)' : `User ID mismatch (client: ${client.userId}, request: ${userId})`}`)
-    res.status(401).json({ ok: false, errors: ['User invalid'] })
+    // Use 412 Precondition Failed instead of 401 to avoid triggering frontend logout
+    // 401 is reserved for authentication failures (invalid JWT)
+    // 412 indicates client must establish sync connection first
+    res.status(412).json({ 
+      ok: false, 
+      errors: ['Matrix editor sync connection required'],
+      code: 'SYNC_REQUIRED'
+    })
     return
   }
   
@@ -863,7 +872,12 @@ export async function fetchChanges(req, res) {
   if (client == null || client.userId != userId) {
     console.error(`${logPrefix} - ❌ FAILED: Client validation failed`)
     console.error(`${logPrefix} - Reason: ${client == null ? 'Client not found (no sync connection)' : `User ID mismatch (client: ${client.userId}, request: ${userId})`}`)
-    res.status(401).json({ ok: false, errors: ['User invalid'] })
+    // Use 412 instead of 401 to avoid triggering frontend logout
+    res.status(412).json({ 
+      ok: false, 
+      errors: ['Matrix editor sync connection required'],
+      code: 'SYNC_REQUIRED'
+    })
     return
   }
   
