@@ -20,16 +20,8 @@ const authenticationHandlers = [
 ]
 
 async function login(req, res, next) {
-  const logPrefix = '[LOGIN-DEBUG]'
-  
-  console.log(`${logPrefix} - Login attempt received`)
-  console.log(`${logPrefix} - Request origin:`, req.headers.origin)
-  console.log(`${logPrefix} - Request referer:`, req.headers.referer)
-  console.log(`${logPrefix} - Request IP:`, req.ip)
-  
   const errors = validationResult(req.body)
   if (!errors.isEmpty()) {
-    console.error(`${logPrefix} - Validation failed:`, errors.array())
     const error = new Error('Validation failed.')
     error.statusCode = 422
     error.data = errors.array()
@@ -39,24 +31,14 @@ async function login(req, res, next) {
   const email = req.body.email
   const password = req.body.password
 
-  console.log(`${logPrefix} - Email:`, email)
-  console.log(`${logPrefix} - Password provided:`, !!password)
-
   if (!email || !password) {
-    console.error(`${logPrefix} - ❌ FAILED: Missing email or password`)
     return res.status(401).json({ message: 'Missing email or password.' })
   }
 
   try {
     for (const handler of authenticationHandlers) {
       if (handler.canHandle(email)) {
-        console.log(`${logPrefix} - Handler found for email:`, handler.constructor.name)
         const userResponse = await handler.handle(email, password)
-        console.log(`${logPrefix} - User authenticated:`, {
-          user_id: userResponse.user_id,
-          email: userResponse.email,
-          access: userResponse.access
-        })
         // link with orcid profile
         if (req.body.orcid) {
           let user = await models.User.findOne({ where: { email: email } })
@@ -75,25 +57,12 @@ async function login(req, res, next) {
         }
         const accessToken = generateAccessToken(userResponse)
         const expiry = getTokenExpiry(accessToken)
-        
-        console.log(`${logPrefix} - Token generated:`, {
-          tokenLength: accessToken.length,
-          expiry: new Date(expiry * 1000).toISOString(),
-          expirySeconds: expiry
-        })
-        
-        const cookieOptions = {
+        res.cookie('authorization', `Bearer ${accessToken}`, {
           expires: new Date(expiry * 1000),
           httpOnly: true,
           path: '/',
           sameSite: 'lax',
-        }
-        
-        console.log(`${logPrefix} - Setting cookie with options:`, cookieOptions)
-        
-        res.cookie('authorization', `Bearer ${accessToken}`, cookieOptions)
-
-        console.log(`${logPrefix} - Cookie set, response headers will include Set-Cookie`)
+        })
 
         // Log user login with session association
         if (req.sessionInfo && req.sessionInfo.sessionKey) {
@@ -106,8 +75,6 @@ async function login(req, res, next) {
           })
         }
 
-        console.log(`${logPrefix} - ✅ SUCCESS: Login successful for user ${userResponse.user_id}`)
-
         res.status(200).json({
           accessToken: accessToken,
           accessTokenExpiry: expiry,
@@ -117,14 +84,8 @@ async function login(req, res, next) {
       }
     }
 
-    console.error(`${logPrefix} - ❌ FAILED: No handler found for email:`, email)
     return res.status(401).json({ message: 'Not a valid user name' })
   } catch (e) {
-    console.error(`${logPrefix} - ❌ FAILED: Login exception:`, {
-      message: e.message,
-      statusCode: e.statusCode,
-      stack: e.stack
-    })
     // Format error response as JSON
     const statusCode = e.statusCode || 500
     return res.status(statusCode).json({ message: e.message })
