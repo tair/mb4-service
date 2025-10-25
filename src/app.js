@@ -35,6 +35,27 @@ const app = express()
 app.set('trust proxy', true)
 
 app.use((req, res, next) => {
+  const logPrefix = `[CORS-DEBUG] ${req.method} ${req.path}`
+  
+  // Log incoming request details for debugging
+  if (req.path !== '/healthz') {  // Skip health check spam
+    console.log(`${logPrefix} - Incoming request`)
+    console.log(`${logPrefix} - Origin:`, req.headers.origin)
+    console.log(`${logPrefix} - Referer:`, req.headers.referer)
+    console.log(`${logPrefix} - Cookie header present:`, !!req.headers.cookie)
+    console.log(`${logPrefix} - Cookie header length:`, req.headers.cookie?.length || 0)
+    
+    if (req.headers.cookie) {
+      const hasAuthCookie = req.headers.cookie.includes('authorization=')
+      console.log(`${logPrefix} - Authorization cookie in header:`, hasAuthCookie)
+      if (hasAuthCookie) {
+        // Log first 100 chars of cookie (sanitized)
+        const cookieSnippet = req.headers.cookie.substring(0, 100)
+        console.log(`${logPrefix} - Cookie snippet:`, cookieSnippet)
+      }
+    }
+  }
+  
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader(
     'Access-Control-Allow-Methods',
@@ -45,6 +66,12 @@ app.use((req, res, next) => {
     'Access-Control-Allow-Headers',
     'Content-Type, Authorization, x-session-key, x-session-fingerprint'
   )
+  
+  // Log CORS headers being set
+  if (req.method === 'OPTIONS') {
+    console.log(`${logPrefix} - Responding to OPTIONS preflight request`)
+  }
+  
   next()
 })
 
