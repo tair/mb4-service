@@ -178,12 +178,12 @@ export async function createMediaFiles(req, res) {
     return
   }
 
-  // Validate ZIP file size (max 1GB)
-  const maxZipSize = 1024 * 1024 * 1024 // 1GB
+  // Validate ZIP file size (max 1.5GB)
+  const maxZipSize = 1536 * 1024 * 1024 // 1.5GB
   if (req.file.size > maxZipSize) {
     res.status(400).json({
       message:
-        'ZIP file is too large. Maximum size is 1GB. Please split your files into smaller archives.',
+        'ZIP file is too large. Maximum size is 1.5GB. Please split your files into smaller archives.',
     })
     return
   }
@@ -1819,12 +1819,12 @@ export async function createStacksMediaFile(req, res) {
     return
   }
 
-  // Validate ZIP file size (max 1GB)
-  const maxZipSize = 1024 * 1024 * 1024 // 1GB
+  // Validate ZIP file size (max 1.5GB)
+  const maxZipSize = 1536 * 1024 * 1024 // 1.5GB
   if (req.file.size > maxZipSize) {
     res.status(400).json({
       message:
-        'ZIP file is too large. Maximum size is 1GB. Please split your files into smaller archives.',
+        'ZIP file is too large. Maximum size is 1.5GB. Please split your files into smaller archives.',
     })
     return
   }
