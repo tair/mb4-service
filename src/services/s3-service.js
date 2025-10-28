@@ -6,9 +6,14 @@ import {
   DeleteObjectCommand,
   CopyObjectCommand,
   ListObjectsV2Command,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import config from '../config.js'
+import { Readable } from 'stream'
 
 class S3Service {
   constructor() {
@@ -126,6 +131,138 @@ class S3Service {
   }
 
   /**
+   * Upload a stream to S3 using multipart upload (for large files)
+   * @param {string} bucketName - The S3 bucket name
+   * @param {string} key - The object key/path
+   * @param {Readable} stream - The readable stream to upload
+   * @param {string} contentType - The content type of the object
+   * @param {number} partSize - Size of each part in bytes (default: 100MB)
+   * @returns {Promise<{key: string, etag: string}>}
+   */
+  async putObjectMultipart(
+    bucketName,
+    key,
+    stream,
+    contentType,
+    partSize = 100 * 1024 * 1024
+  ) {
+    let uploadId
+    try {
+      // Step 1: Initiate multipart upload
+      const createCommand = new CreateMultipartUploadCommand({
+        Bucket: bucketName,
+        Key: key,
+        ContentType: contentType,
+      })
+      const createResponse = await this.s3Client.send(createCommand)
+      uploadId = createResponse.UploadId
+
+      // Step 2: Upload parts
+      const uploadedParts = []
+      let partNumber = 1
+      let buffer = Buffer.alloc(0)
+
+      // Convert stream to async iterator if it isn't already
+      if (typeof stream[Symbol.asyncIterator] !== 'function') {
+        stream = Readable.from(stream)
+      }
+
+      for await (const chunk of stream) {
+        buffer = Buffer.concat([buffer, chunk])
+
+        // Upload when buffer reaches part size
+        while (buffer.length >= partSize) {
+          const partData = buffer.slice(0, partSize)
+          buffer = buffer.slice(partSize)
+
+          const uploadPartCommand = new UploadPartCommand({
+            Bucket: bucketName,
+            Key: key,
+            PartNumber: partNumber,
+            UploadId: uploadId,
+            Body: partData,
+          })
+
+          const uploadPartResponse = await this.s3Client.send(uploadPartCommand)
+          uploadedParts.push({
+            ETag: uploadPartResponse.ETag,
+            PartNumber: partNumber,
+          })
+
+          console.log(
+            `Uploaded part ${partNumber} (${Math.round(
+              partData.length / 1024 / 1024
+            )}MB)`
+          )
+          partNumber++
+        }
+      }
+
+      // Upload remaining data as final part
+      if (buffer.length > 0) {
+        const uploadPartCommand = new UploadPartCommand({
+          Bucket: bucketName,
+          Key: key,
+          PartNumber: partNumber,
+          UploadId: uploadId,
+          Body: buffer,
+        })
+
+        const uploadPartResponse = await this.s3Client.send(uploadPartCommand)
+        uploadedParts.push({
+          ETag: uploadPartResponse.ETag,
+          PartNumber: partNumber,
+        })
+
+        console.log(
+          `Uploaded final part ${partNumber} (${Math.round(
+            buffer.length / 1024 / 1024
+          )}MB)`
+        )
+      }
+
+      // Step 3: Complete multipart upload
+      const completeCommand = new CompleteMultipartUploadCommand({
+        Bucket: bucketName,
+        Key: key,
+        UploadId: uploadId,
+        MultipartUpload: {
+          Parts: uploadedParts,
+        },
+      })
+
+      const completeResponse = await this.s3Client.send(completeCommand)
+
+      return {
+        key,
+        etag: completeResponse.ETag,
+        versionId: completeResponse.VersionId,
+      }
+    } catch (error) {
+      // Abort multipart upload on error
+      if (uploadId) {
+        try {
+          await this.s3Client.send(
+            new AbortMultipartUploadCommand({
+              Bucket: bucketName,
+              Key: key,
+              UploadId: uploadId,
+            })
+          )
+          console.log('Aborted multipart upload due to error')
+        } catch (abortError) {
+          console.error('Failed to abort multipart upload:', abortError)
+        }
+      }
+
+      console.error('S3 Service Error:', error)
+      throw new Error(
+        `Failed to upload object to S3 (multipart): ${error.message}`
+      )
+    }
+  }
+
+  /**
    * Delete object from S3 bucket
    * @param {string} bucketName - The S3 bucket name
    * @param {string} key - The object key/path
@@ -220,7 +357,8 @@ class S3Service {
 
       // Add Content-Disposition if provided (for forcing download)
       if (options.responseContentDisposition) {
-        commandParams.ResponseContentDisposition = options.responseContentDisposition
+        commandParams.ResponseContentDisposition =
+          options.responseContentDisposition
       }
 
       const command = new GetObjectCommand(commandParams)

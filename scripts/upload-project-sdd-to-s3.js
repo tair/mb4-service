@@ -3,12 +3,16 @@
 //   node scripts/upload-project-sdd-to-s3.js --project-id=1234       # Single project
 //   node scripts/upload-project-sdd-to-s3.js --project-id=1234,5678  # Multiple projects
 //   node scripts/upload-project-sdd-to-s3.js --all --partition-id=5678 # All projects with partition
+//   node scripts/upload-project-sdd-to-s3.js --csv                   # Generate CSV of missing projects
 // docker cp scripts/ mb4-service-container-prod:/app/
 // Env expected (already set in container):
 //   DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 //   AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_DEFAULT_BUCKET
 //
 // RUN ON LOCAL: docker exec -it mb4-service-container-local npm run upload:sdd -- --all
+//docker exec mb4-service-container-prod pkill -f "upload-project-sdd-to-s3.js"
+// docker exec -d mb4-service-container-prod sh -c "npm run upload:sdd -- --project-id=3919,3972,5280,661,4101,4083,3836,3459,4056,604,3970,4527,4895,3298,5608,2170,3123,3127,3383,3650,1006,4343,4541,2802,2520,4619,5803,3222,2283,3413,2602,4966,2298,5530,2741,1172,1007,2517,4048,687,3415,2396 > /tmp/upload.log 2>&1"
+//
 
 import { PassThrough } from 'stream'
 import { fileURLToPath } from 'url'
@@ -34,8 +38,9 @@ const ARGS = Object.fromEntries(
 const PROCESS_ALL = ARGS['all'] || false
 const PROJECT_ID_INPUT = ARGS['project-id'] || ARGS['project-ids']
 const PARTITION_ID = ARGS['partition-id'] || null
+const GENERATE_CSV = ARGS['csv'] || false
 
-if (!PROCESS_ALL && !PROJECT_ID_INPUT) {
+if (!PROCESS_ALL && !PROJECT_ID_INPUT && !GENERATE_CSV) {
   console.error('Missing required argument')
   console.error('Usage: node scripts/upload-project-sdd-to-s3.js --all')
   console.error(
@@ -44,6 +49,7 @@ if (!PROCESS_ALL && !PROJECT_ID_INPUT) {
   console.error(
     '       node scripts/upload-project-sdd-to-s3.js --project-id=1234,5678'
   )
+  console.error('       node scripts/upload-project-sdd-to-s3.js --csv')
   process.exit(1)
 }
 
@@ -63,8 +69,139 @@ async function getAllProjectIds() {
   }
 }
 
+// Function to get all projects with their details from database
+async function getAllProjectsWithDetails() {
+  try {
+    const [rows] = await sequelizeConn.query(
+      `SELECT project_id, name, disk_usage FROM projects WHERE deleted = 0 ORDER BY project_id`
+    )
+    return rows.map((row) => ({
+      project_id: row.project_id.toString(),
+      name: row.name,
+      disk_usage: row.disk_usage || 0,
+      size_mb: row.disk_usage ? Math.round(row.disk_usage / 1024 / 1024) : 0,
+    }))
+  } catch (error) {
+    console.error(
+      '❌ Failed to fetch project details from database:',
+      error.message
+    )
+    process.exit(1)
+  }
+}
+
+// Function to generate CSV of projects not yet uploaded to S3
+async function generateMissingProjectsCSV() {
+  try {
+    console.log('📊 Generating CSV of projects not yet uploaded to S3...')
+
+    // Get all projects with details
+    const projects = await getAllProjectsWithDetails()
+    console.log(`Found ${projects.length} total projects`)
+
+    // Import S3 service
+    const s3Service = (await import('../src/services/s3-service.js')).default
+    const bucketName = process.env.AWS_S3_DEFAULT_BUCKET || 'mb4-data'
+
+    const missingProjects = []
+    let checkedCount = 0
+
+    for (const project of projects) {
+      checkedCount++
+
+      // Progress indicator every 50 projects
+      if (checkedCount % 50 === 0 || checkedCount === projects.length) {
+        console.log(
+          `Checking S3 status: ${checkedCount}/${projects.length} projects`
+        )
+      }
+
+      try {
+        const s3Key = `sdd_exports/${project.project_id}_morphobank.zip`
+        const exists = await s3Service.objectExists(bucketName, s3Key)
+
+        if (!exists) {
+          missingProjects.push({
+            project_id: project.project_id,
+            name: project.name,
+            size_mb: project.size_mb,
+            disk_usage_bytes: project.disk_usage,
+          })
+        }
+      } catch (error) {
+        console.error(
+          `❌ Error checking project ${project.project_id}: ${error.message}`
+        )
+        // Add to missing list if we can't check (assume missing)
+        missingProjects.push({
+          project_id: project.project_id,
+          name: project.name,
+          size_mb: project.size_mb,
+          disk_usage_bytes: project.disk_usage,
+          error: error.message,
+        })
+      }
+    }
+
+    // Generate CSV content
+    const csvHeader = 'project_id,name,size_mb,disk_usage_bytes,error\n'
+    const csvRows = missingProjects
+      .map((project) => {
+        const name = project.name.replace(/"/g, '""') // Escape quotes
+        const error = project.error
+          ? `"${project.error.replace(/"/g, '""')}"`
+          : ''
+        return `${project.project_id},"${name}",${project.size_mb},${project.disk_usage_bytes},${error}`
+      })
+      .join('\n')
+
+    const csvContent = csvHeader + csvRows
+
+    // Write CSV to file
+    const fs = await import('fs/promises')
+    const csvFilename = `missing_sdd_projects_${
+      new Date().toISOString().split('T')[0]
+    }.csv`
+    await fs.writeFile(csvFilename, csvContent, 'utf8')
+
+    console.log(`\n📄 CSV generated: ${csvFilename}`)
+    console.log(`📊 Summary:`)
+    console.log(`   Total projects: ${projects.length}`)
+    console.log(`   Missing from S3: ${missingProjects.length}`)
+    console.log(
+      `   Already uploaded: ${projects.length - missingProjects.length}`
+    )
+
+    // Show size breakdown
+    const totalSizeMB = missingProjects.reduce((sum, p) => sum + p.size_mb, 0)
+    const largeProjects = missingProjects.filter((p) => p.size_mb > 1024)
+
+    console.log(`   Total size of missing projects: ${totalSizeMB}MB`)
+    console.log(`   Large projects (>1GB): ${largeProjects.length}`)
+
+    if (largeProjects.length > 0) {
+      console.log(
+        `   Large project IDs: ${largeProjects
+          .map((p) => p.project_id)
+          .join(', ')}`
+      )
+    }
+
+    return csvFilename
+  } catch (error) {
+    console.error('❌ Failed to generate CSV:', error.message)
+    process.exit(1)
+  }
+}
+
 // Main execution function
 async function main() {
+  // Handle CSV generation
+  if (GENERATE_CSV) {
+    await generateMissingProjectsCSV()
+    return
+  }
+
   // Get project IDs based on arguments
   let PROJECT_IDS = []
 
@@ -108,14 +245,14 @@ async function main() {
           ? Math.round(project.disk_usage / 1024 / 1024)
           : 0
 
-        // Skip projects larger than 1GB (1024MB) to prevent server crashes
-        if (projectSizeMB > 1024) {
+        // Skip projects larger than 5GB to prevent excessive processing
+        if (projectSizeMB > 5120) {
           console.log(
-            `⚠️  Skipping project ${projectId} - size ${projectSizeMB}MB exceeds 1GB limit`
+            `⚠️  Skipping project ${projectId} - size ${projectSizeMB}MB exceeds 5GB limit`
           )
           resolve({
             success: false,
-            error: 'Project too large (>1GB)',
+            error: 'Project too large (>5GB)',
             skipped: true,
           })
           return
@@ -128,46 +265,57 @@ async function main() {
         // Sanitize project name for filename
         const projectName = project.name.replace(/[^a-zA-Z0-9]/g, '_')
 
-        // Create a PassThrough stream to capture the ZIP data
-        const captureStream = new PassThrough()
-        const chunks = []
+        // Create a PassThrough stream for direct streaming to S3
+        const uploadStream = new PassThrough()
+        const s3Key = `sdd_exports/${projectId}_morphobank.zip`
+        const bucketName = process.env.AWS_S3_DEFAULT_BUCKET || 'mb4-data'
 
-        // Capture data as it flows through
-        captureStream.on('data', (chunk) => {
-          chunks.push(chunk)
-        })
+        // Import S3 service
+        const s3Service = (await import('../src/services/s3-service.js'))
+          .default
 
-        // Handle completion
-        captureStream.on('end', async () => {
-          try {
-            const zipBuffer = Buffer.concat(chunks)
-            const s3Key = `sdd_exports/${projectId}_morphobank.zip`
-            const bucketName = process.env.AWS_S3_DEFAULT_BUCKET || 'mb4-data'
+        // Start the S3 upload immediately (streaming)
+        // Use multipart upload for files larger than 100MB
+        const uploadPromise =
+          projectSizeMB > 100
+            ? s3Service.putObjectMultipart(
+                bucketName,
+                s3Key,
+                uploadStream,
+                'application/zip'
+              )
+            : (async () => {
+                // For smaller files, collect chunks and use regular upload
+                const chunks = []
+                for await (const chunk of uploadStream) {
+                  chunks.push(chunk)
+                }
+                const zipBuffer = Buffer.concat(chunks)
+                return await s3Service.putObject(
+                  bucketName,
+                  s3Key,
+                  zipBuffer,
+                  'application/zip'
+                )
+              })()
 
-            // Import S3 service
-            const s3Service = (await import('../src/services/s3-service.js'))
-              .default
-
-            const uploadResult = await s3Service.putObject(
-              bucketName,
-              s3Key,
-              zipBuffer,
-              'application/zip'
+        // Handle upload completion
+        uploadPromise
+          .then(() => {
+            console.log(
+              `✅ Project ${projectId} completed (${projectSizeMB}MB)`
             )
-
-            const sizeMB = Math.round(zipBuffer.length / 1024 / 1024)
-            console.log(`✅ Project ${projectId} completed (${sizeMB}MB)`)
             resolve({ success: true })
-          } catch (s3UploadError) {
+          })
+          .catch((s3UploadError) => {
             console.error(
-              `❌ Project ${projectId}: Upload failed - ${s3UploadError.message}`
+              `❌ Failed to upload ZIP to S3 for project ${projectId}: ${s3UploadError}`
             )
             resolve({ success: false, error: s3UploadError.message })
-          }
-        })
+          })
 
         // Handle errors in the stream
-        captureStream.on('error', (error) => {
+        uploadStream.on('error', (error) => {
           console.error(
             `❌ Project ${projectId}: Stream error - ${error.message}`
           )
@@ -179,7 +327,7 @@ async function main() {
           projectId,
           PARTITION_ID,
           projectName,
-          captureStream
+          uploadStream
         )
 
         if (!result.success) {
