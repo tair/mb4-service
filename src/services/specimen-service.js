@@ -252,3 +252,56 @@ export async function isSpecimenCitationsInProject(
   )
   return count == citationIds.length
 }
+
+/**
+ * Search specimens within a project by text matching on specimen fields and taxon names
+ * @param {number} projectId - The project ID to search within
+ * @param {string} text - The search text
+ * @returns {Promise<number[]>} Array of matching specimen IDs, limited to 15 results
+ */
+export async function searchSpecimens(projectId, text) {
+  if (!text || text.trim().length === 0) {
+    // Return empty results for empty search
+    return []
+  }
+
+  const searchTerm = `%${text.trim()}%`
+  
+  const [rows] = await sequelizeConn.query(
+    `
+    SELECT DISTINCT s.specimen_id
+    FROM specimens s
+    LEFT JOIN taxa_x_specimens txs ON s.specimen_id = txs.specimen_id
+    LEFT JOIN taxa t ON txs.taxon_id = t.taxon_id
+    WHERE s.project_id = ?
+    AND (
+      s.description LIKE ? OR
+      s.institution_code LIKE ? OR
+      s.collection_code LIKE ? OR
+      s.catalog_number LIKE ? OR
+      s.occurrence_id LIKE ? OR
+      t.genus LIKE ? OR
+      t.specific_epithet LIKE ? OR
+      t.subspecific_epithet LIKE ?
+    )
+    ORDER BY 
+      CASE 
+        WHEN t.genus LIKE ? THEN 1
+        WHEN s.catalog_number LIKE ? THEN 2
+        WHEN s.institution_code LIKE ? THEN 3
+        ELSE 4
+      END,
+      s.specimen_id
+    LIMIT 15`,
+    {
+      replacements: [
+        projectId,
+        searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
+        searchTerm, searchTerm, searchTerm,
+        searchTerm, searchTerm, searchTerm
+      ],
+    }
+  )
+  
+  return rows.map((r) => r.specimen_id)
+}

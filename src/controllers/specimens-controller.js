@@ -292,13 +292,11 @@ export async function getUsage(req, res) {
 }
 
 export async function search(req, res) {
-  // TODO(kenzley): Implement a real search instead of a random selection.
   const projectId = req.project.project_id
-  const specimens = await specimenService.getProjectSpecimens(projectId)
-  const specimenIds = specimens
-    .map((s) => s.specimen_id)
-    .sort(() => 0.5 - Math.random())
-    .splice(0, 15)
+  const searchText = req.body.text || ''
+  
+  const specimenIds = await specimenService.searchSpecimens(projectId, searchText)
+  
   res.status(200).json({
     results: specimenIds,
   })
