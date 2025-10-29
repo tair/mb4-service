@@ -738,7 +738,7 @@ export default class MatrixEditorService {
       citation_id: citationId,
       pp: pp,
       notes: notes,
-      name: await getCitationText(citation),
+      name: getCitationText(citation),
     }
   }
 
@@ -813,7 +813,7 @@ export default class MatrixEditorService {
         citation_id: citationId,
         pp: pp,
         notes: notes,
-        name: await getCitationText(citation),
+        name: getCitationText(citation),
       },
     }
   }
