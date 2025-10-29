@@ -3,7 +3,7 @@ export function getCitationText(record) {
   const journalTitle = record.journal_title ? record.journal_title.trim() : ''
 
   const publicationYear = record.pubyear
-  const publisher = record.title ? record.publisher.trim() : ''
+  const publisher = record.publisher ? record.publisher.trim() : ''
   const placeOfPublication = record.place_of_publication
     ? record.place_of_publication.trim()
     : ''
@@ -65,7 +65,7 @@ export function getCitationText(record) {
   if (collation) {
     citation += number ? ', ' : ' '
     citation +=
-      collation.includes('-') || collation.include(',') ? ' pp. ' : ' p. '
+      collation.includes('-') || collation.includes(',') ? ' pp. ' : ' p. '
     citation += collation
   }
 
@@ -110,13 +110,13 @@ function getAuthors(authors) {
   for (const author of authors) {
     const name = []
     if (author.surname) {
-      names.push(author.surname)
+      name.push(author.surname)
     }
     if (author.forename) {
-      names.push(author.forename)
+      name.push(author.forename)
     }
     if (author.middlename) {
-      names.push(author.middlename)
+      name.push(author.middlename)
     }
     names.push(name.join(', '))
   }

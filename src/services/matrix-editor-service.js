@@ -585,7 +585,7 @@ export default class MatrixEditorService {
 
   async findCitation(text) {
     if (!text || text.trim().length === 0) {
-      return []
+      return { citations: [] }
     }
 
     const searchTerm = `%${text.trim()}%`
@@ -637,7 +637,7 @@ export default class MatrixEditorService {
       name: getCitationText(row)
     }))
 
-    return citations
+    return { citations: citations }
   }
 
   async addCellCitations(
