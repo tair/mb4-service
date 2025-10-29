@@ -363,7 +363,8 @@ async function importIntoMatrix(
           if (stateObj.notes) {
             const existingState = stateNameMap.get(stateObj.name)
 
-            // TODO: Check with Tanya is it ever possible to have state descriptio
+            // Update state description if provided in imported data
+            // This allows updating descriptions for existing states when re-importing
             await models.CharacterState.update(
               { description: stateObj.notes },
               {

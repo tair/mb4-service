@@ -125,6 +125,74 @@ export async function getTaxonName(taxonIds) {
   return rows
 }
 
+/**
+ * Search taxa within a project by text matching on taxon name fields
+ * @param {number} projectId - The project ID to search within
+ * @param {string} text - The search text
+ * @returns {Promise<number[]>} Array of matching taxon IDs, limited to 50 results
+ */
+export async function searchTaxa(projectId, text) {
+  if (!text || text.trim().length === 0) {
+    return []
+  }
+
+  const searchTerm = `%${text.trim()}%`
+  
+  const [rows] = await sequelizeConn.query(
+    `
+    SELECT taxon_id
+    FROM taxa
+    WHERE project_id = ?
+    AND (
+      genus LIKE ? OR
+      subgenus LIKE ? OR
+      specific_epithet LIKE ? OR
+      subspecific_epithet LIKE ? OR
+      supraspecific_clade LIKE ? OR
+      higher_taxon_kingdom LIKE ? OR
+      higher_taxon_phylum LIKE ? OR
+      higher_taxon_class LIKE ? OR
+      higher_taxon_subclass LIKE ? OR
+      higher_taxon_infraclass LIKE ? OR
+      higher_taxon_cohort LIKE ? OR
+      higher_taxon_order LIKE ? OR
+      higher_taxon_suborder LIKE ? OR
+      higher_taxon_infraorder LIKE ? OR
+      higher_taxon_superfamily LIKE ? OR
+      higher_taxon_family LIKE ? OR
+      higher_taxon_subfamily LIKE ? OR
+      higher_taxon_tribe LIKE ? OR
+      higher_taxon_subtribe LIKE ? OR
+      scientific_name_author LIKE ? OR
+      scientific_name_year LIKE ? OR
+      notes LIKE ?
+    )
+    ORDER BY 
+      CASE 
+        WHEN genus LIKE ? THEN 1
+        WHEN specific_epithet LIKE ? THEN 2
+        WHEN supraspecific_clade LIKE ? THEN 3
+        WHEN higher_taxon_family LIKE ? THEN 4
+        ELSE 5
+      END,
+      taxon_id
+    LIMIT 50`,
+    {
+      replacements: [
+        projectId,
+        searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
+        searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
+        searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
+        searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
+        searchTerm, searchTerm,
+        searchTerm, searchTerm, searchTerm, searchTerm
+      ],
+    }
+  )
+  
+  return rows.map((r) => r.taxon_id)
+}
+
 export async function getEolInfo(projectId) {
   const [rows] = await sequelizeConn.query(
     `

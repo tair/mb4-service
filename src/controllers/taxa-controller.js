@@ -1,5 +1,4 @@
 import sequelizeConn from '../util/db.js'
-import { Op } from 'sequelize'
 import * as bibliographyService from '../services/bibliography-service.js'
 import * as matrixService from '../services/matrix-service.js'
 import * as partitionService from '../services/partition-service.js'
@@ -326,23 +325,12 @@ export async function getUsage(req, res) {
   })
 }
 
-// TODO(kenzley): Implement a real search.
 export async function search(req, res) {
   const projectId = req.project.project_id
-  const text = req.body.text
-
-  const taxa = text?.length
-    ? await models.Taxon.findAll({
-        attributes: ['taxon_id'],
-        where: {
-          genus: {
-            [Op.like]: `%${text}%`,
-          },
-          project_id: projectId,
-        },
-      })
-    : []
-  const taxonIds = taxa.map((t) => t.taxon_id)
+  const searchText = req.body.text || ''
+  
+  const taxonIds = await taxaService.searchTaxa(projectId, searchText)
+  
   res.status(200).json({
     results: taxonIds,
   })
