@@ -50,8 +50,8 @@ export class S3DocumentUploader {
       throw new Error('No file buffer or path provided')
     }
 
-    // Validate file size (100MB limit)
-    const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
+    // Validate file size (300MB limit)
+    const MAX_FILE_SIZE = 300 * 1024 * 1024 // 300MB
     if (fileBuffer.length > MAX_FILE_SIZE) {
       throw new Error(`File size ${fileBuffer.length} bytes exceeds maximum allowed size of ${MAX_FILE_SIZE} bytes`)
     }
