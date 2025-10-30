@@ -105,6 +105,14 @@ export class BaseModelDuplicator extends BaseModelScanner {
       rows = await this.filterOnetimeUseMedia(rows, primaryKey)
     }
     
+    // Identify JSON columns for this table (do this once per table, not per row)
+    const jsonColumns = new Set()
+    for (const [field, attributes] of Object.entries(table.rawAttributes)) {
+      if (attributes.type && attributes.type.toSql && attributes.type.toSql() === 'JSON') {
+        jsonColumns.add(field)
+      }
+    }
+    
     for (const row of rows) {
       const rowId = row[primaryKey]
       
@@ -146,8 +154,25 @@ export class BaseModelDuplicator extends BaseModelScanner {
           row[field] = this.getDuplicateRecordId(linkingTable, row[field])
         }
 
-        if (attributes.type.toSql() == 'JSON' && row[field]) {
-          row[field] = JSON.stringify(row[field])
+        // Handle JSON columns - format them properly for MySQL CAST
+        if (jsonColumns.has(field)) {
+          if (row[field] === null || row[field] === undefined) {
+            // NULL values are fine as-is - CAST(? AS JSON) will handle NULL
+            row[field] = null
+          } else if (typeof row[field] === 'string') {
+            // If it's already a string, validate it's valid JSON
+            try {
+              // Validate by parsing - if it fails, set to null
+              JSON.parse(row[field])
+              // Keep as string - MySQL CAST will parse it
+            } catch (e) {
+              // Invalid JSON string - set to null
+              row[field] = null
+            }
+          } else {
+            // It's an object/array - stringify it
+            row[field] = JSON.stringify(row[field])
+          }
         }
 
         if (attributes.ancestored) {
@@ -159,11 +184,21 @@ export class BaseModelDuplicator extends BaseModelScanner {
         }
       }
 
-      const columns = Object.keys(row).join(',')
+      // Build columns and values arrays (in matching order)
+      const columns = Object.keys(row)
       const values = Object.values(row)
-      const placeHolders = new Array(values.length).fill('?').join(',')
+      
+      // Build placeholders with CAST for JSON columns
+      const placeHolders = columns.map(col => {
+        if (jsonColumns.has(col)) {
+          // Use CAST for JSON columns to handle NULL and string values properly
+          return 'CAST(? AS JSON)'
+        }
+        return '?'
+      }).join(',')
+      
       const [cloneRowId] = await sequelizeConn.query(
-        `INSERT INTO ${tableName}(${columns}) VALUES(${placeHolders})`,
+        `INSERT INTO ${tableName}(${columns.join(',')}) VALUES(${placeHolders})`,
         {
           replacements: values,
           transaction,

@@ -45,7 +45,14 @@ export const getObject = async (req, res) => {
     res.send(result.data)
   } catch (error) {
     // Handle 404 errors without logging (expected behavior for missing files)
-    if (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey')) {
+    if (
+      error.name === 'NoSuchKey' ||
+      error.name === 'NotFound' ||
+      error.message.includes('NoSuchKey') ||
+      error.message.includes('Object not found') ||
+      error.message.includes('The specified key does not exist') ||
+      error.$metadata?.httpStatusCode === 404
+    ) {
       return res.status(404).json({
         error: 'Object not found',
         message: 'The requested object does not exist',
