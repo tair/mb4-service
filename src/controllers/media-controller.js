@@ -1272,7 +1272,7 @@ export async function serveMediaFile(req, res) {
     // Send the data
     res.send(result.data)
   } catch (error) {
-    console.error('Media serve error:', error.message)
+    // console.error('Media serve error:', error.message)
 
     if (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey')) {
       return res.status(404).json({
@@ -1432,7 +1432,7 @@ export async function serveBatchMediaFiles(req, res) {
     const statusCode = results.length > 0 ? 200 : 400
     res.status(statusCode).json(response)
   } catch (error) {
-    console.error('Batch Media Serve Error:', error)
+    // console.error('Batch Media Serve Error:', error)
     res.status(500).json({
       error: 'Internal server error',
       message: 'Failed to serve batch media files',

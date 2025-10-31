@@ -5,7 +5,13 @@ import { BaseModelDuplicator } from '../base-model-duplicator.js'
 import { EmailManager } from '../email-manager.js'
 import { Handler, HandlerErrors } from './handler.js'
 
-/** A handler to duplicating projects. */
+/** 
+ * A handler to duplicating projects.
+ * 
+ * @deprecated This task queue handler is kept for backward compatibility with existing queued tasks.
+ * New duplication requests are handled directly via ProjectDuplicationService for immediate execution
+ * and more reliable S3 file copying. See: src/services/project-duplication-service.js
+ */
 export class ProjectDuplicationHandler extends Handler {
   async process(parameters) {
     const requestId = parseInt(parameters.request_id)
