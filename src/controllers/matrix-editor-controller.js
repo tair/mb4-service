@@ -734,7 +734,7 @@ export async function setPreferences(req, res) {
 export async function sync(req, res) {
   const userId = parseInt(req.params.userId)
   if (!userId) {
-    res.status(401).json({ ok: false, errors: ['User invalid'] })
+    res.status(400).json({ ok: false, errors: ['User ID required'] })
     return
   }
 
@@ -755,15 +755,14 @@ export async function sync(req, res) {
   const data = { client_id: clientId }
   res.write(`event: init\ndata: ${JSON.stringify(data)}\n\n`)
   
-  // Send keepalive comments every 30 seconds to prevent connection timeout 
-  // and accidentally logout in UI
+  // Send keepalive comments every 15 seconds to prevent connection timeout
   const keepaliveInterval = setInterval(() => {
     try {
       res.write(': keepalive\n\n')
     } catch (e) {
       clearInterval(keepaliveInterval)
     }
-  }, 30000) // 30 seconds
+  }, 15000) // 15 seconds
   
   req.on('close', () => {
     clearInterval(keepaliveInterval)
@@ -777,7 +776,14 @@ export async function sendEvent(req, res) {
   const userId = req.user ? req.user.user_id : 0
   const client = clients.getClient(matrixId, clientId)
   if (client == null || client.userId != userId) {
-    res.status(401).json({ ok: false, errors: ['User invalid'] })
+    // Use 412 Precondition Failed instead of 401 to avoid triggering frontend logout
+    // 401 is reserved for authentication failures (invalid JWT)
+    // 412 indicates client must establish sync connection first
+    res.status(412).json({ 
+      ok: false, 
+      errors: ['Matrix editor sync connection required'],
+      code: 'SYNC_REQUIRED'
+    })
     return
   }
 
@@ -824,7 +830,12 @@ export async function fetchChanges(req, res) {
   const userId = req.user ? req.user.user_id : 0
   const client = clients.getClient(matrixId, clientId)
   if (client == null || client.userId != userId) {
-    res.status(401).json({ ok: false, errors: ['User invalid'] })
+    // Use 412 instead of 401 to avoid triggering frontend logout
+    res.status(412).json({ 
+      ok: false, 
+      errors: ['Matrix editor sync connection required'],
+      code: 'SYNC_REQUIRED'
+    })
     return
   }
 
