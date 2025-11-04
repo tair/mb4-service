@@ -125,9 +125,12 @@ async function main() {
         // Create stream for tracking and collecting data
         const trackingStream = new PassThrough()
         let bytesReceived = 0
+        let lastBytesReceived = 0
+        let lastBytesUpdateTime = Date.now()
         const startTime = Date.now()
         const s3Key = `sdd_exports/${projectId}_morphobank.zip`
         const bucketName = process.env.AWS_S3_DEFAULT_BUCKET || 'mb4-data'
+        const STALL_TIMEOUT = 180000 // 3 minutes without any data = stalled
 
         // Create S3 client
         const s3Client = new S3Client({
@@ -218,6 +221,7 @@ async function main() {
           if (uploadError) return // Stop processing if error occurred
 
           bytesReceived += chunk.length
+          lastBytesUpdateTime = Date.now() // Update timestamp when data arrives
           partBuffer = Buffer.concat([partBuffer, chunk])
 
           // Trigger upload processing (non-blocking)
@@ -227,7 +231,7 @@ async function main() {
           })
         })
 
-        // Status update interval (every 5 seconds)
+        // Stall detection and status update interval (every 5 seconds)
         const statusInterval = setInterval(() => {
           const elapsed = (Date.now() - startTime) / 1000 // seconds
           const mbReceived = (bytesReceived / 1024 / 1024).toFixed(2)
@@ -240,10 +244,64 @@ async function main() {
               ? ((bytesReceived / 1024 / 1024 / projectSizeMB) * 100).toFixed(1)
               : '0.0'
 
+          // Check for stalled stream
+          const timeSinceLastUpdate = Date.now() - lastBytesUpdateTime
+          const hasStalled =
+            timeSinceLastUpdate > STALL_TIMEOUT && bytesReceived > 0
+          const isStalledWarning =
+            timeSinceLastUpdate > 60000 && bytesReceived === lastBytesReceived // 1 minute without change
+
+          // Monitor buffer sizes
+          const partBufferMB = (partBuffer.length / 1024 / 1024).toFixed(2)
+          const bufferWarning = partBuffer.length > 500 * 1024 * 1024 // 500MB buffer
+
+          if (hasStalled) {
+            console.error(
+              `   ⚠️ STREAM STALLED: No data received for ${Math.floor(
+                timeSinceLastUpdate / 1000
+              )}s (${Math.floor(timeSinceLastUpdate / 60000)} minutes)`
+            )
+            console.error(
+              `   ⚠️ Last received: ${mbReceived}MB. The export process may be stuck.`
+            )
+            console.error(
+              `   ⚠️ Part buffer size: ${partBufferMB}MB | Parts uploaded: ${parts.length} | Is uploading: ${isUploading}`
+            )
+            console.error(
+              `   ⚠️ This could indicate: archiver compression stalled, memory pressure, or the stream has silently failed.`
+            )
+            console.error(
+              `   ⚠️ Consider: checking memory usage, archiver process state, or restarting the export.`
+            )
+          } else if (isStalledWarning) {
+            console.warn(
+              `   ⚠️ WARNING: No progress for ${Math.floor(
+                timeSinceLastUpdate / 1000
+              )}s - stream may be stalled`
+            )
+            console.warn(
+              `   ⚠️ Part buffer: ${partBufferMB}MB | Parts: ${parts.length} | Uploading: ${isUploading}`
+            )
+          } else if (bufferWarning) {
+            console.warn(
+              `   ⚠️ Large buffer: ${partBufferMB}MB - S3 uploads may not be keeping up with stream`
+            )
+          }
+
           console.log(
             `   ⏳ Progress: ${mbReceived}MB / ${projectSizeMB}MB (${progressPercent}%) | ` +
-              `Speed: ${mbPerSecond}MB/s | Elapsed: ${Math.floor(elapsed)}s`
+              `Speed: ${mbPerSecond}MB/s | Elapsed: ${Math.floor(
+                elapsed
+              )}s | ` +
+              `Buffer: ${partBufferMB}MB | Parts: ${parts.length}` +
+              (hasStalled
+                ? ' | ⚠️ STALLED'
+                : isStalledWarning
+                ? ' | ⚠️ Warning'
+                : '')
           )
+
+          lastBytesReceived = bytesReceived
         }, 5000) // Update every 5 seconds
 
         // Handle completion

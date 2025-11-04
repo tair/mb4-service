@@ -312,13 +312,23 @@ export class SDDExporter {
 
     this.currentStep++
     this.reportProgress('finalizing', 0, 1, 'Finalizing...')
-    console.log('[SDD Export] Step 6: Finalizing archive...')
+    console.log(
+      '[SDD Export] Step 6: Finalizing archive (this may take a while for large projects)...'
+    )
 
-    // Finalize the archive
+    // Finalize the archive - this initiates compression and streaming
+    // Note: finalize() resolves immediately, but streaming continues asynchronously
     await archive.finalize()
-    console.log('[SDD Export] Archive finalized')
+    console.log(
+      '[SDD Export] Archive finalization initiated - streaming compressed data now...'
+    )
+    console.log(
+      '[SDD Export] Note: Large archives may take significant time to stream all compressed data'
+    )
 
-    this.reportProgress('completed', 1, 1, 'Complete')
+    // Note: The actual streaming completion is detected by the output stream's 'end' event
+    // This function returns here, but data continues streaming to outputStream
+    this.reportProgress('streaming', 0, 1, 'Streaming compressed archive...')
   }
 
   /**
