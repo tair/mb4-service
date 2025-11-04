@@ -249,6 +249,7 @@ const DUPLICATED_TABLES = [
   models.MatrixAdditionalBlock,
   models.BibliographicAuthor,
   models.MediaLabel,
+  models.MatrixImage,
 ]
 
 const IGNORED_TABLES = [

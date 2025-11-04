@@ -17,6 +17,8 @@ import config from '../config.js'
 import axios from 'axios'
 import { MembershipType } from '../models/projects-x-user.js'
 import { EmailManager } from '../lib/email-manager.js'
+import { PartitionPublishHandler } from '../lib/task-handlers/partition-publish-handler.js'
+import { processTasks } from '../services/task-queue-service.js'
 
 export async function getProjects(req, res) {
   const userId = req.user?.user_id
@@ -773,6 +775,10 @@ export async function publishPartition(req, res) {
     )
 
     await transaction.commit()
+
+    // Kick off background processing (non-blocking)
+    processTasks().catch(() => {})
+
     res.status(200).json({ message: 'success' })
   } catch (e) {
     console.error('Could not process partition publication request\n', e)
