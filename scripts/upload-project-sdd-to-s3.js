@@ -13,6 +13,13 @@
 import { PassThrough } from 'stream'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import {
+  S3Client,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
+} from '@aws-sdk/client-s3'
 
 // Get the project root directory
 const __filename = fileURLToPath(import.meta.url)
@@ -23,6 +30,7 @@ const projectRoot = join(__dirname, '..')
 import { generateProjectSDDFallback } from '../src/services/projects-service.js'
 import { getProject } from '../src/services/projects-service.js'
 import sequelizeConn from '../src/util/db.js'
+import config from '../src/config.js'
 
 const ARGS = Object.fromEntries(
   process.argv.slice(2).map((a) => {
@@ -114,37 +122,210 @@ async function main() {
         // Sanitize project name for filename
         const projectName = project.name.replace(/[^a-zA-Z0-9]/g, '_')
 
-        // Create a PassThrough stream to capture the ZIP data
-        const captureStream = new PassThrough()
-        const chunks = []
+        // Create stream for tracking and collecting data
+        const trackingStream = new PassThrough()
+        let bytesReceived = 0
+        const startTime = Date.now()
+        const s3Key = `sdd_exports/${projectId}_morphobank.zip`
+        const bucketName = process.env.AWS_S3_DEFAULT_BUCKET || 'mb4-data'
 
-        // Capture data as it flows through
-        captureStream.on('data', (chunk) => {
-          chunks.push(chunk)
+        // Create S3 client
+        const s3Client = new S3Client({
+          region: config.aws.region,
+          credentials: {
+            accessKeyId: config.aws.accessKeyId,
+            secretAccessKey: config.aws.secretAccessKey,
+          },
+          maxAttempts: 3,
+          retryMode: 'adaptive',
         })
 
+        // Multipart upload state
+        const PART_SIZE = 100 * 1024 * 1024 // 100MB per part
+        let uploadId = null
+        const parts = []
+        let partBuffer = Buffer.alloc(0)
+        let partNumber = 1
+        let isUploading = false
+        let uploadError = null
+
+        // Helper function to upload a part
+        async function uploadPart(partData, partNum) {
+          const command = new UploadPartCommand({
+            Bucket: bucketName,
+            Key: s3Key,
+            UploadId: uploadId,
+            PartNumber: partNum,
+            Body: partData,
+          })
+          const response = await s3Client.send(command)
+          return { ETag: response.ETag, PartNumber: partNum }
+        }
+
+        // Process uploads in the background (non-blocking)
+        async function processUploads() {
+          if (isUploading || !uploadId || uploadError) return
+
+          while (partBuffer.length >= PART_SIZE && uploadId && !uploadError) {
+            isUploading = true
+            const partData = partBuffer.slice(0, PART_SIZE)
+            partBuffer = partBuffer.slice(PART_SIZE)
+            const currentPartNumber = partNumber
+            partNumber++
+
+            try {
+              console.log(
+                `   📤 Starting upload of part ${currentPartNumber} (${(
+                  partData.length /
+                  1024 /
+                  1024
+                ).toFixed(2)}MB)...`
+              )
+              const partResult = await uploadPart(partData, currentPartNumber)
+              parts.push(partResult)
+              console.log(
+                `   ✅ Completed upload of part ${partResult.PartNumber}`
+              )
+            } catch (partError) {
+              uploadError = partError
+              console.error(
+                `   ❌ Failed to upload part ${currentPartNumber}: ${partError.message}`
+              )
+              // Abort multipart upload on error
+              if (uploadId) {
+                try {
+                  await s3Client.send(
+                    new AbortMultipartUploadCommand({
+                      Bucket: bucketName,
+                      Key: s3Key,
+                      UploadId: uploadId,
+                    })
+                  )
+                } catch (abortError) {
+                  // Ignore abort errors
+                }
+              }
+              trackingStream.destroy()
+              return
+            } finally {
+              isUploading = false
+            }
+          }
+        }
+
+        // Track bytes for progress reporting (non-blocking)
+        trackingStream.on('data', (chunk) => {
+          if (uploadError) return // Stop processing if error occurred
+
+          bytesReceived += chunk.length
+          partBuffer = Buffer.concat([partBuffer, chunk])
+
+          // Trigger upload processing (non-blocking)
+          processUploads().catch((err) => {
+            uploadError = err
+            trackingStream.destroy()
+          })
+        })
+
+        // Status update interval (every 5 seconds)
+        const statusInterval = setInterval(() => {
+          const elapsed = (Date.now() - startTime) / 1000 // seconds
+          const mbReceived = (bytesReceived / 1024 / 1024).toFixed(2)
+          const mbPerSecond =
+            elapsed > 0
+              ? (bytesReceived / 1024 / 1024 / elapsed).toFixed(2)
+              : '0.00'
+          const progressPercent =
+            projectSizeMB > 0
+              ? ((bytesReceived / 1024 / 1024 / projectSizeMB) * 100).toFixed(1)
+              : '0.0'
+
+          console.log(
+            `   ⏳ Progress: ${mbReceived}MB / ${projectSizeMB}MB (${progressPercent}%) | ` +
+              `Speed: ${mbPerSecond}MB/s | Elapsed: ${Math.floor(elapsed)}s`
+          )
+        }, 5000) // Update every 5 seconds
+
         // Handle completion
-        captureStream.on('end', async () => {
-          try {
-            const zipBuffer = Buffer.concat(chunks)
-            const s3Key = `sdd_exports/${projectId}_morphobank.zip`
-            const bucketName = process.env.AWS_S3_DEFAULT_BUCKET || 'mb4-data'
+        trackingStream.on('end', async () => {
+          clearInterval(statusInterval) // Stop status updates
 
-            // Import S3 service
-            const s3Service = (await import('../src/services/s3-service.js'))
-              .default
+          // Wait for any in-progress uploads to finish
+          while (isUploading) {
+            await new Promise((resolve) => setTimeout(resolve, 100))
+          }
 
-            const uploadResult = await s3Service.putObject(
-              bucketName,
-              s3Key,
-              zipBuffer,
-              'application/zip'
+          if (uploadError) {
+            console.error(
+              `❌ Project ${projectId}: Upload error occurred - ${uploadError.message}`
             )
+            resolve({ success: false, error: uploadError.message })
+            return
+          }
 
-            const sizeMB = Math.round(zipBuffer.length / 1024 / 1024)
+          const totalElapsed = (Date.now() - startTime) / 1000
+          const finalMB = (bytesReceived / 1024 / 1024).toFixed(2)
+          const avgSpeed =
+            totalElapsed > 0
+              ? (bytesReceived / 1024 / 1024 / totalElapsed).toFixed(2)
+              : '0.00'
+          console.log(
+            `   ✅ Stream complete: ${finalMB}MB received in ${Math.floor(
+              totalElapsed
+            )}s (avg: ${avgSpeed}MB/s)`
+          )
+
+          try {
+            // Process any remaining buffered data
+            await processUploads()
+
+            // Upload remaining buffer as final part
+            if (partBuffer.length > 0 && uploadId) {
+              console.log(
+                `   📤 Uploading final part (${(
+                  partBuffer.length /
+                  1024 /
+                  1024
+                ).toFixed(2)}MB)...`
+              )
+              const partResult = await uploadPart(partBuffer, partNumber)
+              parts.push(partResult)
+            }
+
+            // Complete multipart upload
+            console.log(`   📤 Finalizing S3 multipart upload...`)
+            const uploadStartTime = Date.now()
+            const completeCommand = new CompleteMultipartUploadCommand({
+              Bucket: bucketName,
+              Key: s3Key,
+              UploadId: uploadId,
+              MultipartUpload: { Parts: parts },
+            })
+            const uploadResult = await s3Client.send(completeCommand)
+            const uploadElapsed = (
+              (Date.now() - uploadStartTime) /
+              1000
+            ).toFixed(1)
+            console.log(`   ✅ S3 upload completed in ${uploadElapsed}s`)
+
+            const sizeMB = Math.round(bytesReceived / 1024 / 1024)
             console.log(`✅ Project ${projectId} completed (${sizeMB}MB)`)
             resolve({ success: true })
           } catch (s3UploadError) {
+            // Abort multipart upload on error
+            if (uploadId) {
+              try {
+                await s3Client.send(
+                  new AbortMultipartUploadCommand({
+                    Bucket: bucketName,
+                    Key: s3Key,
+                    UploadId: uploadId,
+                  })
+                )
+              } catch (abortError) {
+                // Ignore abort errors
+              }
+            }
             console.error(
               `❌ Project ${projectId}: Upload failed - ${s3UploadError.message}`
             )
@@ -153,26 +334,76 @@ async function main() {
         })
 
         // Handle errors in the stream
-        captureStream.on('error', (error) => {
+        trackingStream.on('error', async (error) => {
+          clearInterval(statusInterval) // Stop status updates
+          // Abort multipart upload on error
+          if (uploadId) {
+            try {
+              await s3Client.send(
+                new AbortMultipartUploadCommand({
+                  Bucket: bucketName,
+                  Key: s3Key,
+                  UploadId: uploadId,
+                })
+              )
+            } catch (abortError) {
+              // Ignore abort errors
+            }
+          }
           console.error(
             `❌ Project ${projectId}: Stream error - ${error.message}`
           )
           resolve({ success: false, error: error.message })
         })
 
-        // Call the service function to generate the SDD export
-        const result = await generateProjectSDDFallback(
-          projectId,
-          PARTITION_ID,
-          projectName,
-          captureStream
-        )
-
-        if (!result.success) {
-          console.error(
-            `❌ Project ${projectId}: Export failed - ${result.error}`
+        // Initialize multipart upload
+        try {
+          const createCommand = new CreateMultipartUploadCommand({
+            Bucket: bucketName,
+            Key: s3Key,
+            ContentType: 'application/zip',
+          })
+          const createResponse = await s3Client.send(createCommand)
+          uploadId = createResponse.UploadId
+          console.log(
+            `   📤 Initialized multipart upload (${parts.length} parts)`
           )
-          resolve({ success: false, error: result.error })
+
+          // Start the export process
+          const result = await generateProjectSDDFallback(
+            projectId,
+            PARTITION_ID,
+            projectName,
+            trackingStream
+          )
+
+          if (!result.success) {
+            clearInterval(statusInterval) // Stop status updates
+            // Abort multipart upload
+            if (uploadId) {
+              try {
+                await s3Client.send(
+                  new AbortMultipartUploadCommand({
+                    Bucket: bucketName,
+                    Key: s3Key,
+                    UploadId: uploadId,
+                  })
+                )
+              } catch (abortError) {
+                // Ignore abort errors
+              }
+            }
+            console.error(
+              `❌ Project ${projectId}: Export failed - ${result.error}`
+            )
+            resolve({ success: false, error: result.error })
+          }
+        } catch (initError) {
+          clearInterval(statusInterval) // Stop status updates
+          console.error(
+            `❌ Project ${projectId}: Failed to initialize upload - ${initError.message}`
+          )
+          resolve({ success: false, error: initError.message })
         }
       } catch (error) {
         console.error(`❌ Project ${projectId}: ${error.message}`)

@@ -6,6 +6,7 @@ import archiver from 'archiver'
 import fs from 'fs'
 import path from 'path'
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { NodeHttpHandler } from '@aws-sdk/node-http-handler'
 import { Readable } from 'stream'
 import { NexusExporter } from '../matrix-export/nexus-exporter.js'
 import { ExportOptions } from '../matrix-export/exporter.js'
@@ -218,24 +219,41 @@ export class SDDExporter {
    * Export project as ZIP archive containing SDD XML and media files
    */
   async exportAsZip(outputStream) {
+    console.log(
+      `[SDD Export] Starting export for project ${this.projectId}${
+        this.partitionId ? ` (partition ${this.partitionId})` : ''
+      }`
+    )
     this.totalSteps = 6
     this.currentStep = 0
 
     this.reportProgress('initializing', 0, 1, 'Loading...')
+    console.log('[SDD Export] Loading project data...')
 
     // Load project
+    const projectStartTime = Date.now()
     this.project = await models.Project.findByPk(this.projectId)
     if (!this.project) {
       throw new Error(`Project ${this.projectId} not found`)
     }
+    console.log(
+      `[SDD Export] Project loaded in ${(
+        (Date.now() - projectStartTime) /
+        1000
+      ).toFixed(1)}s: ${this.project.name}`
+    )
 
     // Load partition if specified
     if (this.partitionId) {
       this.partition = await models.Partition.findByPk(this.partitionId)
+      console.log(
+        `[SDD Export] Partition loaded: ${this.partition?.name || 'unknown'}`
+      )
     }
 
     this.currentStep++
     this.reportProgress('creating_archive', 0, 1, 'Creating archive...')
+    console.log('[SDD Export] Step 1: Creating ZIP archive...')
 
     // Create ZIP archive
     const archive = archiver('zip', {
@@ -244,37 +262,61 @@ export class SDDExporter {
 
     // Handle archive errors
     archive.on('error', (err) => {
+      console.error('[SDD Export] Archive error:', err.message)
       throw err
     })
 
     // Pipe archive to output stream
     archive.pipe(outputStream)
+    console.log('[SDD Export] Archive piped to output stream')
 
     this.currentStep++
     this.reportProgress('generating_xml', 0, 1, 'Adding XML...')
+    console.log('[SDD Export] Step 2: Generating XML...')
 
     // Step 1: Generate and add SDD XML
+    const xmlStartTime = Date.now()
     const sddXml = await this.generateXML()
+    const xmlDuration = Date.now() - xmlStartTime
+    console.log(
+      `[SDD Export] XML generated in ${(xmlDuration / 1000).toFixed(
+        1
+      )}s, adding to archive...`
+    )
+
     const projectName = this.project.name.replace(/[^a-zA-Z0-9]/g, '_')
     archive.append(sddXml, { name: `${projectName}_sdd.xml` })
+    console.log(
+      `[SDD Export] XML added to archive (${(sddXml.length / 1024).toFixed(
+        1
+      )}KB)`
+    )
 
     this.currentStep++
+    console.log('[SDD Export] Step 3: Adding media files...')
     // Step 2: Add media files
     await this.addMediaFilesToArchive(archive)
+    console.log('[SDD Export] Media files completed')
 
     this.currentStep++
+    console.log('[SDD Export] Step 4: Adding matrix files...')
     // Step 3: Add matrix files (if any)
     await this.addMatrixFilesToArchive(archive)
+    console.log('[SDD Export] Matrix files completed')
 
     this.currentStep++
+    console.log('[SDD Export] Step 5: Adding project documents...')
     // Step 4: Add project documents
     await this.addProjectDocumentsToArchive(archive)
+    console.log('[SDD Export] Project documents completed')
 
     this.currentStep++
     this.reportProgress('finalizing', 0, 1, 'Finalizing...')
+    console.log('[SDD Export] Step 6: Finalizing archive...')
 
     // Finalize the archive
     await archive.finalize()
+    console.log('[SDD Export] Archive finalized')
 
     this.reportProgress('completed', 1, 1, 'Complete')
   }
@@ -1177,10 +1219,19 @@ export class SDDExporter {
    * Add media files to ZIP archive
    */
   async addMediaFilesToArchive(archive) {
+    console.log('[SDD Export] Fetching media files list...')
+    const mediaStartTime = Date.now()
     const media = await this.getMediaForDownload()
+    const mediaFetchDuration = Date.now() - mediaStartTime
+    console.log(
+      `[SDD Export] Found ${media?.length || 0} media files (fetched in ${(
+        mediaFetchDuration / 1000
+      ).toFixed(1)}s)`
+    )
 
     if (!media || media.length === 0) {
       this.reportProgress('adding_media', 0, 0, 'No media')
+      console.log('[SDD Export] No media files to add')
       return
     }
 
@@ -1193,6 +1244,15 @@ export class SDDExporter {
     for (let i = 0; i < media.length; i++) {
       const mediaItem = media[i]
       processed++
+
+      // Log every 10 files or every 30 seconds
+      if (i % 10 === 0 || i === 0) {
+        process.stdout.write(
+          `\n[Media Loop] Processing file ${i + 1}/${media.length} (media_id: ${
+            mediaItem.media_id
+          })\n`
+        )
+      }
 
       try {
         const fileSizeBytes = this.getMediaFileSize(mediaItem)
@@ -1221,17 +1281,135 @@ export class SDDExporter {
           `${processed}/${media.length} - ${mediaInfo}`
         )
 
-        const downloadResult = await this.downloadMediaFromS3(
-          s3Client,
-          mediaItem
+        // Add timeout wrapper for S3 download
+        const downloadStartTime = Date.now()
+        const SLOW_DOWNLOAD_THRESHOLD = 30000 // 30 seconds
+        const STUCK_LOG_INTERVAL = 15000 // Log every 15 seconds if stuck
+        const STUCK_LOG_INITIAL_DELAY = 10000 // Start logging after 10 seconds
+
+        process.stdout.write(
+          `\n[Download] Starting: media M${mediaItem.media_id} (${processed}/${media.length})\n`
         )
+
+        const downloadPromise = this.downloadMediaFromS3(s3Client, mediaItem)
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error('S3 download timeout (5 minutes)')),
+            300000
+          )
+        )
+
+        // Heartbeat logging for stuck downloads
+        let heartbeatInterval = null
+        const startHeartbeat = () => {
+          heartbeatInterval = setInterval(() => {
+            const elapsed = Date.now() - downloadStartTime
+            if (elapsed > STUCK_LOG_INITIAL_DELAY) {
+              process.stdout.write(
+                `\n[Download] ⏳ Still downloading media M${
+                  mediaItem.media_id
+                }... (${(elapsed / 1000).toFixed(0)}s elapsed)\n`
+              )
+            }
+          }, STUCK_LOG_INTERVAL)
+        }
+
+        let downloadResult
+        try {
+          startHeartbeat()
+          downloadResult = await Promise.race([downloadPromise, timeoutPromise])
+          if (heartbeatInterval) {
+            clearInterval(heartbeatInterval)
+            heartbeatInterval = null
+          }
+
+          const downloadDuration = Date.now() - downloadStartTime
+
+          // Only log if download was slow or took a while
+          if (downloadDuration > SLOW_DOWNLOAD_THRESHOLD) {
+            console.log(
+              `   ⚠️ Slow download: media M${mediaItem.media_id} took ${(
+                downloadDuration / 1000
+              ).toFixed(1)}s`
+            )
+          }
+        } catch (error) {
+          if (heartbeatInterval) {
+            clearInterval(heartbeatInterval)
+            heartbeatInterval = null
+          }
+          const downloadDuration = Date.now() - downloadStartTime
+          console.error(
+            `   ❌ Failed to download media M${mediaItem.media_id} after ${(
+              downloadDuration / 1000
+            ).toFixed(1)}s: ${error.message}`
+          )
+          throw error
+        }
+
         if (downloadResult && downloadResult.stream) {
           const filename = this.getMediaFilenameFromS3Key(
             downloadResult.s3Key,
             mediaItem
           )
-          archive.append(downloadResult.stream, { name: `media/${filename}` })
+          process.stdout.write(
+            `\n[Archive] Adding media M${mediaItem.media_id} to archive: ${filename}\n`
+          )
+
+          const appendStartTime = Date.now()
+
+          // Wrap archive.append in a promise to detect if it's blocking
+          const appendPromise = new Promise((resolve, reject) => {
+            try {
+              archive.append(downloadResult.stream, {
+                name: `media/${filename}`,
+              })
+              // archive.append() returns immediately, but we need to wait for the stream to finish
+              // Let's add a timeout check
+              const checkInterval = setInterval(() => {
+                const elapsed = Date.now() - appendStartTime
+                if (elapsed > 30000) {
+                  process.stdout.write(
+                    `\n[Archive] ⚠️ archive.append() still waiting for stream (${(
+                      elapsed / 1000
+                    ).toFixed(0)}s) - media M${mediaItem.media_id}\n`
+                  )
+                }
+              }, 10000)
+
+              // The stream should end naturally
+              downloadResult.stream.on('end', () => {
+                clearInterval(checkInterval)
+                resolve()
+              })
+
+              downloadResult.stream.on('error', (err) => {
+                clearInterval(checkInterval)
+                reject(err)
+              })
+
+              // If stream doesn't end in 5 minutes, reject
+              setTimeout(() => {
+                clearInterval(checkInterval)
+                reject(new Error('Stream did not end within 5 minutes'))
+              }, 300000)
+            } catch (err) {
+              reject(err)
+            }
+          })
+
+          await appendPromise
+          const appendDuration = Date.now() - appendStartTime
+          process.stdout.write(
+            `[Archive] ✅ Completed adding media M${
+              mediaItem.media_id
+            } (took ${(appendDuration / 1000).toFixed(1)}s)\n`
+          )
           added++
+        } else {
+          process.stdout.write(
+            `\n[Archive] ⚠️ No stream returned for media M${mediaItem.media_id}, skipping...\n`
+          )
         }
       } catch (error) {
         console.error(
@@ -1407,12 +1585,20 @@ export class SDDExporter {
       throw new Error('AWS credentials not configured')
     }
 
+    const requestHandler = new NodeHttpHandler({
+      requestTimeout: 300000, // 5 minutes per request
+      connectionTimeout: 30000, // 30 seconds to connect
+    })
+
     return new S3Client({
       region: config.aws.region || 'us-west-2',
       credentials: {
         accessKeyId: config.aws.accessKeyId,
         secretAccessKey: config.aws.secretAccessKey,
       },
+      requestHandler,
+      maxAttempts: 3,
+      retryMode: 'adaptive',
     })
   }
 
