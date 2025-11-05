@@ -134,7 +134,7 @@ projectRouter.get(
   '/duplication/request',
   controller.getDuplicationRequestCriteria
 )
-projectRouter.get('/publish/partition', controller.getProjectPartitions)
+projectRouter.get('/publish/partitions', controller.getProjectPartitions)
 projectRouter.get(
   '/publish/partition/:partitionId',
   controller.getPartitionSummary

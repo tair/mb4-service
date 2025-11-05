@@ -293,7 +293,6 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
       }
       case 'cells':
       case 'cell_notes':
-      case 'cells_x_media':
       case 'cells_x_bibliographic_references': {
         const matrixIds = (await this.getAllIdsInTable('matrices')).join(',')
         return `SELECT ${tableName}.*
@@ -307,6 +306,30 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
               ${tableName}.matrix_id IN (${matrixIds}) AND
               matrices.project_id = ?`
       }
+      case 'cells_x_media': {
+        const matrixIds = this.safeJoinIds(
+          await this.getAllIdsInTable('matrices')
+        )
+        const mediaIds = await this.getAllIdsInTable('media_files')
+        // If no media IDs, return empty result set (no cells_x_media should be cloned)
+        if (mediaIds.length === 0) {
+          return `SELECT cells_x_media.*
+              FROM cells_x_media
+              WHERE 1=0`
+        }
+        const mediaIdsStr = mediaIds.join(',')
+        return `SELECT cells_x_media.*
+            FROM cells_x_media
+            INNER JOIN matrices USING(matrix_id)
+            INNER JOIN taxa_x_partitions USING(taxon_id)
+            INNER JOIN characters_x_partitions USING(character_id)
+            WHERE
+              taxa_x_partitions.partition_id = ${this.partitionId} AND
+              characters_x_partitions.partition_id = ${this.partitionId} AND
+              cells_x_media.matrix_id IN (${matrixIds}) AND
+              cells_x_media.media_id IN (${mediaIdsStr}) AND
+              matrices.project_id = ?`
+      }
       case 'matrix_file_uploads':
       case 'matrix_additional_blocks':
       case 'character_orderings': {
@@ -318,6 +341,11 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
               matrix_id IN (${matrixIds}) AND
               matrices.project_id = ?`
       }
+      case 'hp_matrix_images':
+        // Matrix images are project-level, include all for the project
+        return `SELECT hp_matrix_images.*
+            FROM hp_matrix_images
+            WHERE hp_matrix_images.project_id = ?`
       case 'bibliographic_references':
       case 'bibliographic_authors':
         // These tables are copied in completeness
