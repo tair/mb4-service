@@ -1027,7 +1027,7 @@ export class ProjectOverviewGenerator {
         stat.is_administrator,
         stat.membership_status,
         stat.email,
-        stat.membership_status,
+        stat.member_role,
         stat.last_accessed_on,
         stat.taxa_count,
         stat.specimen_count,

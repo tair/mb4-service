@@ -428,9 +428,9 @@ function convertFolderResponse(folder) {
  * GET /public/documents/:projectId/serve/:documentId
  */
 export async function serveDocumentFile(req, res) {
+  const { projectId, documentId } = req.params
+  
   try {
-    const { projectId, documentId } = req.params
-
     // Get document info from database
     const document = await models.ProjectDocument.findOne({
       where: {
@@ -457,13 +457,19 @@ export async function serveDocumentFile(req, res) {
       })
     }
 
-    // Extract file extension from original filename
-    const fileExtension = originalFileName.split('.').pop() || 'bin'
-    
-    // Construct S3 key based on the expected structure
-    // Format: documents/{projectId}/{documentId}/{projectId}_{documentId}_original.{extension}
-    const fileName = `${projectId}_${documentId}_original.${fileExtension}`
-    const s3Key = `documents/${projectId}/${documentId}/${fileName}`
+    // Check if there's an explicit S3 key stored in the database
+    let s3Key = json.s3_key || json['s3_key'] || json.S3_KEY
+
+    // If no explicit S3 key, construct it based on the expected structure
+    if (!s3Key) {
+      // Extract file extension from original filename
+      const fileExtension = originalFileName.split('.').pop() || 'bin'
+      
+      // Construct S3 key based on the expected structure
+      // Format: documents/{projectId}/{documentId}/{projectId}_{documentId}_original.{extension}
+      const fileName = `${projectId}_${documentId}_original.${fileExtension}`
+      s3Key = `documents/${projectId}/${documentId}/${fileName}`
+    }
 
     // Use default bucket from config
     const bucket = config.aws.defaultBucket
@@ -478,13 +484,18 @@ export async function serveDocumentFile(req, res) {
     // Get object from S3
     const result = await s3Service.getObject(bucket, s3Key)
 
+    // Encode filename for Content-Disposition header (RFC 5987)
+    // This handles filenames with non-ASCII characters
+    const encodedFilename = encodeURIComponent(originalFileName)
+    const contentDisposition = `inline; filename="${originalFileName.replace(/[^\x00-\x7F]/g, '_')}"; filename*=UTF-8''${encodedFilename}`
+
     // Set appropriate headers
     res.set({
       'Content-Type': result.contentType || 'application/octet-stream',
       'Content-Length': result.contentLength,
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Last-Modified': result.lastModified,
-      'Content-Disposition': `inline; filename="${originalFileName}"`,
+      'Content-Disposition': contentDisposition,
     })
 
     // Send the data
@@ -492,7 +503,7 @@ export async function serveDocumentFile(req, res) {
   } catch (error) {
     console.error('Document serve error:', error.message)
 
-    if (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey')) {
+    if (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey') || error.message.includes('Object not found')) {
       return res.status(404).json({
         error: 'File not found',
         message: 'The requested document file does not exist in S3',
@@ -506,7 +517,7 @@ export async function serveDocumentFile(req, res) {
       })
     }
 
-    if (error.name === 'AccessDenied') {
+    if (error.name === 'AccessDenied' || error.message.includes('AccessDenied')) {
       return res.status(403).json({
         error: 'Access denied',
         message: 'Insufficient permissions to access the requested file',

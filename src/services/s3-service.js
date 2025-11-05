@@ -58,12 +58,16 @@ class S3Service {
         error.name === 'NotFound' ||
         error.$metadata?.httpStatusCode === 404
       ) {
-        throw new Error(`Object not found: ${error.message}`)
+        const notFoundError = new Error(`Object not found: ${error.message}`)
+        notFoundError.name = 'NoSuchKey'
+        throw notFoundError
       }
 
-      // Log other unexpected errors
-      console.error('S3 Service Error:', error)
-      throw new Error(`Failed to get object from S3: ${error.message}`)
+      // Re-throw other errors without verbose logging
+      const s3Error = new Error(`Failed to get object from S3: ${error.message}`)
+      s3Error.name = error.name
+      s3Error.originalError = error
+      throw s3Error
     }
   }
 
@@ -120,7 +124,6 @@ class S3Service {
         versionId: response.VersionId,
       }
     } catch (error) {
-      console.error('S3 Service Error:', error)
       throw new Error(`Failed to upload object to S3: ${error.message}`)
     }
   }
@@ -140,7 +143,6 @@ class S3Service {
 
       await this.s3Client.send(command)
     } catch (error) {
-      console.error('S3 Service Error:', error)
       throw new Error(`Failed to delete object from S3: ${error.message}`)
     }
   }
@@ -176,7 +178,6 @@ class S3Service {
         versionId: response.VersionId,
       }
     } catch (error) {
-      console.error('S3 Service Error:', error)
       throw new Error(`Failed to copy object in S3: ${error.message}`)
     }
   }
@@ -197,7 +198,6 @@ class S3Service {
       const response = await this.s3Client.send(command)
       return response.Contents || []
     } catch (error) {
-      console.error('S3 Service Error:', error)
       throw new Error(`Failed to list objects in S3: ${error.message}`)
     }
   }
@@ -231,7 +231,6 @@ class S3Service {
 
       return signedUrl
     } catch (error) {
-      console.error('S3 Service Error:', error)
       throw new Error(`Failed to generate signed URL: ${error.message}`)
     }
   }
