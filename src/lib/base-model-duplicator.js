@@ -151,6 +151,15 @@ export class BaseModelDuplicator extends BaseModelScanner {
         if (linkingFieldName && linkingFieldName == field) {
           const tableNumber = row['table_num']
           const linkingTable = this.datamodel.getTableByNumber(tableNumber)
+          
+          // Safety check: ensure the linked record was actually cloned
+          if (!this.clonedIds.has(linkingTable, row[field])) {
+            throw new Error(
+              `${tableName} record references uncloned ${linkingTable.getTableName()} record ${row[field]} ` +
+              `(table_num: ${tableNumber}). This should have been filtered by shouldSkipRecordDueToFilteredMedia.`
+            )
+          }
+          
           row[field] = this.getDuplicateRecordId(linkingTable, row[field])
         }
 
@@ -276,6 +285,21 @@ export class BaseModelDuplicator extends BaseModelScanner {
           console.warn(`[BASE_DUPLICATOR] Skipping ${tableName} record that references filtered media file ${row[field]} via ${field}`)
           return true
         }
+      }
+    }
+    
+    // Check numbered/polymorphic table references (e.g., MediaLabel)
+    // These tables use table_num + link_id to reference records in other tables
+    const linkingFieldName = this.numberedTables.get(table)
+    if (linkingFieldName && row[linkingFieldName] && row['table_num']) {
+      const linkedTableNumber = row['table_num']
+      const linkedTable = this.datamodel.getTableByNumber(linkedTableNumber)
+      const linkedRecordId = row[linkingFieldName]
+      
+      // Check if the linked record was actually cloned
+      if (!this.clonedIds.has(linkedTable, linkedRecordId)) {
+        console.warn(`[BASE_DUPLICATOR] Skipping ${tableName} record that references uncloned ${linkedTable.getTableName()} record ${linkedRecordId} via table_num ${linkedTableNumber}`)
+        return true
       }
     }
     
@@ -611,7 +635,29 @@ export class BaseModelDuplicator extends BaseModelScanner {
     
     const constructedMedia = { ...originalMedia }
     
-    // Use the CORRECT S3 naming pattern: {projectId}_{mediaId}_{variant}.jpg
+    // Detect file extension from the original media data
+    const getExtension = (variant) => {
+      // Try to get extension from the variant data
+      if (originalMedia[variant]) {
+        if (originalMedia[variant].EXTENSION) {
+          return originalMedia[variant].EXTENSION
+        }
+        if (originalMedia[variant].extension) {
+          return originalMedia[variant].extension
+        }
+        if (originalMedia[variant].FILENAME) {
+          const match = originalMedia[variant].FILENAME.match(/\.([^.]+)$/)
+          if (match) return match[1]
+        }
+        if (originalMedia[variant].filename) {
+          const match = originalMedia[variant].filename.match(/\.([^.]+)$/)
+          if (match) return match[1]
+        }
+      }
+      // Default to jpg for non-original variants (they're usually converted to jpg)
+      return variant === 'original' ? 'jpg' : 'jpg'
+    }
+    
     // Only look for variants that actually exist: original, large, thumbnail
     const actualVariants = ['original', 'large', 'thumbnail']
     const mediaTypeFolder = mediaType === 'video' ? 'videos' : mediaType === 'model_3d' ? 'model_3ds' : 'images'
@@ -619,8 +665,11 @@ export class BaseModelDuplicator extends BaseModelScanner {
 
     
     for (const variant of actualVariants) {
-      // Construct the correct filename pattern
-      const correctFilename = `${projectId}_${mediaId}_${variant}.jpg`
+      // Get the correct extension for this variant
+      const extension = getExtension(variant)
+      
+      // Construct the correct filename pattern with actual extension
+      const correctFilename = `${projectId}_${mediaId}_${variant}.${extension}`
       
       // Construct the full S3 key
       const correctS3Key = `media_files/${mediaTypeFolder}/${projectId}/${mediaId}/${correctFilename}`
@@ -635,7 +684,8 @@ export class BaseModelDuplicator extends BaseModelScanner {
     }
     
     // Also construct a root-level S3 key for the original file
-    const rootFilename = `${projectId}_${mediaId}_original.jpg`
+    const originalExtension = getExtension('original')
+    const rootFilename = `${projectId}_${mediaId}_original.${originalExtension}`
     const rootS3Key = `media_files/${mediaTypeFolder}/${projectId}/${mediaId}/${rootFilename}`
     constructedMedia.s3_key = rootS3Key
 
