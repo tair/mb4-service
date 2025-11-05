@@ -741,7 +741,11 @@ async function getCharactersInProjectMap(projectId) {
     const characterId = parseInt(state.character_id)
     const character = charactersMap.get(characterId)
     character.states.push(state)
-    character.states.sort((a, b) => b.num - a.num)
+  }
+  
+  // Sort states by num in ascending order (once per character, not per state)
+  for (const character of charactersMap.values()) {
+    character.states.sort((a, b) => a.num - b.num)
   }
 
   return charactersMap
@@ -880,21 +884,22 @@ function processCellValue(cellValue, params) {
         continue
       }
       
-      // Map score to state index
-      let index
+      // Map score to state num (not array index!)
+      let stateNum
       if (symbols && Object.keys(symbols).length > 0) {
-        index = symbols[score]
+        stateNum = symbols[score]
       } else if (score >= '0' && score <= '9') {
-        index = parseInt(score)
+        stateNum = parseInt(score)
       } else {
-        index = score.toUpperCase().charCodeAt(0) - 65 // A = 0, B = 1, etc.
+        stateNum = score.toUpperCase().charCodeAt(0) - 65 // A = 0, B = 1, etc.
       }
       
-      if (index == undefined || index < 0) {
+      if (stateNum == undefined || stateNum < 0) {
         continue
       }
       
-      const state = character.states[index]
+      // Find state by its num property, not by array index
+      const state = character.states.find(s => s.num === stateNum)
       if (!state) {
         continue
       }
