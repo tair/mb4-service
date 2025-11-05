@@ -679,7 +679,29 @@ export class BaseModelDuplicator extends BaseModelScanner {
 
     const constructedMedia = { ...originalMedia }
 
-    // Use the CORRECT S3 naming pattern: {projectId}_{mediaId}_{variant}.jpg
+    // Detect file extension from the original media data
+    const getExtension = (variant) => {
+      // Try to get extension from the variant data
+      if (originalMedia[variant]) {
+        if (originalMedia[variant].EXTENSION) {
+          return originalMedia[variant].EXTENSION
+        }
+        if (originalMedia[variant].extension) {
+          return originalMedia[variant].extension
+        }
+        if (originalMedia[variant].FILENAME) {
+          const match = originalMedia[variant].FILENAME.match(/\.([^.]+)$/)
+          if (match) return match[1]
+        }
+        if (originalMedia[variant].filename) {
+          const match = originalMedia[variant].filename.match(/\.([^.]+)$/)
+          if (match) return match[1]
+        }
+      }
+      // Default to jpg for non-original variants (they're usually converted to jpg)
+      return variant === 'original' ? 'jpg' : 'jpg'
+    }
+
     // Only look for variants that actually exist: original, large, thumbnail
     const actualVariants = ['original', 'large', 'thumbnail']
     const mediaTypeFolder =
@@ -690,8 +712,11 @@ export class BaseModelDuplicator extends BaseModelScanner {
         : 'images'
 
     for (const variant of actualVariants) {
-      // Construct the correct filename pattern
-      const correctFilename = `${projectId}_${mediaId}_${variant}.jpg`
+      // Get the correct extension for this variant
+      const extension = getExtension(variant)
+
+      // Construct the correct filename pattern with actual extension
+      const correctFilename = `${projectId}_${mediaId}_${variant}.${extension}`
 
       // Construct the full S3 key
       const correctS3Key = `media_files/${mediaTypeFolder}/${projectId}/${mediaId}/${correctFilename}`
@@ -704,7 +729,8 @@ export class BaseModelDuplicator extends BaseModelScanner {
     }
 
     // Also construct a root-level S3 key for the original file
-    const rootFilename = `${projectId}_${mediaId}_original.jpg`
+    const originalExtension = getExtension('original')
+    const rootFilename = `${projectId}_${mediaId}_original.${originalExtension}`
     const rootS3Key = `media_files/${mediaTypeFolder}/${projectId}/${mediaId}/${rootFilename}`
     constructedMedia.s3_key = rootS3Key
 
