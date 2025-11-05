@@ -371,7 +371,7 @@ export async function getCharactersInMatrix(matrixId, partitionId = undefined) {
         mco.matrix_id = ?
         ${clause}
       ORDER BY mco.position`,
-    { replacements: [replacements] }
+    { replacements }
   )
 
   const [stateRows] = await sequelizeConn.query(
@@ -439,18 +439,19 @@ export async function getCharacterRulesInMatrix(matrixId) {
 }
 
 export async function getCells(matrixId, partitionId = undefined) {
-  const replacements = [matrixId]
+  let replacements = []
   let join = ''
-  let clause = ''
   if (partitionId) {
     join = `
       INNER JOIN characters_x_partitions AS cxp
         ON cxp.character_id = c.character_id AND cxp.partition_id = ?
       INNER JOIN taxa_x_partitions AS txp
-        ON txp.character_id = c.taxon_id AND txp.partition_id = cxp.partition_id
+        ON txp.taxon_id = c.taxon_id AND txp.partition_id = ?
       `
-    clause = 'AND p.partition_id = ?'
-    replacements.push(partitionId)
+    // Order matters: partition placeholders in JOIN come before matrix_id in WHERE
+    replacements = [partitionId, partitionId, matrixId]
+  } else {
+    replacements = [matrixId]
   }
 
   const [rows] = await sequelizeConn.query(
@@ -466,9 +467,8 @@ export async function getCells(matrixId, partitionId = undefined) {
       ${join}
       WHERE
         c.matrix_id = ?
-        ${clause}
       ORDER BY c.taxon_id, c.character_id, c.state_id`,
-    { replacements: replacements }
+    { replacements }
   )
   const cells = new Table()
   for (const row of rows) {
@@ -483,18 +483,19 @@ export async function getCells(matrixId, partitionId = undefined) {
 }
 
 export async function getCellNotes(matrixId, partitionId = undefined) {
-  const replacements = [matrixId]
+  let replacements = []
   let join = ''
-  let clause = ''
   if (partitionId) {
     join = `
       INNER JOIN characters_x_partitions AS cxp
         ON cxp.character_id = c.character_id AND cxp.partition_id = ?
       INNER JOIN taxa_x_partitions AS txp
-        ON txp.character_id = c.taxon_id AND txp.partition_id = cxp.partition_id
+        ON txp.taxon_id = c.taxon_id AND txp.partition_id = ?
       `
-    clause = 'AND p.partition_id = ?'
-    replacements.push(partitionId)
+    // Order matters: partition placeholders in JOIN come before matrix_id in WHERE
+    replacements = [partitionId, partitionId, matrixId]
+  } else {
+    replacements = [matrixId]
   }
 
   const [rows] = await sequelizeConn.query(
@@ -509,9 +510,8 @@ export async function getCellNotes(matrixId, partitionId = undefined) {
       ${join}
       WHERE
         c.matrix_id = ?
-        ${clause}
       ORDER BY mco.position, mto.position`,
-    { replacements: replacements }
+    { replacements }
   )
   return rows
 }

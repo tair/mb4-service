@@ -779,6 +779,23 @@ export async function download(req, res) {
     return
   }
 
+  // Get partition ID from query parameters
+  const partitionId = req.query.partitionId
+    ? parseInt(req.query.partitionId)
+    : null
+
+  // Fetch partition details if partitionId is provided
+  let partition = null
+  if (partitionId) {
+    partition = await models.Partition.findByPk(partitionId)
+    if (!partition) {
+      res
+        .status(400)
+        .json({ message: 'The specified partition does not exist.' })
+      return
+    }
+  }
+
   let fileExtension
   let exporter
   const options = new ExportOptions()
@@ -801,10 +818,13 @@ export async function download(req, res) {
 
   options.includeNotes = !!req.query.notes
   let filename = ''
+  const partitionName = partition
+    ? `_${partition.name.replace(/[^a-zA-Z0-9]/g, '_')}`
+    : ''
   if (!options.includeNotes) {
-    filename = `mbank_X${matrixId}_${getFilenameDate()}_no_notes.${fileExtension}`
+    filename = `mbank_X${matrixId}${partitionName}_${getFilenameDate()}_no_notes.${fileExtension}`
   } else {
-    filename = `mbank_X${matrixId}_${getFilenameDate()}.${fileExtension}`
+    filename = `mbank_X${matrixId}${partitionName}_${getFilenameDate()}.${fileExtension}`
   }
   res.set({
     'Content-Type': 'text/plain; charset=utf-8',
@@ -816,11 +836,15 @@ export async function download(req, res) {
   res.status(200)
 
   options.matrix = await matrixService.getMatrix(matrixId)
-  options.taxa = await matrixService.getTaxaInMatrix(matrixId)
-  options.characters = await matrixService.getCharactersInMatrix(matrixId)
-  options.cellsTable = await matrixService.getCells(matrixId)
+  // Pass partitionId to filter taxa, characters, cells, and cell notes
+  options.taxa = await matrixService.getTaxaInMatrix(matrixId, partitionId)
+  options.characters = await matrixService.getCharactersInMatrix(
+    matrixId,
+    partitionId
+  )
+  options.cellsTable = await matrixService.getCells(matrixId, partitionId)
   options.cellNotes = options.includeNotes
-    ? await matrixService.getCellNotes(matrixId)
+    ? await matrixService.getCellNotes(matrixId, partitionId)
     : null
   exporter.export(options)
   res.end()
@@ -835,13 +859,33 @@ export async function downloadCharacters(req, res) {
     return
   }
 
+  // Get partition ID from query parameters
+  const partitionId = req.query.partitionId
+    ? parseInt(req.query.partitionId)
+    : null
+
+  // Fetch partition details if partitionId is provided
+  let partition = null
+  if (partitionId) {
+    partition = await models.Partition.findByPk(partitionId)
+    if (!partition) {
+      res
+        .status(400)
+        .json({ message: 'The specified partition does not exist.' })
+      return
+    }
+  }
+
   const options = new ExportOptions()
   options.includeNotes = !!req.query.notes
   let filename = ''
+  const partitionName = partition
+    ? `_${partition.name.replace(/[^a-zA-Z0-9]/g, '_')}`
+    : ''
   if (!options.includeNotes) {
-    filename = `mbank_X${matrixId}_${getFilenameDate()}_character_list_no_notes.txt`
+    filename = `mbank_X${matrixId}${partitionName}_${getFilenameDate()}_character_list_no_notes.txt`
   } else {
-    filename = `mbank_X${matrixId}_${getFilenameDate()}_character_list.txt`
+    filename = `mbank_X${matrixId}${partitionName}_${getFilenameDate()}_character_list.txt`
   }
 
   res.set({
@@ -855,7 +899,11 @@ export async function downloadCharacters(req, res) {
 
   const exporter = new CharacterTextExporter((txt) => res.write(txt))
   options.matrix = await matrixService.getMatrix(matrixId)
-  options.characters = await matrixService.getCharactersInMatrix(matrixId)
+  // Pass partitionId to filter characters
+  options.characters = await matrixService.getCharactersInMatrix(
+    matrixId,
+    partitionId
+  )
 
   exporter.export(options)
   res.end()
