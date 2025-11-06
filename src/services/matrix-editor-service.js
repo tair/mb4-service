@@ -6991,10 +6991,10 @@ export default class MatrixEditorService {
       if (row.is_uncertain) {
         cell['uct'] = 1
       }
-      // This is a shortcut to evaluate discrete characters to false and
-      // continuous and mestric characters to true since they are numeric.
+      // Set numeric values for continuous and meristic characters
+      // Character types: 0=discrete, 1=continuous, 2=meristic
       const type = characterTypeMap.get(characterId)
-      if (type) {
+      if (type != null && type > 0) {
         const convertFunction = parseInt(type) == 1 ? parseFloat : parseInt
         if (row.start_value != null) {
           cell['sv'] = convertFunction(row.start_value)
