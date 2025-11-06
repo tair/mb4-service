@@ -825,7 +825,7 @@ function processCellValue(cellValue, params) {
   if (typeof cellValue === 'object' && cellValue !== null) {
     isUncertain = !!cellValue.uncertain
     note = cellValue.note
-    scores = cellValue.scores
+    scores = cellValue.score  // Fixed: should be 'score' (singular) not 'scores' (plural)
   }
   
   const isContinuous = character.type > 0

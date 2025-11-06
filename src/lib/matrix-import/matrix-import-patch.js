@@ -155,10 +155,13 @@ export async function bulkInsertCellsOptimized(cells, matrixId, userId) {
       const charId = cell.character_id || 'NULL'
       const taxonId = cell.taxon_id || 'NULL'
       const stateId = cell.state_id || 'NULL'
+      const startValue = cell.start_value != null ? cell.start_value : 'NULL'
+      const endValue = cell.end_value != null ? cell.end_value : 'NULL'
       const uncertain = cell.is_uncertain ? 1 : 0
+      const isNpa = cell.is_npa ? 1 : 0
       // Notes are stored in cell_notes table, not in cells
       
-      return `(${matrixId}, ${charId}, ${taxonId}, ${stateId}, ${uncertain}, ${userId}, 0, ${timestamp}, ${timestamp})`
+      return `(${matrixId}, ${charId}, ${taxonId}, ${stateId}, ${startValue}, ${endValue}, ${isNpa}, ${uncertain}, ${userId}, 0, ${timestamp}, ${timestamp})`
     }).join(',')
     
     chunks.push(values)
@@ -169,10 +172,13 @@ export async function bulkInsertCellsOptimized(cells, matrixId, userId) {
     await withBatchedTransaction(async (transaction) => {
       await sequelizeConn.query(
         `INSERT INTO cells 
-         (matrix_id, character_id, taxon_id, state_id, is_uncertain, user_id, access, created_on, last_modified_on)
+         (matrix_id, character_id, taxon_id, state_id, start_value, end_value, is_npa, is_uncertain, user_id, access, created_on, last_modified_on)
          VALUES ${valueChunk}
          ON DUPLICATE KEY UPDATE
            state_id = VALUES(state_id),
+           start_value = VALUES(start_value),
+           end_value = VALUES(end_value),
+           is_npa = VALUES(is_npa),
            is_uncertain = VALUES(is_uncertain),
            last_modified_on = VALUES(last_modified_on)`,
         { transaction }

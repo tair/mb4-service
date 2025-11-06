@@ -78,7 +78,7 @@ export class TNTExporter extends Exporter {
     } else {
       const maxStateLength = characters
         .map((c) => c.states?.length || 0)
-        .reduce((a, b) => Math.max(a, b))
+        .reduce((a, b) => Math.max(a, b), 0)
       this.writeLine(`nstates num ${maxStateLength};`)
     }
     this.writeLine('xread')
