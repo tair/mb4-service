@@ -210,7 +210,21 @@ export class BaseModelDuplicator extends BaseModelScanner {
 
       // Build columns and values arrays (in matching order)
       const columns = Object.keys(row)
-      const values = Object.values(row)
+      const values = Object.values(row).map((value, index) => {
+        const col = columns[index]
+        
+        // Stringify any remaining objects that aren't null/undefined
+        // This catches columns that are defined as STRING but contain JSON data
+        if (value !== null && value !== undefined && typeof value === 'object') {
+          // Check if it's not already been handled as a JSON column
+          if (!jsonColumns.has(col)) {
+            console.warn(`[BASE_DUPLICATOR] Stringifying object in non-JSON column ${col} in table ${tableName}`)
+            return JSON.stringify(value)
+          }
+        }
+        
+        return value
+      })
 
       // Build placeholders with CAST for JSON columns
       const placeHolders = columns
