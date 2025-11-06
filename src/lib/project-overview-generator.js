@@ -124,7 +124,12 @@ export class ProjectOverviewGenerator {
     )
 
     const [[{ mediaSize }]] = await query(`
-      SELECT SUM(media->>"$.original.PROPERTIES.filesize") AS mediaSize
+      SELECT SUM(
+        COALESCE(
+          media->>"$.original.PROPERTIES.filesize",
+          media->>"$.original.properties.filesize"
+        )
+      ) AS mediaSize
       FROM media_files mf
       WHERE mf.project_id = ?`)
 

@@ -23,7 +23,25 @@ export async function getMediaByIds(mediaIds) {
 
 export async function getMediaFiles(projectId) {
   const [rows] = await sequelizeConn.query(
-    `SELECT * FROM media_files WHERE project_id = ?`,
+    `SELECT 
+      mf.*,
+      mv.name AS view_name,
+      s.institution_code,
+      s.collection_code,
+      s.catalog_number,
+      s.reference_source,
+      t.genus,
+      t.specific_epithet,
+      t.subspecific_epithet,
+      t.scientific_name_author,
+      t.scientific_name_year,
+      t.is_extinct
+    FROM media_files mf
+    LEFT JOIN media_views mv ON mf.view_id = mv.view_id
+    LEFT JOIN specimens s ON mf.specimen_id = s.specimen_id
+    LEFT JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
+    LEFT JOIN taxa t ON t.taxon_id = ts.taxon_id
+    WHERE mf.project_id = ?`,
     { replacements: [projectId] }
   )
   return rows
