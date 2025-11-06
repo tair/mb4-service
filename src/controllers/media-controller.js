@@ -136,6 +136,23 @@ export async function createMediaFile(req, res) {
       shouldSkipLogChange: true,
     })
 
+    // Auto-set as exemplar if this is the first curated image and project has no exemplar
+    const project = await models.Project.findByPk(projectId, { transaction })
+    if (
+      !project.exemplar_media_id &&
+      media.media_type === 'image' &&
+      media.cataloguing_status === 0 &&
+      media.specimen_id &&
+      media.view_id &&
+      media.is_copyrighted !== null
+    ) {
+      project.exemplar_media_id = media.media_id
+      await project.save({
+        transaction,
+        user: req.user,
+      })
+    }
+
     await transaction.commit()
     mediaUploader.commit()
   } catch (e) {
@@ -546,6 +563,23 @@ export async function editMediaFile(req, res) {
       shouldSkipLogChange: true,
     })
 
+    // Auto-set as exemplar if this is the first curated image and project has no exemplar
+    const project = await models.Project.findByPk(projectId, { transaction })
+    if (
+      !project.exemplar_media_id &&
+      media.media_type === 'image' &&
+      media.cataloguing_status === 0 &&
+      media.specimen_id &&
+      media.view_id &&
+      media.is_copyrighted !== null
+    ) {
+      project.exemplar_media_id = media.media_id
+      await project.save({
+        transaction,
+        user: req.user,
+      })
+    }
+
     await transaction.commit()
     mediaUploader.commit()
     res.status(200).json({ media: convertMediaResponse(media) })
@@ -935,6 +969,27 @@ export async function editMediaFiles(req, res) {
       },
       transaction: transaction,
     })
+
+    // Auto-set as exemplar if project has no exemplar and first curated image is in results
+    const project = await models.Project.findByPk(projectId, { transaction })
+    if (!project.exemplar_media_id) {
+      // Find the first image that qualifies as exemplar
+      const firstQualifyingImage = results.find(
+        (media) =>
+          media.media_type === 'image' &&
+          media.cataloguing_status === 0 &&
+          media.specimen_id &&
+          media.view_id &&
+          media.is_copyrighted !== null
+      )
+      if (firstQualifyingImage) {
+        project.exemplar_media_id = firstQualifyingImage.media_id
+        await project.save({
+          transaction,
+          user: req.user,
+        })
+      }
+    }
 
     await transaction.commit()
 

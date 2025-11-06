@@ -443,7 +443,6 @@ export async function editProject(req, res, next) {
     }
 
     const transaction = await sequelizeConn.transaction()
-    let mediaUploader = null
 
     try {
       // Only update basic project fields if this is not just an exemplar update
@@ -490,6 +489,24 @@ export async function editProject(req, res, next) {
             return res.status(400).json({
               message:
                 'Invalid exemplar media ID or media does not belong to this project',
+            })
+          }
+
+          // Validate media is curated and ready (has specimen and view)
+          if (!media.specimen_id || !media.view_id) {
+            await transaction.rollback()
+            return res.status(400).json({
+              message:
+                'Selected exemplar media must have specimen and view assigned. Please curate the media first.',
+            })
+          }
+
+          // Validate copyright info is complete
+          if (media.is_copyrighted === null) {
+            await transaction.rollback()
+            return res.status(400).json({
+              message:
+                'Selected exemplar media must have copyright information completed.',
             })
           }
         }
@@ -552,45 +569,6 @@ export async function editProject(req, res, next) {
         project.journal_cover = null
       }
 
-      // Handle exemplar media upload
-      if (exemplarMediaFile) {
-        if (!mediaUploader) {
-          mediaUploader = new S3MediaUploader(transaction, req.user)
-        }
-
-        // Create a new media file record for exemplar media
-        const exemplarMedia = await models.MediaFile.create(
-          {
-            project_id: project.project_id,
-            user_id: req.user.user_id,
-            notes: 'Exemplar media',
-            published: 0,
-            access: 0,
-            cataloguing_status: 1,
-            media_type: 'image',
-          },
-          {
-            transaction,
-            user: req.user,
-          }
-        )
-
-        // Process and upload the exemplar media
-        await mediaUploader.setMedia(exemplarMedia, 'media', exemplarMediaFile)
-
-        await exemplarMedia.save({
-          transaction,
-          user: req.user,
-          shouldSkipLogChange: true,
-        })
-
-        // Update the project to link to this exemplar media
-        project.exemplar_media_id = exemplarMedia.media_id
-
-        // Commit the media uploader
-        mediaUploader.commit()
-      }
-
       // Save the updated project
       await project.save({
         transaction,
@@ -604,19 +582,12 @@ export async function editProject(req, res, next) {
       if (journalCoverFile) {
         response.journal_cover_uploaded = true
       }
-      if (exemplarMediaFile) {
-        response.exemplar_media_uploaded = true
-        response.exemplar_media_id = project.exemplar_media_id
-      }
 
       res
         .status(200)
         .json({ message: 'Project updated successfully', project: response })
     } catch (error) {
       await transaction.rollback()
-      if (mediaUploader) {
-        await mediaUploader.rollback()
-      }
       console.error('Error updating project:', error)
       res.status(500).json({ message: 'Failed to update project' })
     }
@@ -994,7 +965,6 @@ export async function createProject(req, res, next) {
 
     const transaction = await sequelizeConn.transaction()
     const currentTime = Math.floor(Date.now() / 1000)
-    let mediaUploader = null
 
     try {
       // Hash the reviewer login password if provided
@@ -1041,7 +1011,6 @@ export async function createProject(req, res, next) {
 
       // Handle file uploads if provided
       let journalCoverFile = req.files?.journal_cover?.[0]
-      let exemplarMediaFile = req.files?.exemplar_media?.[0]
 
       // Ensure files are valid and not empty placeholders
       // This prevents bad request errors when user wants to keep existing images
@@ -1050,12 +1019,6 @@ export async function createProject(req, res, next) {
         (!journalCoverFile.originalname || journalCoverFile.size === 0)
       ) {
         journalCoverFile = null
-      }
-      if (
-        exemplarMediaFile &&
-        (!exemplarMediaFile.originalname || exemplarMediaFile.size === 0)
-      ) {
-        exemplarMediaFile = null
       }
 
       // Handle journal cover upload
@@ -1095,47 +1058,8 @@ export async function createProject(req, res, next) {
         project.journal_cover = null
       }
 
-      // Handle exemplar media upload
-      if (exemplarMediaFile) {
-        if (!mediaUploader) {
-          mediaUploader = new S3MediaUploader(transaction, req.user)
-        }
-
-        // Create a new media file record for exemplar media
-        const exemplarMedia = await models.MediaFile.create(
-          {
-            project_id: project.project_id,
-            user_id: req.user.user_id,
-            notes: 'Exemplar media',
-            published: 0,
-            access: 0,
-            cataloguing_status: 1,
-            media_type: 'image',
-          },
-          {
-            transaction,
-            user: req.user,
-          }
-        )
-
-        // Process and upload the exemplar media
-        await mediaUploader.setMedia(exemplarMedia, 'media', exemplarMediaFile)
-
-        await exemplarMedia.save({
-          transaction,
-          user: req.user,
-          shouldSkipLogChange: true,
-        })
-
-        // Update the project to link to this exemplar media
-        project.exemplar_media_id = exemplarMedia.media_id
-
-        // Commit the media uploader
-        mediaUploader.commit()
-      }
-
       // Save project if any fields were updated
-      if (journalCoverFile || exemplarMediaFile) {
+      if (journalCoverFile) {
         await project.save({
           transaction,
           user: req.user,
@@ -1150,17 +1074,10 @@ export async function createProject(req, res, next) {
       if (journalCoverFile) {
         response.journal_cover_uploaded = true
       }
-      if (exemplarMediaFile) {
-        response.exemplar_media_uploaded = true
-        response.exemplar_media_id = project.exemplar_media_id
-      }
 
       res.status(201).json(response)
     } catch (error) {
       await transaction.rollback()
-      if (mediaUploader) {
-        await mediaUploader.rollback()
-      }
       throw error
     }
   } catch (error) {
