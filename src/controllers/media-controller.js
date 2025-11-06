@@ -1213,7 +1213,7 @@ export async function getFilterMediaIds(req, res) {
 }
 
 function convertMediaResponse(row) {
-  return {
+  const response = {
     media_id: parseInt(row.media_id),
     project_id: parseInt(row.project_id),
     user_id: parseInt(row.user_id),
@@ -1236,6 +1236,36 @@ function convertMediaResponse(row) {
     url: row.url,
     url_description: row.url_description,
   }
+  
+  // Add view name if available
+  if (row.view_name) {
+    response.view_name = row.view_name
+  }
+  
+  // Build and add specimen name if specimen data is available
+  if (row.specimen_id && row.reference_source !== undefined) {
+    const specimenRecord = {
+      specimen_id: row.specimen_id,
+      reference_source: row.reference_source,
+      institution_code: row.institution_code,
+      collection_code: row.collection_code,
+      catalog_number: row.catalog_number,
+      genus: row.genus,
+      specific_epithet: row.specific_epithet,
+      subspecific_epithet: row.subspecific_epithet,
+      scientific_name_author: row.scientific_name_author,
+      scientific_name_year: row.scientific_name_year,
+      is_extinct: row.is_extinct
+    }
+    // Use the utility function to get the specimen name
+    // showExtinctMarker=true, showAuthor=false, skipSubgenus=false
+    const specimenName = getSpecimenName(specimenRecord, null, true, false, false)
+    if (specimenName) {
+      response.specimen_name = specimenName
+    }
+  }
+  
+  return response
 }
 
 /**
