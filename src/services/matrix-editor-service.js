@@ -3872,7 +3872,10 @@ export default class MatrixEditorService {
           )
           cellChangesResults.push(cell)
         } else if (cellScores.size > 1) {
-          throw UserError('Selected Continuous scores have more than one value')
+          throw new UserError(
+            `Data integrity error: Multiple cell records found for this taxon/character combination. ` +
+              `Please contact the administrator to fix duplicate cells (taxon_id=${taxonId}, character_id=${characterId})`
+          )
         } else if (shouldDelete) {
           const cellScore = cellScores.get(0)
           await models.Cell.destroy({
@@ -3884,7 +3887,9 @@ export default class MatrixEditorService {
           cellChangesResults.push(cellScore)
         } else {
           const cellScore = cellScores.get(0)
-          const cell = await models.Cell.findByPk(cellScore.cell_id)
+          const cell = await models.Cell.findByPk(cellScore.cell_id, {
+            transaction: transaction,
+          })
           cell.start_value = startValue
           cell.end_value = endValue
           cell.user_id = this.user.user_id
