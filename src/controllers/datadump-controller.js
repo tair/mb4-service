@@ -172,6 +172,31 @@ async function projectListDump(req, res) {
   }
 }
 
+async function projectListDumpS3(req, res) {
+  try {
+    console.log('Start dumping project list data to S3...')
+    const publishingService = await import('../services/publishing-service.js')
+    const result = await publishingService.dumpAndUploadProjectsList()
+    
+    if (result.success) {
+      console.log('Dumped project list data to S3 - DONE!')
+      res.status(200).json({
+        message: 'Successfully dumped projects list to S3',
+        timeElapsed: result.timeElapsed,
+        s3Result: result.s3Result
+      })
+    } else {
+      res.status(500).json({ 
+        message: 'Failed to upload projects list to S3',
+        error: result.s3Result.message 
+      })
+    }
+  } catch (err) {
+    console.error(`Error while dumping project list data to S3. `, err.message)
+    res.status(500).json({ message: 'Error while running S3 dump process.' })
+  }
+}
+
 async function projectStatsDump(req, res) {
   try {
     console.log('Start dumping project stats data...')
@@ -946,6 +971,7 @@ async function getSDDExportTaskStatus(req, res) {
 export {
   dataDump,
   projectListDump,
+  projectListDumpS3,
   statsDump,
   projectStatsDump,
   projectSDDZipDump,
