@@ -17,12 +17,25 @@ function transformProjectsDataForAPI(projectsData) {
     // Use project_stats which contains accurate counts from the dump data
     const stats = project.project_stats || {}
     
+    // Format dates as ISO strings (convert from Unix timestamp if needed)
+    // Check for > 0 since 0 is the default for old projects without proper date tracking
+    const creationDate = project.created_on && project.created_on > 0
+      ? new Date(project.created_on * 1000).toISOString() 
+      : null
+    const publicationDate = project.published_on && project.published_on > 0
+      ? new Date(project.published_on * 1000).toISOString() 
+      : null
+    
     return {
       project_id: project.project_id.toString(),
       name: project.article_title || project.name || '',
       media_count: stats.media || 0,
       taxonomy_count: stats.taxa || 0,
       matrices_count: stats.matrices || 0,
+      creation_date: creationDate,
+      publication_date: publicationDate,
+      doi: project.article_doi || '',
+      authors: project.article_authors || '',
       // Use the new site path structure
       url: `${config.app.frontendDomain}/project/${project.project_id}/overview`
     }
