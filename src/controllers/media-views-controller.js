@@ -10,13 +10,20 @@ export async function getMediaViews(req, res) {
 
 export async function createViews(req, res) {
   const values = req.body
-  const { name, ...otherData } = values
+  const { name, names, ...otherData } = values
 
-  // Split names and create views
-  const viewNames = name
-    .split(',')
-    .map((n) => n.trim())
-    .filter((n) => n)
+  // Handle both 'names' array (new format) and 'name' string (legacy format)
+  let viewNames = []
+  if (names && Array.isArray(names)) {
+    // New format: array of names already split
+    viewNames = names.map((n) => n.trim()).filter((n) => n)
+  } else if (name) {
+    // Legacy format: split by semicolon
+    viewNames = name
+      .split(';')
+      .map((n) => n.trim())
+      .filter((n) => n)
+  }
 
   if (viewNames.length === 0) {
     res.status(400).json({
