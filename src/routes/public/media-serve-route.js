@@ -16,4 +16,10 @@ mediaServeRouter.get(
   controller.getMediaVideoUrl
 )
 
+// Get pre-signed URL for any media file (avoids proxy timeout for large files like 3D models)
+mediaServeRouter.get(
+  '/:projectId/media-url/:mediaId',
+  controller.getMediaPresignedUrl
+)
+
 export default mediaServeRouter
