@@ -34,7 +34,7 @@ function transformProjectsDataForAPI(projectsData) {
       matrices_count: stats.matrices || 0,
       creation_date: creationDate,
       publication_date: publicationDate,
-      doi: project.article_doi || '',
+      doi: project.project_doi || '',
       authors: project.article_authors || '',
       // Use the new site path structure
       url: `${config.app.frontendDomain}/project/${project.project_id}/overview`

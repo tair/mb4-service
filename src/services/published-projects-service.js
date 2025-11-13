@@ -24,7 +24,7 @@ export async function getProjects() {
     SELECT
       p.project_id, TRIM(journal_title) as journal_title, journal_cover,
       journal_year, journal_in_press, article_authors, article_title,
-      published_on, created_on, article_doi, 0 as has_continuous_char
+      published_on, created_on, project_doi, 0 as has_continuous_char
     FROM projects p
     WHERE p.published = 1 AND p.deleted = 0
     ORDER BY p.published_on DESC`)
