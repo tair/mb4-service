@@ -56,6 +56,31 @@ async function validateSpecimenAndView(specimenId, viewId, projectId) {
   }
 }
 
+/**
+ * Replace the file extension in a filename with a new extension
+ * Handles edge cases like files with multiple dots and hidden files
+ * @param {string} filename - Original filename (e.g., "archive.v2.zip", ".gitignore", "photo.jpg")
+ * @param {string} newExtension - New extension without dot (e.g., "tif", "png")
+ * @returns {string} Filename with replaced extension
+ */
+function replaceFileExtension(filename, newExtension) {
+  if (!filename || !newExtension) {
+    return filename
+  }
+
+  // Find the last dot in the filename
+  const lastDotIndex = filename.lastIndexOf('.')
+  
+  // If no extension found, just append the new extension
+  if (lastDotIndex === -1 || lastDotIndex === 0) {
+    return `${filename}.${newExtension}`
+  }
+  
+  // Replace the extension after the last dot
+  const basename = filename.substring(0, lastDotIndex)
+  return `${basename}.${newExtension}`
+}
+
 export async function getMediaFiles(req, res) {
   const projectId = req.params.projectId
   try {
@@ -1314,6 +1339,7 @@ export async function serveMediaFile(req, res) {
     // Extract S3 key from the media data (new system) or construct it (old system)
     const mediaVersion = mediaData[fileSize]
 
+    // Get S3 key first
     let s3Key
     if (mediaVersion.S3_KEY || mediaVersion.s3_key) {
       // New S3-based system - handle both uppercase and lowercase
@@ -1330,6 +1356,20 @@ export async function serveMediaFile(req, res) {
       })
     }
 
+    // Extract extension from S3 key (the actual file extension)
+    const s3Extension = s3Key.split('.').pop()?.toLowerCase() || ''
+    
+    // Get original filename from database
+    const originalFileName = mediaData.ORIGINAL_FILENAME || 
+                            mediaVersion.FILENAME || 
+                            `${projectId}_${mediaId}_${fileSize}`
+    
+    // Create correct filename: basename from database + extension from S3
+    // This handles cases where database has "archive.zip" but S3 has "file.tif"
+    const correctFileName = s3Extension 
+      ? replaceFileExtension(originalFileName, s3Extension)
+      : originalFileName
+
     // Use default bucket from config
     const bucket = config.aws.defaultBucket
 
@@ -1343,6 +1383,11 @@ export async function serveMediaFile(req, res) {
     // Get object from S3
     const result = await s3Service.getObject(bucket, s3Key)
 
+    // Encode filename for Content-Disposition header (RFC 5987)
+    // This handles filenames with non-ASCII characters
+    const encodedFilename = encodeURIComponent(correctFileName)
+    const contentDisposition = `attachment; filename="${correctFileName.replace(/[^\x00-\x7F]/g, '_')}"; filename*=UTF-8''${encodedFilename}`
+
     // Set appropriate headers
     // Use MIMETYPE from database if available, otherwise fall back to S3 content type
     const contentType = mediaVersion.MIMETYPE || result.contentType || 'application/octet-stream'
@@ -1352,6 +1397,7 @@ export async function serveMediaFile(req, res) {
       'Content-Length': result.contentLength,
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Last-Modified': result.lastModified,
+      'Content-Disposition': contentDisposition,
     })
 
     // Send the data
@@ -1568,10 +1614,7 @@ export async function getMediaVideoUrl(req, res) {
       })
     }
 
-    // Get original filename for download
-    const originalFilename = mediaData.ORIGINAL_FILENAME || `video_${mediaId}.mp4`
-
-    // Get S3 key for original video
+    // Get S3 key for original video first
     let s3Key
     if (originalMedia.S3_KEY || originalMedia.s3_key) {
       // New S3-based system - handle both uppercase and lowercase
@@ -1587,6 +1630,17 @@ export async function getMediaVideoUrl(req, res) {
         message: 'Media data is missing file information',
       })
     }
+
+    // Extract extension from S3 key (the actual file extension)
+    const s3Extension = s3Key.split('.').pop()?.toLowerCase() || 'mp4'
+    
+    // Get original filename from database
+    const originalFilename = mediaData.ORIGINAL_FILENAME || `video_${mediaId}.${s3Extension}`
+    
+    // Create correct filename: basename from database + extension from S3
+    const correctFilename = s3Extension 
+      ? replaceFileExtension(originalFilename, s3Extension)
+      : originalFilename
 
     // Use default bucket from config
     const bucket = config.aws.defaultBucket
@@ -1604,7 +1658,7 @@ export async function getMediaVideoUrl(req, res) {
     // If download=true, add Content-Disposition header to force download
     if (download === 'true') {
       // Sanitize filename for Content-Disposition header
-      const safeFilename = originalFilename.replace(/[^\w\s.-]/g, '_')
+      const safeFilename = correctFilename.replace(/[^\w\s.-]/g, '_')
       urlOptions.responseContentDisposition = `attachment; filename="${safeFilename}"`
     }
 
@@ -1617,13 +1671,128 @@ export async function getMediaVideoUrl(req, res) {
       expiresIn: 3600,
       mediaId: parseInt(mediaId),
       projectId: parseInt(projectId),
-      filename: originalFilename,
+      filename: correctFilename,
     })
   } catch (error) {
     console.error('Video URL generation error:', error.message)
     res.status(500).json({
       error: 'Internal server error',
       message: 'Failed to generate video URL',
+    })
+  }
+}
+
+/**
+ * Get pre-signed URL for any media file from S3
+ * This avoids proxy timeout issues for large files
+ * GET /projects/:projectId/media-url/:mediaId?fileSize=original&download=true
+ */
+export async function getMediaPresignedUrl(req, res) {
+  try {
+    const { projectId, mediaId } = req.params
+    const { fileSize = 'original', download } = req.query
+
+    // Validate file size
+    const supportedFileSizes = ['original', 'large', 'thumbnail']
+    if (!supportedFileSizes.includes(fileSize)) {
+      return res.status(400).json({
+        error: 'Invalid file size',
+        message: `File size '${fileSize}' is not supported. Supported sizes: ${supportedFileSizes.join(', ')}`,
+      })
+    }
+
+    // Get media file info from database
+    const [mediaRows] = await sequelizeConn.query(
+      `SELECT media_id, media FROM media_files WHERE project_id = ? AND media_id = ?`,
+      { replacements: [projectId, mediaId] }
+    )
+
+    if (!mediaRows || mediaRows.length === 0) {
+      return res.status(404).json({
+        error: 'Media not found',
+        message: 'The requested media file does not exist',
+      })
+    }
+
+    const mediaData = mediaRows[0].media
+
+    if (!mediaData || !mediaData[fileSize]) {
+      return res.status(404).json({
+        error: 'File size not found',
+        message: `The requested file size '${fileSize}' is not available for this media`,
+      })
+    }
+
+    const mediaVersion = mediaData[fileSize]
+
+    // Get S3 key first
+    let s3Key
+    if (mediaVersion.S3_KEY || mediaVersion.s3_key) {
+      // New S3-based system - handle both uppercase and lowercase
+      s3Key = mediaVersion.S3_KEY || mediaVersion.s3_key
+    } else if (mediaVersion.FILENAME) {
+      // Legacy local file system - construct S3 key
+      const fileExtension = mediaVersion.FILENAME.split('.').pop() || 'jpg'
+      const fileName = `${projectId}_${mediaId}_${fileSize}.${fileExtension}`
+      s3Key = `media_files/images/${projectId}/${mediaId}/${fileName}`
+    } else {
+      return res.status(404).json({
+        error: 'Invalid media data',
+        message: 'Media data is missing file information',
+      })
+    }
+
+    // Extract extension from S3 key (the actual file extension)
+    const s3Extension = s3Key.split('.').pop()?.toLowerCase() || ''
+    
+    // Get original filename from database
+    const originalFilename = mediaData.ORIGINAL_FILENAME || 
+                            mediaVersion.FILENAME || 
+                            `${projectId}_${mediaId}_${fileSize}`
+    
+    // Create correct filename: basename from database + extension from S3
+    // This handles cases where database has "archive.zip" but S3 has "file.tif"
+    const correctFilename = s3Extension 
+      ? replaceFileExtension(originalFilename, s3Extension)
+      : originalFilename
+
+    // Use default bucket from config
+    const bucket = config.aws.defaultBucket
+
+    if (!bucket) {
+      return res.status(500).json({
+        error: 'Configuration error',
+        message: 'Default S3 bucket not configured',
+      })
+    }
+
+    // Generate pre-signed URL options
+    const urlOptions = {}
+    
+    // If download=true, add Content-Disposition header to force download
+    if (download === 'true') {
+      // Sanitize filename for Content-Disposition header
+      const safeFilename = correctFilename.replace(/[^\w\s.-]/g, '_')
+      urlOptions.responseContentDisposition = `attachment; filename="${safeFilename}"`
+    }
+
+    // Generate pre-signed URL (valid for 1 hour)
+    const signedUrl = await s3Service.getSignedUrl(bucket, s3Key, 3600, urlOptions)
+
+    res.json({
+      success: true,
+      url: signedUrl,
+      expiresIn: 3600,
+      mediaId: parseInt(mediaId),
+      projectId: parseInt(projectId),
+      filename: correctFilename,
+      fileSize: fileSize,
+    })
+  } catch (error) {
+    console.error('Media presigned URL generation error:', error.message)
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to generate media URL',
     })
   }
 }
