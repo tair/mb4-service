@@ -19,6 +19,7 @@ import { MembershipType } from '../models/projects-x-user.js'
 import { EmailManager } from '../lib/email-manager.js'
 import { PartitionPublishHandler } from '../lib/task-handlers/partition-publish-handler.js'
 import { processTasks } from '../services/task-queue-service.js'
+import { dumpAndUploadProjectDetails, dumpAndUploadProjectsList } from '../services/publishing-service.js'
 
 export async function getProjects(req, res) {
   const userId = req.user?.user_id
@@ -576,6 +577,39 @@ export async function editProject(req, res, next) {
       })
 
       await transaction.commit()
+
+      // Re-dump project data to S3 if project is published
+      if (project.published === 1) {
+        try {
+          // Re-dump project details to S3 (synchronous, critical for immediate consistency)
+          const dumpResult = await dumpAndUploadProjectDetails(projectId)
+          if (!dumpResult.success) {
+            console.warn(
+              `Warning: Failed to re-dump project ${projectId} details after edit:`,
+              dumpResult.message
+            )
+            // Don't fail the edit operation, just log the warning
+          }
+
+          // Re-dump projects list to S3 asynchronously (fire-and-forget, can take time)
+          setImmediate(async () => {
+            try {
+              const projectsResult = await dumpAndUploadProjectsList()
+              if (!projectsResult.success) {
+                console.warn(
+                  `Warning: Failed to re-dump projects list after edit:`,
+                  projectsResult.message
+                )
+              }
+            } catch (asyncDumpError) {
+              console.error('Error during asynchronous projects list dumping:', asyncDumpError)
+            }
+          })
+        } catch (dumpError) {
+          console.error('Error during synchronous project details dumping:', dumpError)
+          // Don't fail the edit operation, just log the error
+        }
+      }
 
       // Return the updated project with media info if files were uploaded
       const response = { ...project.toJSON() }
