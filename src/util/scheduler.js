@@ -28,7 +28,7 @@ export function startScheduler() {
   }
 
   // Run every day at midnight (12:00 AM) Chicago time
-  cron.schedule('22 15 * * *', scheduledProjectStatsDump, {
+  cron.schedule('00 0 * * *', scheduledProjectStatsDump, {
     scheduled: true,
     timezone: 'America/Chicago',
   })
