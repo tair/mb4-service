@@ -201,13 +201,17 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
             WHERE matrix_id IN (${matrixIds}) AND project_id = ? `
       }
       case 'media_files': {
-        const mediaIds = (await this.getAllIdsInTable('media_files')).join(',')
+        const mediaIds = this.safeJoinIds(
+          await this.getAllIdsInTable('media_files')
+        )
         return `SELECT *
             FROM media_files
             WHERE media_id IN (${mediaIds}) AND project_id = ?`
       }
       case 'specimens': {
-        const mediaIds = (await this.getAllIdsInTable('media_files')).join(',')
+        const mediaIds = this.safeJoinIds(
+          await this.getAllIdsInTable('media_files')
+        )
         return `SELECT specimens.*
             FROM specimens
             INNER JOIN media_files USING (specimen_id)
@@ -217,7 +221,9 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
             GROUP BY specimens.specimen_id`
       }
       case 'specimens_x_bibliographic_references': {
-        const mediaIds = (await this.getAllIdsInTable('media_files')).join(',')
+        const mediaIds = this.safeJoinIds(
+          await this.getAllIdsInTable('media_files')
+        )
         return `SELECT specimens_x_bibliographic_references.*
             FROM specimens_x_bibliographic_references
             INNER JOIN specimens USING (specimen_id)
@@ -228,7 +234,9 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
             GROUP BY specimens_x_bibliographic_references.link_id`
       }
       case 'media_views': {
-        const mediaIds = (await this.getAllIdsInTable('media_files')).join(',')
+        const mediaIds = this.safeJoinIds(
+          await this.getAllIdsInTable('media_files')
+        )
         return `SELECT media_views.*
             FROM media_views
             INNER JOIN media_files USING(view_id)
@@ -238,7 +246,9 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
             GROUP BY media_views.view_id`
       }
       case 'taxa_x_specimens': {
-        const mediaIds = (await this.getAllIdsInTable('media_files')).join(',')
+        const mediaIds = this.safeJoinIds(
+          await this.getAllIdsInTable('media_files')
+        )
         return `SELECT taxa_x_specimens.*
             FROM taxa_x_specimens
             INNER JOIN taxa_x_partitions USING(taxon_id)
@@ -251,7 +261,9 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
             GROUP BY taxa_x_specimens.link_id`
       }
       case 'media_labels': {
-        const mediaIds = (await this.getAllIdsInTable('media_files')).join(',')
+        const mediaIds = this.safeJoinIds(
+          await this.getAllIdsInTable('media_files')
+        )
         return `SELECT media_labels.*
             FROM media_labels
             INNER JOIN media_files USING (media_id)
@@ -262,7 +274,9 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
       }
       case 'media_files_x_documents':
       case 'media_files_x_bibliographic_references': {
-        const mediaIds = (await this.getAllIdsInTable('media_files')).join(',')
+        const mediaIds = this.safeJoinIds(
+          await this.getAllIdsInTable('media_files')
+        )
         return `SELECT ${tableName}.*
             FROM ${tableName}
             INNER JOIN media_files USING (media_id)
@@ -271,7 +285,9 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
               media_files.project_id = ?`
       }
       case 'project_documents': {
-        const mediaIds = (await this.getAllIdsInTable('media_files')).join(',')
+        const mediaIds = this.safeJoinIds(
+          await this.getAllIdsInTable('media_files')
+        )
         return `SELECT project_documents.*
             FROM project_documents
             INNER JOIN media_files_x_documents USING(document_id)
@@ -281,7 +297,9 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
             GROUP BY project_documents.document_id`
       }
       case 'project_document_folders': {
-        const mediaIds = (await this.getAllIdsInTable('media_files')).join(',')
+        const mediaIds = this.safeJoinIds(
+          await this.getAllIdsInTable('media_files')
+        )
         return `SELECT project_document_folders.*
             FROM project_document_folders
             INNER JOIN project_documents USING(folder_id)
@@ -294,7 +312,9 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
       case 'cells':
       case 'cell_notes':
       case 'cells_x_bibliographic_references': {
-        const matrixIds = (await this.getAllIdsInTable('matrices')).join(',')
+        const matrixIds = this.safeJoinIds(
+          await this.getAllIdsInTable('matrices')
+        )
         return `SELECT ${tableName}.*
             FROM ${tableName}
             INNER JOIN matrices USING(matrix_id)
@@ -333,7 +353,9 @@ export class PartitionModelDuplicator extends BaseModelDuplicator {
       case 'matrix_file_uploads':
       case 'matrix_additional_blocks':
       case 'character_orderings': {
-        const matrixIds = (await this.getAllIdsInTable('matrices')).join(',')
+        const matrixIds = this.safeJoinIds(
+          await this.getAllIdsInTable('matrices')
+        )
         return `SELECT ${tableName}.*
             FROM ${tableName}
             INNER JOIN matrices USING (matrix_id)
