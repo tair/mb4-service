@@ -81,6 +81,17 @@ function replaceFileExtension(filename, newExtension) {
   return `${basename}.${newExtension}`
 }
 
+/**
+ * Generate download filename in the format M{mediaId}.{extension}
+ * @param {string|number} mediaId - The media ID
+ * @param {string} extension - File extension without dot (e.g., "jpg", "mp4", "tif")
+ * @returns {string} Download filename in format M{mediaId}.{extension}
+ */
+function generateDownloadFilename(mediaId, extension) {
+  const ext = extension || 'jpg'
+  return `M${mediaId}.${ext}`
+}
+
 export async function getMediaFiles(req, res) {
   const projectId = req.params.projectId
   try {
@@ -1260,6 +1271,7 @@ function convertMediaResponse(row) {
     created_on: row.created_on,
     url: row.url,
     url_description: row.url_description,
+    original_filename: row.media.ORIGINAL_FILENAME,
   }
   
   // Add view name if available
@@ -1357,18 +1369,10 @@ export async function serveMediaFile(req, res) {
     }
 
     // Extract extension from S3 key (the actual file extension)
-    const s3Extension = s3Key.split('.').pop()?.toLowerCase() || ''
+    const s3Extension = s3Key.split('.').pop()?.toLowerCase() || 'jpg'
     
-    // Get original filename from database
-    const originalFileName = mediaData.ORIGINAL_FILENAME || 
-                            mediaVersion.FILENAME || 
-                            `${projectId}_${mediaId}_${fileSize}`
-    
-    // Create correct filename: basename from database + extension from S3
-    // This handles cases where database has "archive.zip" but S3 has "file.tif"
-    const correctFileName = s3Extension 
-      ? replaceFileExtension(originalFileName, s3Extension)
-      : originalFileName
+    // Generate download filename in format M{mediaId}.{extension}
+    const downloadFileName = generateDownloadFilename(mediaId, s3Extension)
 
     // Use default bucket from config
     const bucket = config.aws.defaultBucket
@@ -1385,8 +1389,8 @@ export async function serveMediaFile(req, res) {
 
     // Encode filename for Content-Disposition header (RFC 5987)
     // This handles filenames with non-ASCII characters
-    const encodedFilename = encodeURIComponent(correctFileName)
-    const contentDisposition = `attachment; filename="${correctFileName.replace(/[^\x00-\x7F]/g, '_')}"; filename*=UTF-8''${encodedFilename}`
+    const encodedFilename = encodeURIComponent(downloadFileName)
+    const contentDisposition = `attachment; filename="${downloadFileName.replace(/[^\x00-\x7F]/g, '_')}"; filename*=UTF-8''${encodedFilename}`
 
     // Set appropriate headers
     // Use MIMETYPE from database if available, otherwise fall back to S3 content type
@@ -1634,13 +1638,8 @@ export async function getMediaVideoUrl(req, res) {
     // Extract extension from S3 key (the actual file extension)
     const s3Extension = s3Key.split('.').pop()?.toLowerCase() || 'mp4'
     
-    // Get original filename from database
-    const originalFilename = mediaData.ORIGINAL_FILENAME || `video_${mediaId}.${s3Extension}`
-    
-    // Create correct filename: basename from database + extension from S3
-    const correctFilename = s3Extension 
-      ? replaceFileExtension(originalFilename, s3Extension)
-      : originalFilename
+    // Generate download filename in format M{mediaId}.{extension}
+    const downloadFileName = generateDownloadFilename(mediaId, s3Extension)
 
     // Use default bucket from config
     const bucket = config.aws.defaultBucket
@@ -1658,7 +1657,7 @@ export async function getMediaVideoUrl(req, res) {
     // If download=true, add Content-Disposition header to force download
     if (download === 'true') {
       // Sanitize filename for Content-Disposition header
-      const safeFilename = correctFilename.replace(/[^\w\s.-]/g, '_')
+      const safeFilename = downloadFileName.replace(/[^\w\s.-]/g, '_')
       urlOptions.responseContentDisposition = `attachment; filename="${safeFilename}"`
     }
 
@@ -1671,7 +1670,7 @@ export async function getMediaVideoUrl(req, res) {
       expiresIn: 3600,
       mediaId: parseInt(mediaId),
       projectId: parseInt(projectId),
-      filename: correctFilename,
+      filename: downloadFileName,
     })
   } catch (error) {
     console.error('Video URL generation error:', error.message)
@@ -1743,18 +1742,10 @@ export async function getMediaPresignedUrl(req, res) {
     }
 
     // Extract extension from S3 key (the actual file extension)
-    const s3Extension = s3Key.split('.').pop()?.toLowerCase() || ''
+    const s3Extension = s3Key.split('.').pop()?.toLowerCase() || 'jpg'
     
-    // Get original filename from database
-    const originalFilename = mediaData.ORIGINAL_FILENAME || 
-                            mediaVersion.FILENAME || 
-                            `${projectId}_${mediaId}_${fileSize}`
-    
-    // Create correct filename: basename from database + extension from S3
-    // This handles cases where database has "archive.zip" but S3 has "file.tif"
-    const correctFilename = s3Extension 
-      ? replaceFileExtension(originalFilename, s3Extension)
-      : originalFilename
+    // Generate download filename in format M{mediaId}.{extension}
+    const downloadFileName = generateDownloadFilename(mediaId, s3Extension)
 
     // Use default bucket from config
     const bucket = config.aws.defaultBucket
@@ -1772,7 +1763,7 @@ export async function getMediaPresignedUrl(req, res) {
     // If download=true, add Content-Disposition header to force download
     if (download === 'true') {
       // Sanitize filename for Content-Disposition header
-      const safeFilename = correctFilename.replace(/[^\w\s.-]/g, '_')
+      const safeFilename = downloadFileName.replace(/[^\w\s.-]/g, '_')
       urlOptions.responseContentDisposition = `attachment; filename="${safeFilename}"`
     }
 
@@ -1785,7 +1776,7 @@ export async function getMediaPresignedUrl(req, res) {
       expiresIn: 3600,
       mediaId: parseInt(mediaId),
       projectId: parseInt(projectId),
-      filename: correctFilename,
+      filename: downloadFileName,
       fileSize: fileSize,
     })
   } catch (error) {
