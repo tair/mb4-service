@@ -271,6 +271,53 @@ export async function dumpProjectById(req, res) {
 }
 
 /**
+ * Unpublish project
+ * Only curators and administrators can unpublish a project
+ */
+export async function unpublishProject(req, res) {
+  try {
+    const projectId = req.params.projectId
+    const userId = req.user.user_id
+
+    const project = await models.Project.findByPk(projectId)
+    if (!project) {
+      return res.status(404).json({ message: 'Project not found' })
+    }
+
+    // Check permissions - only curators and admins can unpublish
+    const userRoles = await getRoles(userId)
+    const isCurator = userRoles.includes('curator')
+    const isAdmin = userRoles.includes('admin')
+
+    if (!isCurator && !isAdmin) {
+      return res
+        .status(403)
+        .json({ message: 'Only curators and administrators can unpublish projects' })
+    }
+
+    // Check if already unpublished
+    if (project.published === 0) {
+      return res.status(400).json({ message: 'Project is already unpublished' })
+    }
+
+    // Get user for changelog logging
+    const user = await models.User.findByPk(userId)
+
+    // Unpublish the project
+    project.published = 0
+    await project.save({ user: user })
+
+    return res.status(200).json({
+      message: 'Project unpublished successfully',
+      projectId: projectId,
+    })
+  } catch (error) {
+    console.error('Error in unpublishProject:', error)
+    res.status(500).json({ message: 'Error unpublishing project' })
+  }
+}
+
+/**
  * Publish project
  * Main function to publish a project with all validation and side effects
  */
