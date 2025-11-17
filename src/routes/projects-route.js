@@ -170,6 +170,7 @@ projectRouter.get(
   publishingController.getUnpublishedItems
 )
 projectRouter.post('/publishing/publish', publishingController.publishProject)
+projectRouter.post('/publishing/unpublish', publishingController.unpublishProject)
 projectRouter.post('/publishing/dump', publishingController.dumpProjectById)
 
 // SDD export to S3 route (synchronous - may timeout for large projects)
