@@ -2,6 +2,32 @@ import * as institutionService from '../services/institution-service.js'
 import { models } from '../models/init-models.js'
 import { Sequelize } from 'sequelize'
 import sequelizeConn from '../util/db.js'
+import { dumpAndUploadProjectDetails, dumpAndUploadProjectsList } from '../services/publishing-service.js'
+
+/**
+ * Helper function to trigger S3 dump for published projects after institution changes
+ * @param {number} projectId - The project ID
+ * @param {string} action - The action being performed (e.g., 'adding', 'removing')
+ */
+async function triggerProjectDumpForPublishedProject(projectId, action) {
+  const project = await models.Project.findByPk(projectId)
+  if (project && project.published === 1) {
+    try {
+      // Re-dump project details to S3 (synchronous, critical for immediate consistency)
+      const dumpResult = await dumpAndUploadProjectDetails(projectId)
+      if (!dumpResult.success) {
+        console.warn(
+          `Warning: Failed to re-dump project ${projectId} details after ${action} institution:`,
+          dumpResult.message
+        )
+      }
+
+    } catch (dumpError) {
+      console.error('Error during synchronous project details dumping:', dumpError)
+      // Don't fail the operation, just log the error
+    }
+  }
+}
 
 export async function fetchProjectInstitutions(req, res) {
   try {
@@ -60,6 +86,10 @@ export async function addInstitutionToProject(req, res) {
     )
 
     await transaction.commit()
+
+    // Re-dump project data to S3 if project is published
+    await triggerProjectDumpForPublishedProject(projectId, 'adding')
+
     res.status(200).json({ institution })
   } catch (e) {
     if (transaction) {
@@ -217,6 +247,9 @@ export async function removeInstitutionFromProject(req, res) {
     })
 
     await transaction.commit()
+
+    // Re-dump project data to S3 if project is published
+    await triggerProjectDumpForPublishedProject(projectId, 'removing')
 
     res.status(200).json({ institutionIds })
   } catch (e) {
