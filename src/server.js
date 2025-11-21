@@ -54,13 +54,25 @@ const server = http.createServer(app)
 server.on('error', onError)
 server.on('listening', onListening)
 
+// Test database connection but don't sync in production
 sequelizeConn
-  .sync()
+  .authenticate()
+  .then(() => {
+    console.log('Database connection established successfully.')
+    
+    // Only sync in development environment
+    const shouldSync = process.env.MB_ENV !== 'production'
+    if (shouldSync) {
+      console.log('Development mode: syncing database models...')
+      return sequelizeConn.sync()
+    }
+    return Promise.resolve()
+  })
   .then(() => {
     server.listen(port)
     // Start the project stats dump scheduler (controlled by SCHEDULER_ENABLED env var)
     startScheduler()
   })
   .catch((err) => {
-    console.log(err)
+    console.log('Database connection error:', err)
   })

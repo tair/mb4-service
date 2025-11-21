@@ -81,11 +81,25 @@ export class PartitionPublishHandler extends Handler {
       transaction: transaction,
     })
     if (clonedProject.exemplar_media_id) {
-      const newExemplarMediaId = modelDuplicator.getDuplicateRecordId(
-        models.MediaFile,
-        clonedProject.exemplar_media_id
-      )
-      clonedProject.exemplar_media_id = newExemplarMediaId
+      // Check if the exemplar media file was cloned before trying to get its duplicate ID
+      if (
+        modelDuplicator.wasRecordCloned(
+          models.MediaFile,
+          clonedProject.exemplar_media_id
+        )
+      ) {
+        const newExemplarMediaId = modelDuplicator.getDuplicateRecordId(
+          models.MediaFile,
+          clonedProject.exemplar_media_id
+        )
+        clonedProject.exemplar_media_id = newExemplarMediaId
+      } else {
+        // If the exemplar media wasn't cloned (e.g., filtered out), set to null
+        console.warn(
+          `[PARTITION_PUBLISH] Exemplar media ${clonedProject.exemplar_media_id} was not cloned, setting to null`
+        )
+        clonedProject.exemplar_media_id = null
+      }
     }
 
     await clonedProject.update(
@@ -249,6 +263,7 @@ const DUPLICATED_TABLES = [
   models.MatrixAdditionalBlock,
   models.BibliographicAuthor,
   models.MediaLabel,
+  models.MatrixImage,
 ]
 
 const IGNORED_TABLES = [

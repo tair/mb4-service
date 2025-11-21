@@ -23,9 +23,19 @@ RUN apk add --no-cache tini ffmpeg
 # copy runtime deps and source code
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/src ./src
+COPY --from=build /app/migrations ./migrations
+COPY --from=build /app/config ./config
+COPY --from=build /app/.sequelizerc ./.sequelizerc
+COPY --from=build /app/docker-entrypoint.sh ./docker-entrypoint.sh
 COPY package.json ./
 
-# security: don’t run as root
+# Create data directory with proper permissions before switching to node user
+RUN mkdir -p /app/data/project_stats && chown -R node:node /app/data
+
+# Make entrypoint executable (as root before switching to node user)
+RUN chmod +x ./docker-entrypoint.sh
+
+# security: don't run as root
 USER node
 
 EXPOSE 8080
@@ -34,5 +44,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=2s --retries=3 \
   CMD node -e "require('http').get({host:'127.0.0.1',port:8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-ENTRYPOINT ["/sbin/tini","--"]
-CMD ["node", "src/server.js"]
+ENTRYPOINT ["/sbin/tini","--","./docker-entrypoint.sh"]

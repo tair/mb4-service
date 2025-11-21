@@ -44,9 +44,15 @@ export const getObject = async (req, res) => {
     // Send the data
     res.send(result.data)
   } catch (error) {
-    console.error('S3 Controller Error:', error)
-
-    if (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey')) {
+    // Handle 404 errors without logging (expected behavior for missing files)
+    if (
+      error.name === 'NoSuchKey' ||
+      error.name === 'NotFound' ||
+      error.message.includes('NoSuchKey') ||
+      error.message.includes('Object not found') ||
+      error.message.includes('The specified key does not exist') ||
+      error.$metadata?.httpStatusCode === 404
+    ) {
       return res.status(404).json({
         error: 'Object not found',
         message: 'The requested object does not exist',
@@ -59,6 +65,9 @@ export const getObject = async (req, res) => {
         message: 'The specified bucket does not exist',
       })
     }
+
+    // Log only non-404 errors
+    console.error('S3 Controller Error:', error)
 
     if (error.name === 'AccessDenied') {
       return res.status(403).json({

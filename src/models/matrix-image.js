@@ -14,8 +14,10 @@ export default class MatrixImage extends Model {
           allowNull: false,
         },
         media: {
-          type: DataTypes.STRING,
+          type: DataTypes.JSON,
           allowNull: false,
+          media: true,
+          volume: 'media',
         },
       },
       {

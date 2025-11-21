@@ -6,7 +6,7 @@ const { Model } = _sequelize
 export const MembershipType = {
   ADMIN: 0, // ADMIN membership (can edit everything)
   OBSERVER: 1, // Observer (cannot edit)
-  CHARACTER_ANNOTATOR: 2, // Character annotater (can edit characters and states only)
+  CHARACTER_ANNOTATOR: 2, // Matrix scorer (cannot edit character or state names, can edit other data)
   BIBLIOGRAPHY_MAINTAINER: 3, // Bibliography maintainer (can edit bibliography only)
 }
 

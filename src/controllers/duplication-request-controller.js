@@ -1,6 +1,7 @@
 import { models } from '../models/init-models.js'
 import { getRoles } from '../services/user-roles-service.js'
 import { EmailManager } from '../lib/email-manager.js'
+import { ProjectDuplicationService } from '../services/project-duplication-service.js'
 import sequelizeConn from '../util/db.js'
 import { Op } from 'sequelize'
 
@@ -258,28 +259,19 @@ export async function updateDuplicationRequest(req, res) {
           // Don't fail the request update if email fails
         }
       } else if (newStatus === 50 && oldStatus !== 50) {
-        // Status changed to Approved - queue duplication task        
-        const taskQueueEntry = await models.TaskQueue.create({
-          user_id: request.user_id,
-          priority: 500,
-          entity_key: null,
-          row_key: null,
-          handler: 'ProjectDuplication',
-          parameters: {
-            request_id: requestId
-          }
-        }, { transaction, user: req.user })
+        // Status changed to Approved - execute duplication immediately (async)
+        console.log(`[DUPLICATION_CONTROLLER] Request ${requestId} approved. Starting duplication asynchronously...`)
         
-        // Double-check by querying the database directly
-        const verifyTask = await sequelizeConn.query(
-          'SELECT * FROM ca_task_queue WHERE task_id = ?',
-          { 
-            replacements: [taskQueueEntry.task_id], 
-            type: sequelizeConn.QueryTypes.SELECT,
-            transaction 
-          }
-        )
-
+        // Execute duplication asynchronously (fire and forget)
+        // This ensures immediate execution and consistent S3 file copying
+        ProjectDuplicationService.executeDuplication(requestId).catch(error => {
+          console.error(`[DUPLICATION_CONTROLLER] Async duplication failed for request ${requestId}:`, {
+            error: error.message,
+            stack: error.stack
+          })
+        })
+        
+        console.log(`[DUPLICATION_CONTROLLER] Duplication process initiated for request ${requestId}`)
       }
     }
 

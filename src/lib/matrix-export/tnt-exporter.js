@@ -30,10 +30,18 @@ export class TNTExporter extends Exporter {
     
     return formatted
   }
-  formatTntText(text) {
+
+  formatTntName(text) {
     return text
       .replace(/;/g, '_') // replace semicolons with underscores
       .replace(/[\r\n\t\s]+/g, '_') // replace whitespace with underscores
+      .trim()
+  }
+
+  formatTntState(text) {
+    return text
+      .replace(/;/g, ',') // replace semicolons with commas
+      .replace(/[\r\n\t\s]+/g, '_') // replace whitespace with commas
       .trim()
   }
 
@@ -44,7 +52,7 @@ export class TNTExporter extends Exporter {
     let maxTaxonNameLength = 0
     for (const taxon of taxa) {
       const taxonId = parseInt(taxon.taxon_id)
-      const name = this.formatTntText(this.cleanName(getTaxonName(taxon, null, false, false)))
+      const name = this.formatTntName(this.cleanName(getTaxonName(taxon, null, false, false)))
       taxaIndicesMap.set(taxonId, currentTaxaIndex++)
       taxaNameMap.set(taxonId, name)
 
@@ -78,7 +86,7 @@ export class TNTExporter extends Exporter {
     } else {
       const maxStateLength = characters
         .map((c) => c.states?.length || 0)
-        .reduce((a, b) => Math.max(a, b))
+        .reduce((a, b) => Math.max(a, b), 0)
       this.writeLine(`nstates num ${maxStateLength};`)
     }
     this.writeLine('xread')
@@ -179,14 +187,14 @@ export class TNTExporter extends Exporter {
     for (let i = 0, l = characters.length; i < l; ++i) {
       const character = characters[i]
       const characterId = parseInt(character.character_id)
-      const characterName = characterNamesMap.get(characterId)
-      this.write(`{ ${i} '${characterName}'`)
+      const characterName = this.formatTntName(characterNamesMap.get(characterId))
+      this.write(`{ ${i} ${characterName}`)
       if (character.states) {
         for (const state of character.states) {
           const stateId = parseInt(state.state_id)
           statesMap.set(stateId, state)
-          const stateName = this.cleanText(state.name)
-          this.write(` '${stateName}'`)
+          const stateName = this.formatTntState(this.cleanText(state.name))
+          this.write(` ${stateName}`)
         }
       }
       this.writeLine(';')

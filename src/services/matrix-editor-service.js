@@ -585,7 +585,7 @@ export default class MatrixEditorService {
 
   async findCitation(text) {
     if (!text || text.trim().length === 0) {
-      return []
+      return { citations: [] }
     }
 
     const searchTerm = `%${text.trim()}%`
@@ -637,7 +637,7 @@ export default class MatrixEditorService {
       name: getCitationText(row)
     }))
 
-    return citations
+    return { citations: citations }
   }
 
   async addCellCitations(
@@ -738,7 +738,7 @@ export default class MatrixEditorService {
       citation_id: citationId,
       pp: pp,
       notes: notes,
-      name: await getCitationText(citation),
+      name: getCitationText(citation),
     }
   }
 
@@ -813,7 +813,7 @@ export default class MatrixEditorService {
         citation_id: citationId,
         pp: pp,
         notes: notes,
-        name: await getCitationText(citation),
+        name: getCitationText(citation),
       },
     }
   }
@@ -1694,6 +1694,12 @@ export default class MatrixEditorService {
       replacements: replacements,
       type: QueryTypes.SELECT,
     })
+
+    // If no media matched the taxonomic filters, fall back to showing
+    // a general list of project media so users can still attach media.
+    if (!results || results.length === 0) {
+      return await this.getAllProjectMedia(projectId, matrixId, userId)
+    }
 
     return await this.formatMediaResults(results, userId, matrixId)
   }
@@ -3866,7 +3872,10 @@ export default class MatrixEditorService {
           )
           cellChangesResults.push(cell)
         } else if (cellScores.size > 1) {
-          throw UserError('Selected Continuous scores have more than one value')
+          throw new UserError(
+            `Data integrity error: Multiple cell records found for this taxon/character combination. ` +
+              `Please contact the administrator to fix duplicate cells (taxon_id=${taxonId}, character_id=${characterId})`
+          )
         } else if (shouldDelete) {
           const cellScore = cellScores.get(0)
           await models.Cell.destroy({
@@ -3878,7 +3887,9 @@ export default class MatrixEditorService {
           cellChangesResults.push(cellScore)
         } else {
           const cellScore = cellScores.get(0)
-          const cell = await models.Cell.findByPk(cellScore.cell_id)
+          const cell = await models.Cell.findByPk(cellScore.cell_id, {
+            transaction: transaction,
+          })
           cell.start_value = startValue
           cell.end_value = endValue
           cell.user_id = this.user.user_id
@@ -6985,10 +6996,10 @@ export default class MatrixEditorService {
       if (row.is_uncertain) {
         cell['uct'] = 1
       }
-      // This is a shortcut to evaluate discrete characters to false and
-      // continuous and mestric characters to true since they are numeric.
+      // Set numeric values for continuous and meristic characters
+      // Character types: 0=discrete, 1=continuous, 2=meristic
       const type = characterTypeMap.get(characterId)
-      if (type) {
+      if (type != null && type > 0) {
         const convertFunction = parseInt(type) == 1 ? parseFloat : parseInt
         if (row.start_value != null) {
           cell['sv'] = convertFunction(row.start_value)
@@ -7252,6 +7263,7 @@ const CHARACTER_ANNOTATOR_CAPABILITIES = [
   'deleteCharacterCitation',
   'editCellData',
   'editTaxon',
+  'addTaxon',
   'addTaxonMedia',
   'deleteTaxonMedia',
   'editPartition',

@@ -6,6 +6,7 @@ import { PartitionPublishHandler } from './partition-publish-handler.js'
 import { ProjectDuplicationHandler } from './project-duplication-handler.js'
 import { ProjectOverviewGenerationHandler } from './project-overview-generation-handler.js'
 import { SDDExportHandler } from './sdd-export-handler.js'
+import { MatrixImportHandler } from './matrix-import-handler.js'
 
 /**
  * Registers a TaskHandler to be processed when the /task endpoint is invoked.
@@ -23,3 +24,4 @@ registerTaskHandler(new PartitionPublishHandler())
 registerTaskHandler(new ProjectDuplicationHandler())
 registerTaskHandler(new ProjectOverviewGenerationHandler())
 registerTaskHandler(new SDDExportHandler())
+registerTaskHandler(new MatrixImportHandler())

@@ -1,11 +1,11 @@
 import sequelizeConn from '../util/db.js'
-import { Op } from 'sequelize'
 import * as bibliographyService from '../services/bibliography-service.js'
 import * as matrixService from '../services/matrix-service.js'
 import * as partitionService from '../services/partition-service.js'
 import * as taxaService from '../services/taxa-service.js'
 import { models } from '../models/init-models.js'
 import { getTaxonHash } from '../models/taxon.js'
+import { TAXA_FIELD_NAMES, getTaxonName } from '../util/taxa.js'
 import {
   ModelRefencialMapper,
   ModelReferencialConfig,
@@ -49,38 +49,103 @@ export async function getTaxa(req, res) {
 
 export async function createTaxon(req, res) {
   const values = req.body
-  const taxon = models.Taxon.build(values)
+  const projectId = req.project.project_id
 
-  taxon.set({
-    project_id: req.project.project_id,
-    user_id: req.user.user_id,
+  // Validate: require at least one taxonomic field
+  const hasTaxonomicField = TAXA_FIELD_NAMES.some((field) => {
+    const v = values[field]
+    return v !== undefined && String(v).trim() !== ''
   })
+  if (!hasTaxonomicField) {
+    return res
+      .status(400)
+      .json({ message: 'At least one taxonomic field must be provided.' })
+  }
 
+  let transaction
   try {
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
+    
+    // Build the taxon and compute its hash
+    const taxon = models.Taxon.build(values)
+    taxon.set({
+      project_id: projectId,
+      user_id: req.user.user_id,
+    })
+    
+    const hash = getTaxonHash(taxon)
+    
+    // Check if a taxon with the same hash already exists in this project
+    const query = `
+      SELECT t.*
+      FROM taxa t
+      WHERE t.project_id = ?
+      AND t.taxon_hash = ?
+    `
+    const existingTaxa = await sequelizeConn.query(query, {
+      replacements: [projectId, hash],
+      transaction: transaction,
+      type: sequelizeConn.QueryTypes.SELECT,
+    })
+    
+    if (existingTaxa && existingTaxa.length > 0) {
+      await transaction.rollback()
+      const existingTaxon = existingTaxa[0]
+      // Get taxon name and strip HTML tags for display
+      const taxonName = getTaxonName(existingTaxon, null, false, false)
+      const displayName = taxonName ? taxonName.replace(/<\/?[^>]+(>|$)/g, '') : 'this taxon'
+      return res.status(400).json({ 
+        message: `The taxon "${displayName}" already exists in this project.`,
+        existing_taxon_id: existingTaxon.taxon_id,
+        existing_taxon_name: displayName
+      })
+    }
+    
+    // No duplicate found, proceed with save
     await taxon.save({
       transaction,
       user: req.user,
     })
     await transaction.commit()
+    
+    res.status(200).json({ taxon: taxon })
   } catch (e) {
-    console.log(e)
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error creating taxon:', e)
     res
       .status(500)
       .json({ message: 'Failed to create taxon with server error' })
-    return
   }
-
-  res.status(200).json({ taxon: taxon })
 }
 
 export async function createTaxa(req, res) {
   const taxa = req.body.taxa
   const projectId = req.project.project_id
 
+  let transaction
   try {
+    // Validate each taxon: must have at least one taxonomic field
+    const invalid = Array.isArray(taxa)
+      ? taxa.filter(
+          (values) =>
+            !TAXA_FIELD_NAMES.some((field) => {
+              const v = values[field]
+              return v !== undefined && String(v).trim() !== ''
+            })
+        )
+      : []
+    if (invalid.length > 0) {
+      return res.status(400).json({
+        message:
+          'Each taxon must include at least one taxonomic field. Found entries with no taxonomic data.',
+        invalid_count: invalid.length,
+      })
+    }
+
     const results = []
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
 
     // First pass: prepare all taxon objects and collect hashes
     const taxonHashes = []
@@ -146,7 +211,10 @@ export async function createTaxa(req, res) {
     await transaction.commit()
     res.status(200).json({ taxa: results })
   } catch (e) {
-    console.log(e)
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error creating taxa:', e)
     res
       .status(500)
       .json({ message: 'Failed to create taxon with server error' })
@@ -167,24 +235,27 @@ export async function editTaxon(req, res) {
     taxon.set(column, values[column])
   }
 
+  let transaction
   try {
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
     await taxon.save({
       transaction,
       user: req.user,
     })
     await transaction.commit()
+    
+    res.status(200).json({
+      taxon: taxon,
+    })
   } catch (e) {
-    console.log(e)
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error updating taxon:', e)
     res
       .status(500)
       .json({ message: 'Failed to update taxon with server error' })
-    return
   }
-
-  res.status(200).json({
-    taxon: taxon,
-  })
 }
 
 export async function editTaxa(req, res) {
@@ -254,23 +325,12 @@ export async function getUsage(req, res) {
   })
 }
 
-// TODO(kenzley): Implement a real search.
 export async function search(req, res) {
   const projectId = req.project.project_id
-  const text = req.body.text
-
-  const taxa = text?.length
-    ? await models.Taxon.findAll({
-        attributes: ['taxon_id'],
-        where: {
-          genus: {
-            [Op.like]: `%${text}%`,
-          },
-          project_id: projectId,
-        },
-      })
-    : []
-  const taxonIds = taxa.map((t) => t.taxon_id)
+  const searchText = req.body.text || ''
+  
+  const taxonIds = await taxaService.searchTaxa(projectId, searchText)
+  
   res.status(200).json({
     results: taxonIds,
   })
@@ -433,22 +493,25 @@ export async function createCitation(req, res) {
     user_id: req.user.user_id,
   })
 
+  let transaction
   try {
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
     await citation.save({
       transaction,
       user: req.user,
     })
     await transaction.commit()
+    
+    res.status(200).json({ citation })
   } catch (e) {
-    console.log(e)
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error creating citation:', e)
     res
       .status(500)
       .json({ message: 'Failed to create citation with server error' })
-    return
   }
-
-  res.status(200).json({ citation })
 }
 
 export async function editCitation(req, res) {
@@ -484,22 +547,26 @@ export async function editCitation(req, res) {
       citation.set(key, values[key])
     }
   }
+  
+  let transaction
   try {
-    const transaction = await sequelizeConn.transaction()
+    transaction = await sequelizeConn.transaction()
     await citation.save({
       transaction,
       user: req.user,
     })
     await transaction.commit()
+    
+    res.status(200).json({ citation })
   } catch (e) {
-    console.log(e)
+    if (transaction) {
+      await transaction.rollback()
+    }
+    console.error('Error updating citation:', e)
     res
       .status(500)
-      .json({ message: 'Failed to create citation with server error' })
-    return
+      .json({ message: 'Failed to update citation with server error' })
   }
-
-  res.status(200).json({ citation })
 }
 
 export async function deleteCitations(req, res) {

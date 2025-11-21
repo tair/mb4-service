@@ -124,7 +124,12 @@ export class ProjectOverviewGenerator {
     )
 
     const [[{ mediaSize }]] = await query(`
-      SELECT SUM(media->>"$.original.PROPERTIES.filesize") AS mediaSize
+      SELECT SUM(
+        COALESCE(
+          media->>"$.original.PROPERTIES.filesize",
+          media->>"$.original.properties.filesize"
+        )
+      ) AS mediaSize
       FROM media_files mf
       WHERE mf.project_id = ?`)
 
@@ -649,7 +654,10 @@ export class ProjectOverviewGenerator {
       WHERE project_id = ?
       GROUP BY user_id`)
     for (const result of taxaCounts) {
-      stats.get(result.user_id).taxa_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.taxa_count = result.count
+      }
     }
 
     const [specimensCounts] = await query(`
@@ -658,7 +666,10 @@ export class ProjectOverviewGenerator {
       WHERE project_id = ?
       GROUP BY user_id`)
     for (const result of specimensCounts) {
-      stats.get(result.user_id).specimen_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.specimen_count = result.count
+      }
     }
 
     const [mediaCounts] = await query(`
@@ -670,7 +681,10 @@ export class ProjectOverviewGenerator {
         mf.project_id = ?
       GROUP BY user_id`)
     for (const result of mediaCounts) {
-      stats.get(result.user_id).media_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.media_count = result.count
+      }
     }
 
     const [mediaNotesCounts] = await query(`
@@ -683,7 +697,10 @@ export class ProjectOverviewGenerator {
         mf.project_id = ?
       GROUP BY user_id`)
     for (const result of mediaNotesCounts) {
-      stats.get(result.user_id).media_notes_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.media_notes_count = result.count
+      }
     }
 
     const [characterCounts] = await query(`
@@ -696,7 +713,10 @@ export class ProjectOverviewGenerator {
         c.project_id = ?
       GROUP BY c.user_id`)
     for (const result of characterCounts) {
-      stats.get(result.user_id).character_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.character_count = result.count
+      }
     }
 
     const [characterCommentsCounts] = await query(`
@@ -712,7 +732,10 @@ export class ProjectOverviewGenerator {
         c.project_id = ?
       GROUP BY a.user_id`)
     for (const result of characterCommentsCounts) {
-      stats.get(result.user_id).character_comments_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.character_comments_count = result.count
+      }
     }
 
     const [characterNotesCounts] = await query(`
@@ -727,7 +750,10 @@ export class ProjectOverviewGenerator {
         c.project_id = ?
       GROUP BY c.user_id`)
     for (const result of characterNotesCounts) {
-      stats.get(result.user_id).character_note_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.character_note_count = result.count
+      }
     }
 
     const [characterMediaCounts] = await query(`
@@ -747,7 +773,10 @@ export class ProjectOverviewGenerator {
         mf.project_id = ?
       GROUP BY mf.user_id`)
     for (const result of characterMediaCounts) {
-      stats.get(result.user_id).character_media_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.character_media_count = result.count
+      }
     }
 
     const [characterMediaLabelsCounts] = await query(`
@@ -770,7 +799,10 @@ export class ProjectOverviewGenerator {
         c.project_id = ?
       GROUP BY ml.user_id`)
     for (const result of characterMediaLabelsCounts) {
-      stats.get(result.user_id).character_label_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.character_label_count = result.count
+      }
     }
 
     const [scoresCounts] = await query(`
@@ -782,7 +814,10 @@ export class ProjectOverviewGenerator {
         m.project_id = ?
       GROUP BY c.user_id`)
     for (const result of scoresCounts) {
-      stats.get(result.user_id).cell_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.cell_count = result.count
+      }
     }
 
     const [noNpaCounts] = await query(`
@@ -796,7 +831,10 @@ export class ProjectOverviewGenerator {
         m.project_id = ?
       GROUP BY c.user_id`)
     for (const result of noNpaCounts) {
-      stats.get(result.user_id).cell_nonnpa_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.cell_nonnpa_count = result.count
+      }
     }
 
     const [npaCounts] = await query(`
@@ -809,7 +847,10 @@ export class ProjectOverviewGenerator {
         m.project_id = ?
       GROUP BY c.user_id`)
     for (const result of npaCounts) {
-      stats.get(result.user_id).cell_npa_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.cell_npa_count = result.count
+      }
     }
 
     const [inapplicableScoreCounts] = await query(`
@@ -823,7 +864,10 @@ export class ProjectOverviewGenerator {
         m.project_id = ?
       GROUP BY c.user_id`)
     for (const result of inapplicableScoreCounts) {
-      stats.get(result.user_id).cell_inapplicable_scores = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.cell_inapplicable_scores = result.count
+      }
     }
 
     const [cellCommentsCounts] = await query(`
@@ -836,7 +880,10 @@ export class ProjectOverviewGenerator {
         m.project_id = ?
       GROUP BY a.user_id`)
     for (const result of cellCommentsCounts) {
-      stats.get(result.user_id).cell_comment_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.cell_comment_count = result.count
+      }
     }
 
     const [cellNotesCounts] = await query(`
@@ -857,7 +904,10 @@ export class ProjectOverviewGenerator {
         m.project_id = ?
       GROUP BY ccl.user_id`)
     for (const result of cellNotesCounts) {
-      stats.get(result.user_id).cell_note_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.cell_note_count = result.count
+      }
     }
 
     const [cellMediaCounts] = await query(`
@@ -871,7 +921,10 @@ export class ProjectOverviewGenerator {
           m.project_id = ?
         GROUP BY cxm.user_id`)
     for (const result of cellMediaCounts) {
-      stats.get(result.user_id).cell_media_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.cell_media_count = result.count
+      }
     }
 
     const [cellMediaLabelsCounts] = await query(`
@@ -889,7 +942,10 @@ export class ProjectOverviewGenerator {
         mf.project_id = ?
       GROUP BY ml.user_id`)
     for (const result of cellMediaLabelsCounts) {
-      stats.get(result.user_id).cell_label_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.cell_label_count = result.count
+      }
     }
 
     const [rulesCounts] = await query(`
@@ -904,7 +960,10 @@ export class ProjectOverviewGenerator {
         m.project_id = ?
       GROUP BY cr.user_id`)
     for (const result of rulesCounts) {
-      stats.get(result.user_id).rule_count = result.count
+      const memberStat = stats.get(result.user_id)
+      if (memberStat) {
+        memberStat.rule_count = result.count
+      }
     }
 
     if (project.published) {
@@ -956,7 +1015,10 @@ export class ProjectOverviewGenerator {
         }
       )
       for (const result of warningCounts) {
-        stats.get(result.user_id).warnings_count += result.count
+        const memberStat = stats.get(result.user_id)
+        if (memberStat) {
+          memberStat.warnings_count += result.count
+        }
       }
     }
 
@@ -970,7 +1032,7 @@ export class ProjectOverviewGenerator {
         stat.is_administrator,
         stat.membership_status,
         stat.email,
-        stat.membership_status,
+        stat.member_role,
         stat.last_accessed_on,
         stat.taxa_count,
         stat.specimen_count,

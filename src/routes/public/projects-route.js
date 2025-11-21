@@ -12,7 +12,7 @@ const projectsRouter = express.Router({ mergeParams: true })
 
 projectsRouter.get('/data_dump', dataDumpController.dataDump)
 projectsRouter.get('/project_list_dump', dataDumpController.projectListDump)
-
+projectsRouter.get('/project_list_dump_s3', dataDumpController.projectListDumpS3)
 projectsRouter.get('/', projectsController.getProjects)
 projectsRouter.get(
   '/authors_projects',
@@ -21,6 +21,10 @@ projectsRouter.get(
 projectsRouter.get(
   '/journals_projects',
   projectsController.getJournalsWithProjects
+)
+projectsRouter.get(
+  '/titles_projects',
+  projectsController.getTitlesWithProjects
 )
 projectsRouter.get(
   '/institutions',

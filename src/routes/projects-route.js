@@ -51,6 +51,7 @@ const projectsRouter = express.Router({ mergeParams: true })
 projectsRouter.get(
   '/:projectId/overview',
   maybeAuthenticateToken,
+  authorizeUser,
   controller.getOverview
 )
 
@@ -58,6 +59,7 @@ projectsRouter.get(
 projectsRouter.get(
   '/:projectId/download/sdd',
   maybeAuthenticateToken,
+  authorizeUser,
   controller.downloadProjectSDD
 )
 
@@ -68,7 +70,11 @@ projectsRouter.use(authorizeUser)
 projectsRouter.get('/', controller.getProjects)
 
 // Refresh project statistics endpoint (requires authentication and project access)
-projectsRouter.post('/:projectId/refresh-stats', authorizeProject, controller.refreshProjectStats)
+projectsRouter.post(
+  '/:projectId/refresh-stats',
+  authorizeProject,
+  controller.refreshProjectStats
+)
 
 // Add a new route for retrieving curator projects
 projectsRouter.get('/curator-projects', controller.getCuratorProjects)
@@ -128,7 +134,7 @@ projectRouter.get(
   '/duplication/request',
   controller.getDuplicationRequestCriteria
 )
-projectRouter.get('/publish/partition', controller.getProjectPartitions)
+projectRouter.get('/publish/partitions', controller.getProjectPartitions)
 projectRouter.get(
   '/publish/partition/:partitionId',
   controller.getPartitionSummary
@@ -164,6 +170,7 @@ projectRouter.get(
   publishingController.getUnpublishedItems
 )
 projectRouter.post('/publishing/publish', publishingController.publishProject)
+projectRouter.post('/publishing/unpublish', publishingController.unpublishProject)
 projectRouter.post('/publishing/dump', publishingController.dumpProjectById)
 
 // SDD export to S3 route (synchronous - may timeout for large projects)

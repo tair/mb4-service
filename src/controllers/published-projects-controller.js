@@ -57,6 +57,16 @@ export async function getJournalsWithProjects(req, res) {
   }
 }
 
+export async function getTitlesWithProjects(req, res) {
+  try {
+    const result = await publishedProjectService.getTitlesWithProjects()
+    res.status(200).json(result)
+  } catch (e) {
+    console.error('Error while getting titles (controller).', e)
+    res.status(500).json({ message: 'Error while fetching titles.' })
+  }
+}
+
 export async function getInstitutionsWithProjects(req, res) {
   try {
     const result = await publishedProjectService.getInstitutionsWithProjects()

@@ -38,6 +38,11 @@ matrixRouter.post(
 )
 matrixRouter.post('/create', controller.createMatrix)
 matrixRouter.post(
+  '/convert-csv',
+  upload.single('csv_file'),
+  controller.convertCsvToMatrix
+)
+matrixRouter.post(
   '/:matrixId/upload',
   upload.single('matrix_file'),
   controller.mergeMatrixFile

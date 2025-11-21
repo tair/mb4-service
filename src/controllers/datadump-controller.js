@@ -172,6 +172,31 @@ async function projectListDump(req, res) {
   }
 }
 
+async function projectListDumpS3(req, res) {
+  try {
+    console.log('Start dumping project list data to S3...')
+    const publishingService = await import('../services/publishing-service.js')
+    const result = await publishingService.dumpAndUploadProjectsList()
+    
+    if (result.success) {
+      console.log('Dumped project list data to S3 - DONE!')
+      res.status(200).json({
+        message: 'Successfully dumped projects list to S3',
+        timeElapsed: result.timeElapsed,
+        s3Result: result.s3Result
+      })
+    } else {
+      res.status(500).json({ 
+        message: 'Failed to upload projects list to S3',
+        error: result.s3Result.message 
+      })
+    }
+  } catch (err) {
+    console.error(`Error while dumping project list data to S3. `, err.message)
+    res.status(500).json({ message: 'Error while running S3 dump process.' })
+  }
+}
+
 async function projectStatsDump(req, res) {
   try {
     console.log('Start dumping project stats data...')
@@ -869,13 +894,21 @@ async function queueSDDExportTask(req, res) {
 async function getSDDExportTaskStatus(req, res) {
   try {
     const { taskId } = req.params
-    const userId = req.user?.user_id
+    const userId = req.user?.user_id || req.credential?.user_id
 
+    // Require authentication to view task status; avoid passing undefined in WHERE
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      })
+    }
+
+    // Allow status lookup for any handler type; still scoped to current user
     const task = await models.TaskQueue.findOne({
       where: {
         task_id: taskId,
-        user_id: userId, // Only allow users to check their own tasks
-        handler: 'SDDExport',
+        user_id: userId,
       },
     })
 
@@ -897,6 +930,7 @@ async function getSDDExportTaskStatus(req, res) {
       success: true,
       taskId: task.task_id,
       status: statusMap[task.status] || 'unknown',
+      handler: task.handler,
       projectId: task.parameters?.projectId,
       partitionId: task.parameters?.partitionId,
       createdAt: new Date(task.created_on * 1000).toISOString(),
@@ -905,23 +939,14 @@ async function getSDDExportTaskStatus(req, res) {
         : null,
     }
 
-    // Add result data if completed successfully
-    if (task.status === 2 && task.result) {
+    // If completed, try to parse JSON notes written by task-queue as result
+    if (task.status === 2 && task.notes) {
       try {
-        const result =
-          typeof task.result === 'string'
-            ? JSON.parse(task.result)
-            : task.result
-        response.result = {
-          filename: result.filename,
-          timeElapsed: result.timeElapsed,
-          uploadedToS3: result.uploadedToS3,
-          s3Url: result.s3Url,
-          message: result.message,
+        const parsed = typeof task.notes === 'string' ? JSON.parse(task.notes) : task.notes
+        if (parsed && typeof parsed === 'object') {
+          response.result = parsed
         }
-      } catch (parseError) {
-        console.error('Error parsing task result:', parseError)
-      }
+      } catch {}
     }
 
     // Add error info if failed
@@ -946,6 +971,7 @@ async function getSDDExportTaskStatus(req, res) {
 export {
   dataDump,
   projectListDump,
+  projectListDumpS3,
   statsDump,
   projectStatsDump,
   projectSDDZipDump,

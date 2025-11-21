@@ -53,7 +53,7 @@ export class NexusExporter extends Exporter {
     this.writeLine(`\tDIMENSIONS NCHAR=${characters.length};`)
     this.writeLine(
       `\tFORMAT DATATYPE=${dataType} GAP=- MISSING=? ${
-        isMeristic ? '' : 'SYMBOLS=' + symbols
+        isMeristic ? '' : 'SYMBOLS="' + symbols + '"'
       };`
     )
 

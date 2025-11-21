@@ -7,6 +7,7 @@ import {
   CopyObjectCommand,
   ListObjectsV2Command,
 } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import config from '../config.js'
 
 class S3Service {
@@ -57,12 +58,16 @@ class S3Service {
         error.name === 'NotFound' ||
         error.$metadata?.httpStatusCode === 404
       ) {
-        throw new Error(`Object not found: ${error.message}`)
+        const notFoundError = new Error(`Object not found: ${error.message}`)
+        notFoundError.name = 'NoSuchKey'
+        throw notFoundError
       }
 
-      // Log other unexpected errors
-      console.error('S3 Service Error:', error)
-      throw new Error(`Failed to get object from S3: ${error.message}`)
+      // Re-throw other errors without verbose logging
+      const s3Error = new Error(`Failed to get object from S3: ${error.message}`)
+      s3Error.name = error.name
+      s3Error.originalError = error
+      throw s3Error
     }
   }
 
@@ -119,7 +124,6 @@ class S3Service {
         versionId: response.VersionId,
       }
     } catch (error) {
-      console.error('S3 Service Error:', error)
       throw new Error(`Failed to upload object to S3: ${error.message}`)
     }
   }
@@ -139,7 +143,6 @@ class S3Service {
 
       await this.s3Client.send(command)
     } catch (error) {
-      console.error('S3 Service Error:', error)
       throw new Error(`Failed to delete object from S3: ${error.message}`)
     }
   }
@@ -175,7 +178,6 @@ class S3Service {
         versionId: response.VersionId,
       }
     } catch (error) {
-      console.error('S3 Service Error:', error)
       throw new Error(`Failed to copy object in S3: ${error.message}`)
     }
   }
@@ -196,8 +198,40 @@ class S3Service {
       const response = await this.s3Client.send(command)
       return response.Contents || []
     } catch (error) {
-      console.error('S3 Service Error:', error)
       throw new Error(`Failed to list objects in S3: ${error.message}`)
+    }
+  }
+
+  /**
+   * Generate a pre-signed URL for accessing an S3 object
+   * @param {string} bucketName - The S3 bucket name
+   * @param {string} key - The object key/path
+   * @param {number} expiresIn - URL expiration time in seconds (default: 3600 = 1 hour)
+   * @param {Object} options - Additional options
+   * @param {string} options.responseContentDisposition - Content-Disposition header (e.g., 'attachment; filename="video.mp4"')
+   * @returns {Promise<string>} - Pre-signed URL
+   */
+  async getSignedUrl(bucketName, key, expiresIn = 3600, options = {}) {
+    try {
+      const commandParams = {
+        Bucket: bucketName,
+        Key: key,
+      }
+
+      // Add Content-Disposition if provided (for forcing download)
+      if (options.responseContentDisposition) {
+        commandParams.ResponseContentDisposition = options.responseContentDisposition
+      }
+
+      const command = new GetObjectCommand(commandParams)
+
+      const signedUrl = await getSignedUrl(this.s3Client, command, {
+        expiresIn,
+      })
+
+      return signedUrl
+    } catch (error) {
+      throw new Error(`Failed to generate signed URL: ${error.message}`)
     }
   }
 }

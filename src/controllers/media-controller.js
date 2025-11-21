@@ -56,6 +56,42 @@ async function validateSpecimenAndView(specimenId, viewId, projectId) {
   }
 }
 
+/**
+ * Replace the file extension in a filename with a new extension
+ * Handles edge cases like files with multiple dots and hidden files
+ * @param {string} filename - Original filename (e.g., "archive.v2.zip", ".gitignore", "photo.jpg")
+ * @param {string} newExtension - New extension without dot (e.g., "tif", "png")
+ * @returns {string} Filename with replaced extension
+ */
+function replaceFileExtension(filename, newExtension) {
+  if (!filename || !newExtension) {
+    return filename
+  }
+
+  // Find the last dot in the filename
+  const lastDotIndex = filename.lastIndexOf('.')
+  
+  // If no extension found, just append the new extension
+  if (lastDotIndex === -1 || lastDotIndex === 0) {
+    return `${filename}.${newExtension}`
+  }
+  
+  // Replace the extension after the last dot
+  const basename = filename.substring(0, lastDotIndex)
+  return `${basename}.${newExtension}`
+}
+
+/**
+ * Generate download filename in the format M{mediaId}.{extension}
+ * @param {string|number} mediaId - The media ID
+ * @param {string} extension - File extension without dot (e.g., "jpg", "mp4", "tif")
+ * @returns {string} Download filename in format M{mediaId}.{extension}
+ */
+function generateDownloadFilename(mediaId, extension) {
+  const ext = extension || 'jpg'
+  return `M${mediaId}.${ext}`
+}
+
 export async function getMediaFiles(req, res) {
   const projectId = req.params.projectId
   try {
@@ -136,6 +172,23 @@ export async function createMediaFile(req, res) {
       shouldSkipLogChange: true,
     })
 
+    // Auto-set as exemplar if this is the first curated image and project has no exemplar
+    const project = await models.Project.findByPk(projectId, { transaction })
+    if (
+      !project.exemplar_media_id &&
+      media.media_type === 'image' &&
+      media.cataloguing_status === 0 &&
+      media.specimen_id &&
+      media.view_id &&
+      media.is_copyrighted !== null
+    ) {
+      project.exemplar_media_id = media.media_id
+      await project.save({
+        transaction,
+        user: req.user,
+      })
+    }
+
     await transaction.commit()
     mediaUploader.commit()
   } catch (e) {
@@ -178,12 +231,12 @@ export async function createMediaFiles(req, res) {
     return
   }
 
-  // Validate ZIP file size (max 100MB)
-  const maxZipSize = 100 * 1024 * 1024 // 100MB
+  // Validate ZIP file size (max 1.5GB)
+  const maxZipSize = 1536 * 1024 * 1024 // 1.5GB
   if (req.file.size > maxZipSize) {
     res.status(400).json({
       message:
-        'ZIP file is too large. Maximum size is 100MB. Please split your files into smaller archives.',
+        'ZIP file is too large. Maximum size is 1.5GB. Please split your files into smaller archives.',
     })
     return
   }
@@ -545,6 +598,23 @@ export async function editMediaFile(req, res) {
       user: req.user,
       shouldSkipLogChange: true,
     })
+
+    // Auto-set as exemplar if this is the first curated image and project has no exemplar
+    const project = await models.Project.findByPk(projectId, { transaction })
+    if (
+      !project.exemplar_media_id &&
+      media.media_type === 'image' &&
+      media.cataloguing_status === 0 &&
+      media.specimen_id &&
+      media.view_id &&
+      media.is_copyrighted !== null
+    ) {
+      project.exemplar_media_id = media.media_id
+      await project.save({
+        transaction,
+        user: req.user,
+      })
+    }
 
     await transaction.commit()
     mediaUploader.commit()
@@ -936,6 +1006,27 @@ export async function editMediaFiles(req, res) {
       transaction: transaction,
     })
 
+    // Auto-set as exemplar if project has no exemplar and first curated image is in results
+    const project = await models.Project.findByPk(projectId, { transaction })
+    if (!project.exemplar_media_id) {
+      // Find the first image that qualifies as exemplar
+      const firstQualifyingImage = results.find(
+        (media) =>
+          media.media_type === 'image' &&
+          media.cataloguing_status === 0 &&
+          media.specimen_id &&
+          media.view_id &&
+          media.is_copyrighted !== null
+      )
+      if (firstQualifyingImage) {
+        project.exemplar_media_id = firstQualifyingImage.media_id
+        await project.save({
+          transaction,
+          user: req.user,
+        })
+      }
+    }
+
     await transaction.commit()
 
     // Double-check the database after commit
@@ -1158,7 +1249,7 @@ export async function getFilterMediaIds(req, res) {
 }
 
 function convertMediaResponse(row) {
-  return {
+  const response = {
     media_id: parseInt(row.media_id),
     project_id: parseInt(row.project_id),
     user_id: parseInt(row.user_id),
@@ -1180,7 +1271,38 @@ function convertMediaResponse(row) {
     created_on: row.created_on,
     url: row.url,
     url_description: row.url_description,
+    original_filename: row.media.ORIGINAL_FILENAME,
   }
+  
+  // Add view name if available
+  if (row.view_name) {
+    response.view_name = row.view_name
+  }
+  
+  // Build and add specimen name if specimen data is available
+  if (row.specimen_id && row.reference_source !== undefined) {
+    const specimenRecord = {
+      specimen_id: row.specimen_id,
+      reference_source: row.reference_source,
+      institution_code: row.institution_code,
+      collection_code: row.collection_code,
+      catalog_number: row.catalog_number,
+      genus: row.genus,
+      specific_epithet: row.specific_epithet,
+      subspecific_epithet: row.subspecific_epithet,
+      scientific_name_author: row.scientific_name_author,
+      scientific_name_year: row.scientific_name_year,
+      is_extinct: row.is_extinct
+    }
+    // Use the utility function to get the specimen name
+    // showExtinctMarker=true, showAuthor=false, skipSubgenus=false
+    const specimenName = getSpecimenName(specimenRecord, null, true, false, false)
+    if (specimenName) {
+      response.specimen_name = specimenName
+    }
+  }
+  
+  return response
 }
 
 /**
@@ -1229,6 +1351,7 @@ export async function serveMediaFile(req, res) {
     // Extract S3 key from the media data (new system) or construct it (old system)
     const mediaVersion = mediaData[fileSize]
 
+    // Get S3 key first
     let s3Key
     if (mediaVersion.S3_KEY || mediaVersion.s3_key) {
       // New S3-based system - handle both uppercase and lowercase
@@ -1245,6 +1368,12 @@ export async function serveMediaFile(req, res) {
       })
     }
 
+    // Extract extension from S3 key (the actual file extension)
+    const s3Extension = s3Key.split('.').pop()?.toLowerCase() || 'jpg'
+    
+    // Generate download filename in format M{mediaId}.{extension}
+    const downloadFileName = generateDownloadFilename(mediaId, s3Extension)
+
     // Use default bucket from config
     const bucket = config.aws.defaultBucket
 
@@ -1258,6 +1387,11 @@ export async function serveMediaFile(req, res) {
     // Get object from S3
     const result = await s3Service.getObject(bucket, s3Key)
 
+    // Encode filename for Content-Disposition header (RFC 5987)
+    // This handles filenames with non-ASCII characters
+    const encodedFilename = encodeURIComponent(downloadFileName)
+    const contentDisposition = `attachment; filename="${downloadFileName.replace(/[^\x00-\x7F]/g, '_')}"; filename*=UTF-8''${encodedFilename}`
+
     // Set appropriate headers
     // Use MIMETYPE from database if available, otherwise fall back to S3 content type
     const contentType = mediaVersion.MIMETYPE || result.contentType || 'application/octet-stream'
@@ -1267,12 +1401,13 @@ export async function serveMediaFile(req, res) {
       'Content-Length': result.contentLength,
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Last-Modified': result.lastModified,
+      'Content-Disposition': contentDisposition,
     })
 
     // Send the data
     res.send(result.data)
   } catch (error) {
-    console.error('Media serve error:', error.message)
+    // console.error('Media serve error:', error.message)
 
     if (error.name === 'NoSuchKey' || error.message.includes('NoSuchKey')) {
       return res.status(404).json({
@@ -1432,10 +1567,223 @@ export async function serveBatchMediaFiles(req, res) {
     const statusCode = results.length > 0 ? 200 : 400
     res.status(statusCode).json(response)
   } catch (error) {
-    console.error('Batch Media Serve Error:', error)
+    // console.error('Batch Media Serve Error:', error)
     res.status(500).json({
       error: 'Internal server error',
       message: 'Failed to serve batch media files',
+    })
+  }
+}
+
+/**
+ * Get pre-signed URL for video file from S3
+ * GET /projects/:projectId/video-url/:mediaId?download=true
+ */
+export async function getMediaVideoUrl(req, res) {
+  try {
+    const { projectId, mediaId } = req.params
+    const { download } = req.query // Check if this is for download
+
+    // Get media file info from database
+    const [mediaRows] = await sequelizeConn.query(
+      `SELECT media_id, media FROM media_files WHERE project_id = ? AND media_id = ?`,
+      { replacements: [projectId, mediaId] }
+    )
+
+    if (!mediaRows || mediaRows.length === 0) {
+      return res.status(404).json({
+        error: 'Media not found',
+        message: 'The requested media file does not exist',
+      })
+    }
+
+    const mediaData = mediaRows[0].media
+
+    // Check if this is a video file by looking at the original file's MIMETYPE
+    if (!mediaData || !mediaData.original) {
+      return res.status(404).json({
+        error: 'Media data not found',
+        message: 'The media file does not have original data',
+      })
+    }
+
+    const originalMedia = mediaData.original
+    const mimeType = originalMedia.MIMETYPE || ''
+
+    // Validate that this is a video file
+    if (!mimeType.startsWith('video/')) {
+      return res.status(400).json({
+        error: 'Invalid media type',
+        message: 'This endpoint only supports video files',
+      })
+    }
+
+    // Get S3 key for original video first
+    let s3Key
+    if (originalMedia.S3_KEY || originalMedia.s3_key) {
+      // New S3-based system - handle both uppercase and lowercase
+      s3Key = originalMedia.S3_KEY || originalMedia.s3_key
+    } else if (originalMedia.FILENAME) {
+      // Legacy local file system - construct S3 key
+      const fileExtension = originalMedia.FILENAME.split('.').pop() || 'mp4'
+      const fileName = `${projectId}_${mediaId}_original.${fileExtension}`
+      s3Key = `media_files/images/${projectId}/${mediaId}/${fileName}`
+    } else {
+      return res.status(404).json({
+        error: 'Invalid media data',
+        message: 'Media data is missing file information',
+      })
+    }
+
+    // Extract extension from S3 key (the actual file extension)
+    const s3Extension = s3Key.split('.').pop()?.toLowerCase() || 'mp4'
+    
+    // Generate download filename in format M{mediaId}.{extension}
+    const downloadFileName = generateDownloadFilename(mediaId, s3Extension)
+
+    // Use default bucket from config
+    const bucket = config.aws.defaultBucket
+
+    if (!bucket) {
+      return res.status(500).json({
+        error: 'Configuration error',
+        message: 'Default S3 bucket not configured',
+      })
+    }
+
+    // Generate pre-signed URL options
+    const urlOptions = {}
+    
+    // If download=true, add Content-Disposition header to force download
+    if (download === 'true') {
+      // Sanitize filename for Content-Disposition header
+      const safeFilename = downloadFileName.replace(/[^\w\s.-]/g, '_')
+      urlOptions.responseContentDisposition = `attachment; filename="${safeFilename}"`
+    }
+
+    // Generate pre-signed URL (valid for 1 hour)
+    const signedUrl = await s3Service.getSignedUrl(bucket, s3Key, 3600, urlOptions)
+
+    res.json({
+      success: true,
+      url: signedUrl,
+      expiresIn: 3600,
+      mediaId: parseInt(mediaId),
+      projectId: parseInt(projectId),
+      filename: downloadFileName,
+    })
+  } catch (error) {
+    console.error('Video URL generation error:', error.message)
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to generate video URL',
+    })
+  }
+}
+
+/**
+ * Get pre-signed URL for any media file from S3
+ * This avoids proxy timeout issues for large files
+ * GET /projects/:projectId/media-url/:mediaId?fileSize=original&download=true
+ */
+export async function getMediaPresignedUrl(req, res) {
+  try {
+    const { projectId, mediaId } = req.params
+    const { fileSize = 'original', download } = req.query
+
+    // Validate file size
+    const supportedFileSizes = ['original', 'large', 'thumbnail']
+    if (!supportedFileSizes.includes(fileSize)) {
+      return res.status(400).json({
+        error: 'Invalid file size',
+        message: `File size '${fileSize}' is not supported. Supported sizes: ${supportedFileSizes.join(', ')}`,
+      })
+    }
+
+    // Get media file info from database
+    const [mediaRows] = await sequelizeConn.query(
+      `SELECT media_id, media FROM media_files WHERE project_id = ? AND media_id = ?`,
+      { replacements: [projectId, mediaId] }
+    )
+
+    if (!mediaRows || mediaRows.length === 0) {
+      return res.status(404).json({
+        error: 'Media not found',
+        message: 'The requested media file does not exist',
+      })
+    }
+
+    const mediaData = mediaRows[0].media
+
+    if (!mediaData || !mediaData[fileSize]) {
+      return res.status(404).json({
+        error: 'File size not found',
+        message: `The requested file size '${fileSize}' is not available for this media`,
+      })
+    }
+
+    const mediaVersion = mediaData[fileSize]
+
+    // Get S3 key first
+    let s3Key
+    if (mediaVersion.S3_KEY || mediaVersion.s3_key) {
+      // New S3-based system - handle both uppercase and lowercase
+      s3Key = mediaVersion.S3_KEY || mediaVersion.s3_key
+    } else if (mediaVersion.FILENAME) {
+      // Legacy local file system - construct S3 key
+      const fileExtension = mediaVersion.FILENAME.split('.').pop() || 'jpg'
+      const fileName = `${projectId}_${mediaId}_${fileSize}.${fileExtension}`
+      s3Key = `media_files/images/${projectId}/${mediaId}/${fileName}`
+    } else {
+      return res.status(404).json({
+        error: 'Invalid media data',
+        message: 'Media data is missing file information',
+      })
+    }
+
+    // Extract extension from S3 key (the actual file extension)
+    const s3Extension = s3Key.split('.').pop()?.toLowerCase() || 'jpg'
+    
+    // Generate download filename in format M{mediaId}.{extension}
+    const downloadFileName = generateDownloadFilename(mediaId, s3Extension)
+
+    // Use default bucket from config
+    const bucket = config.aws.defaultBucket
+
+    if (!bucket) {
+      return res.status(500).json({
+        error: 'Configuration error',
+        message: 'Default S3 bucket not configured',
+      })
+    }
+
+    // Generate pre-signed URL options
+    const urlOptions = {}
+    
+    // If download=true, add Content-Disposition header to force download
+    if (download === 'true') {
+      // Sanitize filename for Content-Disposition header
+      const safeFilename = downloadFileName.replace(/[^\w\s.-]/g, '_')
+      urlOptions.responseContentDisposition = `attachment; filename="${safeFilename}"`
+    }
+
+    // Generate pre-signed URL (valid for 1 hour)
+    const signedUrl = await s3Service.getSignedUrl(bucket, s3Key, 3600, urlOptions)
+
+    res.json({
+      success: true,
+      url: signedUrl,
+      expiresIn: 3600,
+      mediaId: parseInt(mediaId),
+      projectId: parseInt(projectId),
+      filename: downloadFileName,
+      fileSize: fileSize,
+    })
+  } catch (error) {
+    console.error('Media presigned URL generation error:', error.message)
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to generate media URL',
     })
   }
 }
@@ -1716,12 +2064,12 @@ export async function createStacksMediaFile(req, res) {
     return
   }
 
-  // Validate ZIP file size (max 100MB)
-  const maxZipSize = 100 * 1024 * 1024 // 100MB
+  // Validate ZIP file size (max 1.5GB)
+  const maxZipSize = 1536 * 1024 * 1024 // 1.5GB
   if (req.file.size > maxZipSize) {
     res.status(400).json({
       message:
-        'ZIP file is too large. Maximum size is 100MB. Please split your files into smaller archives.',
+        'ZIP file is too large. Maximum size is 1.5GB. Please split your files into smaller archives.',
     })
     return
   }

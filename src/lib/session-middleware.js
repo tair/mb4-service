@@ -7,6 +7,7 @@
 import sequelizeConn from '../util/db.js'
 import { time } from '../util/util.js'
 import loggingService from '../services/logging-service.js'
+import { isIPv6 } from 'net'
 
 // In-memory session tracking to avoid duplicate inserts
 const activeSessionsCache = new Map()
@@ -309,9 +310,6 @@ function isValidIpAddress(ip) {
   const ipv4Regex =
     /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/
 
-  // IPv6 regex (updated to include IPv4-mapped addresses)
-  const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::1$|^::$|^::ffff:[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/i
-
   // Check for private/localhost IPs that might be spoofed
   if (ipv4Regex.test(ip)) {
     const parts = ip.split('.').map(Number)
@@ -320,7 +318,9 @@ function isValidIpAddress(ip) {
     return true
   }
 
-  return ipv6Regex.test(ip)
+  // IPv6 validation - use Node.js built-in validation which handles all compression cases
+  // This properly handles compressed notation like 2a09:bac1:7680:8e0::3f9:31
+  return isIPv6(ip)
 }
 
 /**
@@ -335,20 +335,15 @@ function normalizeIpAddress(ipAddr) {
     return 'invalid'
   }
 
-  // Convert IPv4-mapped IPv6 addresses to IPv4
+  // Convert IPv4-mapped IPv6 addresses to IPv4 for consistency
   if (ipAddr.startsWith('::ffff:')) {
     const ipv4Part = ipAddr.substring(7)
     if (isValidIpAddress(ipv4Part)) {
-      return ipv4Part.substring(0, 15)
+      return ipv4Part
     }
   }
 
-  // For IPv6, store first 15 chars but log truncation
-  if (ipAddr.length > 15) {
-    console.warn('IP address truncated for database storage:', ipAddr)
-    return ipAddr.substring(0, 15)
-  }
-
+  // Return full IPv6 address (database now supports up to 45 chars)
   return ipAddr
 }
 

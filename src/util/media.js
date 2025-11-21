@@ -8,24 +8,36 @@ export const MEDIA_URL_PATH = `${config.media.scheme}://${config.media.domain}${
 export const NEW_MEDIA_URL_PATH = `${config.media.newDomain}/public/media`
 
 export function getMedia(media, version, projectId, mediaId) {
-  const mediaVersion = getMediaVersion(media, version)
-  if (mediaVersion == null) {
-    return undefined
+  // Try to obtain the requested version's metadata for width/height
+  let mediaVersion = getMediaVersion(media, version)
+
+  // For small variants, gracefully fall back to thumbnail metadata when missing
+  if (mediaVersion == null && (version === 'icon' || version === 'tiny' || version === 'thumbnail')) {
+    mediaVersion = getMediaVersion(media, 'thumbnail')
   }
+
+  // As an additional fallback, try large for dimensions if thumbnail is also missing
+  if (mediaVersion == null) {
+    mediaVersion = getMediaVersion(media, 'large')
+  }
+
+  // If dimensions are still unavailable, provide safe defaults to avoid crashes
+  const width = (mediaVersion && mediaVersion['width']) || 256
+  const height = (mediaVersion && mediaVersion['height']) || 256
 
   // For icon and tiny versions, we use the thumbnail endpoint
   if (version == 'icon' || version == 'tiny') {
     return {
       url: `${NEW_MEDIA_URL_PATH}/${projectId}/serve/${mediaId}/thumbnail`,
-      width: mediaVersion['width'],
-      height: mediaVersion['height'],
+      width,
+      height,
     }
   }
 
   return {
     url: `${NEW_MEDIA_URL_PATH}/${projectId}/serve/${mediaId}/${version}`,
-    width: mediaVersion['width'],
-    height: mediaVersion['height'],
+    width,
+    height,
   }
 }
 
