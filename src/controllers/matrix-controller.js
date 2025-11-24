@@ -1209,3 +1209,146 @@ export async function convertCsvToMatrix(req, res) {
     }
   }
 }
+
+/**
+ * Process PDF file to extract character data via mb4-curator API
+ * This acts as a proxy to the curator service for better security and architecture
+ */
+export async function processPdf(req, res) {
+  try {
+    const file = req.file
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: 'PDF file is required',
+      })
+    }
+
+    // Validate file type
+    const fileExt = path.extname(file.originalname).toLowerCase()
+    if (fileExt !== '.pdf') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid file type. Only PDF files are supported.',
+      })
+    }
+
+    // Extract form fields
+    const {
+      total_characters,
+      page_range,
+      zero_indexed,
+      extraction_model,
+      evaluation_model,
+    } = req.body
+
+    // Validate total_characters
+    const totalChars = total_characters
+      ? parseInt(total_characters, 10)
+      : 1000
+    if (isNaN(totalChars) || totalChars < 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'total_characters must be a valid positive integer',
+      })
+    }
+
+    // Prepare form data for curator API
+    const formData = new FormData()
+    formData.append('pdf_file', fs.createReadStream(file.path), {
+      filename: file.originalname,
+      contentType: file.mimetype,
+    })
+    formData.append('total_characters', totalChars.toString())
+
+    // Add optional fields
+    if (page_range) {
+      formData.append('page_range', page_range)
+    }
+    if (zero_indexed !== undefined) {
+      formData.append('zero_indexed', zero_indexed)
+    }
+    if (extraction_model) {
+      formData.append('extraction_model', extraction_model)
+    }
+    if (evaluation_model) {
+      formData.append('evaluation_model', evaluation_model)
+    }
+
+    // Call the curator API
+    const curatorUrl = config.curator.url || 'http://localhost:8001'
+    console.log(`Calling curator API at ${curatorUrl}/api/process-pdf`)
+
+    const response = await axios.post(
+      `${curatorUrl}/api/process-pdf`,
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders(),
+        },
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+        timeout: 300000, // 5 minute timeout for large PDFs
+      }
+    )
+
+    // Clean up uploaded file
+    try {
+      await fs.promises.unlink(file.path)
+    } catch (unlinkError) {
+      console.warn('Failed to clean up temporary file:', unlinkError)
+    }
+
+    // Return curator API response
+    res.json(response.data)
+  } catch (error) {
+    // Clean up uploaded file on error
+    if (req.file?.path) {
+      try {
+        await fs.promises.unlink(req.file.path)
+      } catch (unlinkError) {
+        console.warn('Failed to clean up temporary file:', unlinkError.message)
+      }
+    }
+
+    // Log error concisely
+    const curatorUrl = config.curator.url || 'http://localhost:8001'
+    console.error(
+      `PDF processing failed: ${error.code || 'ERROR'} - ${error.message}`,
+      `[Curator URL: ${curatorUrl}]`
+    )
+
+    // Handle different types of errors
+    if (error.response) {
+      // Curator API returned an error
+      console.error(
+        `Curator API error: ${error.response.status} - ${
+          error.response.data?.detail || error.response.data?.message
+        }`
+      )
+      return res.status(error.response.status).json({
+        success: false,
+        message:
+          error.response.data?.detail ||
+          error.response.data?.message ||
+          'Curator API error',
+        detail: error.response.data,
+      })
+    } else if (error.code === 'ECONNREFUSED') {
+      return res.status(503).json({
+        success: false,
+        message: `Curator service is unavailable at ${curatorUrl}. Please ensure the service is running.`,
+      })
+    } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+      return res.status(504).json({
+        success: false,
+        message: 'Curator service request timed out. Please try again.',
+      })
+    } else {
+      return res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to process PDF file',
+      })
+    }
+  }
+}

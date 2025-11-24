@@ -43,6 +43,11 @@ matrixRouter.post(
   controller.convertCsvToMatrix
 )
 matrixRouter.post(
+  '/process-pdf',
+  upload.single('pdf_file'),
+  controller.processPdf
+)
+matrixRouter.post(
   '/:matrixId/upload',
   upload.single('matrix_file'),
   controller.mergeMatrixFile
