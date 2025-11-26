@@ -97,7 +97,9 @@ export async function getMediaFiles(req, res) {
   try {
     const media = await service.getMediaFiles(projectId)
     res.status(200).json({
-      media: media.map((row) => convertMediaResponse(row)),
+      media: media
+        .filter((row) => row.media != null || row.url)  // Skip entries with no media AND no URL
+        .map((row) => convertMediaResponse(row)),
     })
   } catch (err) {
     console.error(`Error: Cannot media files for ${projectId}`, err)
