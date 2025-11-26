@@ -1271,7 +1271,7 @@ function convertMediaResponse(row) {
     created_on: row.created_on,
     url: row.url,
     url_description: row.url_description,
-    original_filename: row.media.ORIGINAL_FILENAME,
+    original_filename: row.media?.ORIGINAL_FILENAME,  // Add optional chaining (?.)
   }
   
   // Add view name if available
