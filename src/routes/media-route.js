@@ -1,7 +1,7 @@
 import express from 'express'
 import * as controller from '../controllers/media-controller.js'
 import mediaLabelsRouter from './media-labels-route.js'
-import { upload } from './upload.js'
+import { upload, stacksUpload } from './upload.js'
 
 const mediaRouter = express.Router({ mergeParams: true })
 
@@ -20,7 +20,7 @@ mediaRouter.post(
 )
 mediaRouter.post('/create/3d', upload.single('file'), controller.create3DMediaFile)
 mediaRouter.post('/create/video', upload.single('file'), controller.createVideoMediaFile)
-mediaRouter.post('/create/stacks', upload.single('file'), controller.createStacksMediaFile)
+mediaRouter.post('/create/stacks', stacksUpload.single('file'), controller.createStacksMediaFile)
 
 mediaRouter.get('/:mediaId', controller.getMediaFile)
 mediaRouter.get('/:mediaId/details', controller.getMediaFileDetails)

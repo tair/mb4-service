@@ -11,4 +11,14 @@ const upload = multer({
   }
 })
 
-export { upload }
+// Separate upload config for large stack/ZIP files (CT scans, etc.)
+const stacksUpload = multer({
+  storage: storage,
+  limits: {
+    fieldSize: 50 * 1024 * 1024,  // 50MB per non-file field
+    fields: 50,
+    fileSize: 1.1 * 1536 * 1024 * 1024, // 1.65GB for stack ZIP files
+  }
+})
+
+export { upload, stacksUpload }
