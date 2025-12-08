@@ -6,6 +6,7 @@ import {
   DeleteObjectCommand,
   CopyObjectCommand,
   ListObjectsV2Command,
+  GetObjectAttributesCommand,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import config from '../config.js'
@@ -232,6 +233,75 @@ class S3Service {
       return signedUrl
     } catch (error) {
       throw new Error(`Failed to generate signed URL: ${error.message}`)
+    }
+  }
+
+  /**
+   * Generate a pre-signed URL for uploading an object to S3 (PUT operation)
+   * This allows clients to upload directly to S3, bypassing the server.
+   * Useful for large files like CT scan archives to avoid proxy timeouts.
+   * 
+   * @param {string} bucketName - The S3 bucket name
+   * @param {string} key - The object key/path where the file will be stored
+   * @param {string} contentType - The expected content type of the upload (e.g., 'application/zip')
+   * @param {number} expiresIn - URL expiration time in seconds (default: 3600 = 1 hour)
+   * @param {Object} options - Additional options
+   * @param {number} options.contentLengthMax - Maximum allowed content length in bytes
+   * @returns {Promise<string>} - Pre-signed upload URL
+   */
+  async getSignedUploadUrl(bucketName, key, contentType, expiresIn = 3600, options = {}) {
+    try {
+      const commandParams = {
+        Bucket: bucketName,
+        Key: key,
+        ContentType: contentType,
+      }
+
+      const command = new PutObjectCommand(commandParams)
+
+      const signedUrl = await getSignedUrl(this.s3Client, command, {
+        expiresIn,
+        signableHeaders: new Set(['content-type']),
+      })
+
+      return signedUrl
+    } catch (error) {
+      throw new Error(`Failed to generate signed upload URL: ${error.message}`)
+    }
+  }
+
+  /**
+   * Get object metadata/attributes from S3 without downloading the full object
+   * Useful for verifying an upload completed successfully
+   * 
+   * @param {string} bucketName - The S3 bucket name
+   * @param {string} key - The object key/path
+   * @returns {Promise<{contentLength: number, contentType: string, etag: string, lastModified: Date} | null>}
+   */
+  async getObjectAttributes(bucketName, key) {
+    try {
+      const command = new HeadObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+      })
+
+      const response = await this.s3Client.send(command)
+
+      return {
+        contentLength: response.ContentLength,
+        contentType: response.ContentType,
+        etag: response.ETag,
+        lastModified: response.LastModified,
+      }
+    } catch (error) {
+      if (
+        error.name === 'NoSuchKey' ||
+        error.name === 'NotFound' ||
+        error.$metadata?.httpStatusCode === 404
+      ) {
+        return null
+      }
+      throw new Error(`Failed to get object attributes: ${error.message}`)
     }
   }
 }
