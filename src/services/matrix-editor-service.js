@@ -1562,18 +1562,34 @@ export default class MatrixEditorService {
     const creationTime = time()
     for (const [mediaId, medium] of mediaList) {
       for (const taxonId of taxaIds) {
-        const taxaMedium = await models.TaxaXMedium.create(
-          {
+        // Check if this taxon-media relationship already exists to avoid duplicates
+        const existingLink = await models.TaxaXMedium.findOne({
+          where: {
             taxon_id: taxonId,
             media_id: mediaId,
-            user_id: this.user.user_id,
-            created_on: creationTime,
           },
-          {
-            user: this.user,
-            transaction: transaction,
-          }
-        )
+          transaction: transaction,
+        })
+
+        let taxaMedium
+        if (existingLink) {
+          // Use existing link instead of creating a duplicate
+          taxaMedium = existingLink
+        } else {
+          // Create new link only if it doesn't exist
+          taxaMedium = await models.TaxaXMedium.create(
+            {
+              taxon_id: taxonId,
+              media_id: mediaId,
+              user_id: this.user.user_id,
+              created_on: creationTime,
+            },
+            {
+              user: this.user,
+              transaction: transaction,
+            }
+          )
+        }
 
         taxaMedia.push({
           link_id: taxaMedium.link_id,
@@ -7025,6 +7041,12 @@ export default class MatrixEditorService {
     if (this.project.status > 0) {
       return []
     }
+
+    // Project owners, matrix creators, and system admins should have full capabilities
+    if (await this.isAdminLike()) {
+      return FULL_USER_CAPABILITIES
+    }
+
     const [rows] = await sequelizeConn.query(
       'SELECT membership_type FROM projects_x_users WHERE project_id = ? AND user_id = ?',
       { replacements: [this.project.project_id, this.user.user_id] }

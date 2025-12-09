@@ -346,17 +346,28 @@ export async function importMedia(req, res) {
         })
 
         if (item.should_add_as_exemplar) {
-          await models.TaxaXMedium.create(
-            {
-              user_id: userId,
+          // Check if this taxon-media relationship already exists to avoid duplicates
+          const existingTaxonMedia = await models.TaxaXMedium.findOne({
+            where: {
               taxon_id: taxon.taxon_id,
               media_id: media.media_id,
             },
-            {
-              user: req.user,
-              transaction: transaction,
-            }
-          )
+            transaction: transaction,
+          })
+
+          if (!existingTaxonMedia) {
+            await models.TaxaXMedium.create(
+              {
+                user_id: userId,
+                taxon_id: taxon.taxon_id,
+                media_id: media.media_id,
+              },
+              {
+                user: req.user,
+                transaction: transaction,
+              }
+            )
+          }
         }
       }
 
