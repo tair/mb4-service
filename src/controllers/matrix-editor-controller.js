@@ -107,10 +107,9 @@ export async function setTaxaNotes(req, res) {
 
 export async function setTaxaAccess(req, res) {
   const taxaIds = parseIntArray(req.body.taxa_ids)
-  const userId = parseInt(req.body.user_id) || null
   const groupId = parseInt(req.body.group_id) || null
   const success = await applyMatrix(req, res, (service) =>
-    service.setTaxaAccess(taxaIds, userId, groupId)
+    service.setTaxaAccess(taxaIds, groupId)
   )
   if (success) {
     sentSyncEventToClients(req.params.matrixId, req.user)
