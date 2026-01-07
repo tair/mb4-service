@@ -34,6 +34,22 @@ export class HyperTable {
     return undefined
   }
 
+  delete(x, y) {
+    if (!this.map.has(x)) {
+      return false
+    }
+
+    const submap = this.map.get(x)
+    const deleted = submap.delete(y)
+
+    // Clean up empty submaps
+    if (submap.size === 0) {
+      this.map.delete(x)
+    }
+
+    return deleted
+  }
+
   [Symbol.iterator]() {
     return this.map[Symbol.iterator]()
   }

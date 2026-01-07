@@ -3750,7 +3750,7 @@ export default class MatrixEditorService {
     }
 
     if (this.matrix.getOption('APPLY_CHARACTERS_WHILE_SCORING') == 1) {
-      const scores = await this.applyStateRules(insertedScores)
+      const scores = await this.applyStateRules(insertedScores, transaction)
       cellChangesResults.push(...scores)
     }
 
@@ -4631,7 +4631,7 @@ export default class MatrixEditorService {
     }
 
     if (this.matrix.getOption('APPLY_CHARACTERS_WHILE_SCORING') == 1) {
-      const scores = await this.applyStateRules(insertedScores)
+      const scores = await this.applyStateRules(insertedScores, transaction)
       cellChangesResults.push(...scores)
     }
 
@@ -6197,7 +6197,7 @@ export default class MatrixEditorService {
       return true
     }
     const roles = await this.getRoles()
-    return roles.includes('admin')
+    return roles.includes('admin') || roles.includes('curator')
   }
 
   async getCellsStates(taxaIds, characterIds) {
@@ -6679,15 +6679,20 @@ export default class MatrixEditorService {
           if (!allowOverwritingByRules) {
             continue
           }
-          const cellIds = Array.from(existingScore.values()).map((score) =>
-            parseInt(score.cell_id)
-          )
-          await models.Cell.destroy({
-            where: { cell_id: cellIds },
-            transaction: transaction,
-            individualHooks: true,
-            user: this.user,
-          })
+          // Delete existing scores and mark them for frontend update
+          for (const existingCellScore of existingScore.values()) {
+            await models.Cell.destroy({
+              where: { cell_id: existingCellScore.cell_id },
+              transaction: transaction,
+              individualHooks: true,
+              user: this.user,
+            })
+            // Mark as deleted for frontend update
+            existingCellScore.cell_id = 0
+            ruleBasedChanges.push(existingCellScore)
+          }
+          // Clear the cache to prevent duplicate processing
+          existingScores.delete(taxonId, actionCharacterId)
         }
 
         const actionStateId =
@@ -7022,9 +7027,15 @@ export default class MatrixEditorService {
 
   async getUserAllowableActions() {
     // If this project is published, the user is not allowed to perform any action.
-    if (this.project.status > 0) {
+    if (this.project.published > 0) {
       return []
     }
+
+    // Admins and curators have full capabilities regardless of project membership
+    if (await this.isAdminLike()) {
+      return FULL_USER_CAPABILITIES
+    }
+
     const [rows] = await sequelizeConn.query(
       'SELECT membership_type FROM projects_x_users WHERE project_id = ? AND user_id = ?',
       { replacements: [this.project.project_id, this.user.user_id] }
@@ -7146,6 +7157,11 @@ export default class MatrixEditorService {
   }
 
   async checkCanEditTaxa(taxaIds) {
+    // Admins and curators can edit all taxa
+    if (await this.isAdminLike()) {
+      return
+    }
+
     const [[{ count }]] = await sequelizeConn.query(
       `
       SELECT COUNT(DISTINCT mto.taxon_id) AS count
