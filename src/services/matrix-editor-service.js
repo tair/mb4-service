@@ -3028,8 +3028,9 @@ export default class MatrixEditorService {
     const [stateViolationsRows] = await sequelizeConn.query(
       `
       SELECT
-        cra.action_id, ca.taxon_id, cr.character_id AS rule_character_id,
-      cra.character_id AS action_character_id, cra.state_id
+        cra.action_id, c.taxon_id, cr.character_id AS rule_character_id,
+        cra.character_id AS action_character_id, cra.state_id,
+        ca.state_id AS current_state_id, ca.is_npa AS current_is_npa
       FROM matrix_character_order AS mco
       INNER JOIN character_rules AS cr ON
         cr.character_id = mco.character_id
@@ -3064,6 +3065,9 @@ export default class MatrixEditorService {
         rcid: parseInt(row.rule_character_id),
         acid: parseInt(row.action_character_id),
         sid: row.state_id == null ? 0 : parseInt(row.state_id),
+        action: 'SET_STATE',
+        csid: row.current_state_id == null ? null : parseInt(row.current_state_id),
+        cnpa: row.current_is_npa == 1,
       })
     }
 
@@ -3105,6 +3109,7 @@ export default class MatrixEditorService {
         rcid: parseInt(row.rule_character_id),
         acid: parseInt(row.action_character_id),
         sid: row.state_id == null ? 0 : parseInt(row.state_id),
+        action: 'ADD_MEDIA',
       })
     }
 
@@ -3285,31 +3290,42 @@ export default class MatrixEditorService {
       'You are not allowed to modify cells this matrix'
     )
 
-    const [allowedTaxaRows] = await sequelizeConn.query(
-      `
-      SELECT mto.taxon_id
-      FROM matrix_taxa_order mto
-      INNER JOIN matrices AS m ON
-        m.matrix_id = mto.matrix_id
-      INNER JOIN projects_x_users AS pxu ON
-        pxu.project_id = m.project_id
-      LEFT JOIN project_members_x_groups AS pmxg ON
-        pmxg.membership_id = pxu.link_id
-      WHERE
-        m.matrix_id = ? AND pxu.user_id = ? AND
-      (mto.group_id = pmxg.group_id OR mto.group_id IS NULL)`,
-      {
-        replacements: [this.matrix.matrix_id, this.user.user_id],
-      }
-    )
-    if (allowedTaxaRows.length == 0) {
-      throw new UserError(
-        'You are not allowed to modify any of the taxa in this matrix'
+    // Check if user is admin/curator - they can edit all taxa
+    const isAdmin = await this.isAdminLike()
+
+    let allowedTaxaIds
+    if (isAdmin) {
+      // Admins can edit all taxa in the matrix
+      const [allTaxaRows] = await sequelizeConn.query(
+        `SELECT taxon_id FROM matrix_taxa_order WHERE matrix_id = ?`,
+        { replacements: [this.matrix.matrix_id] }
       )
-    }
-    const allowedTaxaIds = []
-    for (const row of allowedTaxaRows) {
-      allowedTaxaIds.push(parseInt(row.taxon_id))
+      allowedTaxaIds = allTaxaRows.map((row) => parseInt(row.taxon_id))
+    } else {
+      // Regular users - check group permissions
+      const [allowedTaxaRows] = await sequelizeConn.query(
+        `
+        SELECT mto.taxon_id
+        FROM matrix_taxa_order mto
+        INNER JOIN matrices AS m ON
+          m.matrix_id = mto.matrix_id
+        INNER JOIN projects_x_users AS pxu ON
+          pxu.project_id = m.project_id
+        LEFT JOIN project_members_x_groups AS pmxg ON
+          pmxg.membership_id = pxu.link_id
+        WHERE
+          m.matrix_id = ? AND pxu.user_id = ? AND
+        (mto.group_id = pmxg.group_id OR mto.group_id IS NULL)`,
+        {
+          replacements: [this.matrix.matrix_id, this.user.user_id],
+        }
+      )
+      if (allowedTaxaRows.length == 0) {
+        throw new UserError(
+          'You are not allowed to modify any of the taxa in this matrix'
+        )
+      }
+      allowedTaxaIds = allowedTaxaRows.map((row) => parseInt(row.taxon_id))
     }
 
     const [stateRows] = await sequelizeConn.query(
@@ -3338,7 +3354,7 @@ export default class MatrixEditorService {
         ca.taxon_id = c.taxon_id
       WHERE
         mco.matrix_id = ? AND
-        ca.state_id != cra.state_id AND
+        NOT (ca.state_id <=> cra.state_id AND ca.is_npa <=> 0) AND
         c.taxon_id IN (?)`,
       {
         replacements: [this.matrix.matrix_id, allowedTaxaIds],
