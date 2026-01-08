@@ -133,4 +133,9 @@ const DEFAULT_EMAIL_OPTIONS = {
     from: 'no-reply@morphobank.org',
     to: 'publishing_notifications@morphobank.org',
   },
+  institution_added: {
+    subject: '[MorphoBank] New Institution Added - Review Required',
+    from: 'no-reply@morphobank.org',
+    to: 'curator@morphobank.org',
+  },
 }

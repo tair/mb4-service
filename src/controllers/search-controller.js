@@ -5,13 +5,23 @@ import { getUserAccessInfo } from '../util/user-access.js'
 
 function searchInstitutions(req, res) {
   const searchTerm = req.query.searchTerm
-  models.Institution.findAll({
-    attributes: ['institution_id', 'name'],
-    where: {
-      name: {
-        [Sequelize.Op.like]: '%' + searchTerm + '%',
-      },
+  const userId = req.user?.user_id
+  
+  // Build where clause: active institutions OR user's own pending institutions
+  const whereClause = {
+    name: {
+      [Sequelize.Op.like]: '%' + searchTerm + '%',
     },
+    [Sequelize.Op.or]: [
+      { active: 1 },
+      // Include user's own pending institutions
+      ...(userId ? [{ user_id: userId, active: 0 }] : [])
+    ]
+  }
+  
+  models.Institution.findAll({
+    attributes: ['institution_id', 'name', 'active', 'user_id'],
+    where: whereClause,
   })
     .then((institutions) => {
       return res.status(200).json(institutions)

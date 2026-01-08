@@ -392,6 +392,14 @@ function initModels(sequelizeConn) {
     as: 'institutions_x_users',
     foreignKey: 'institution_id',
   })
+  Institution.belongsTo(User, {
+    as: 'creator',
+    foreignKey: 'user_id',
+  })
+  User.hasMany(Institution, {
+    as: 'created_institutions',
+    foreignKey: 'user_id',
+  })
   Institution.belongsToMany(User, {
     through: InstitutionsXUser,
     foreignKey: 'institution_id',
@@ -622,6 +630,14 @@ function initModels(sequelizeConn) {
   })
   User.hasMany(ProjectDuplicationRequest, {
     as: 'project_duplication_requests',
+    foreignKey: 'user_id',
+  })
+  CurationRequest.belongsTo(User, {
+    as: 'User',
+    foreignKey: 'user_id',
+  })
+  User.hasMany(CurationRequest, {
+    as: 'curation_requests',
     foreignKey: 'user_id',
   })
   ProjectMemberGroup.belongsTo(Project, {

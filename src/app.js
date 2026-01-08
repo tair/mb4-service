@@ -23,6 +23,8 @@ import tntRouter from './routes/tnt-route.js'
 import schedulerService from './services/scheduler-service.js'
 import s3Router from './routes/s3-route.js'
 import { duplicationRequestRouter } from './routes/duplication-request-route.js'
+import { institutionRequestRouter } from './routes/institution-request-route.js'
+import { curatorInstitutionRouter } from './routes/curator-institution-route.js'
 import apiServiceRouter from './routes/api-service-route.js'
 import { trackSession } from './lib/session-middleware.js'
 import { gracefulShutdown } from './controllers/analytics-controller.js'
@@ -94,6 +96,8 @@ app.use('/scheduler', schedulerRouter)
 app.use('/s3', s3Router)
 app.use('/tnt', tntRouter)
 app.use('/duplication-requests', duplicationRequestRouter)
+app.use('/curation-requests/institutions', institutionRequestRouter)
+app.use('/curator/institutions', curatorInstitutionRouter)
 app.use('/service', apiServiceRouter)
 
 // Initialize stats cache

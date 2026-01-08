@@ -266,6 +266,8 @@ export async function removeInstitutionFromProject(req, res) {
 export async function searchInstitutions(req, res) {
   const searchTerm = req.query.searchTerm
   const projectId = req.params.projectId
+  const userId = req.user?.user_id
+  
   try {
     const projectInstitutions = await models.InstitutionsXProject.findAll({
       attributes: ['institution_id'],
@@ -276,17 +278,23 @@ export async function searchInstitutions(req, res) {
     const dupes = projectInstitutions.map((i) => i.institution_id)
 
     // Get all institutions with like name segment and not within other model
+    // Only return active institutions OR user's own pending institutions
     const institutions = await models.Institution.findAll({
-      attributes: ['institution_id', 'name'],
+      attributes: ['institution_id', 'name', 'active', 'user_id'],
       where: {
         name: { [Sequelize.Op.like]: '%' + searchTerm + '%' },
         institution_id: { [Sequelize.Op.notIn]: dupes },
+        [Sequelize.Op.or]: [
+          { active: 1 },
+          // Include user's own pending institutions
+          ...(userId ? [{ user_id: userId, active: 0 }] : [])
+        ]
       },
     })
 
     return res.status(200).json(institutions)
   } catch (e) {
-    res.status(500).json({ message: 'error obtaining list of insititutions' })
-    console.log('error obtaining list of insititutions', e)
+    res.status(500).json({ message: 'error obtaining list of institutions' })
+    console.log('error obtaining list of institutions', e)
   }
 }
