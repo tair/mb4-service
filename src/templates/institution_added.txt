@@ -1,0 +1,10 @@
+A new institution has been added to MorphoBank and requires review:
+
+Institution Name: $institutionName
+Added by: $userName
+User Email: $userEmail
+Institution ID: $institutionId
+
+Please log in to the Curator interface to approve or reject this institution request:
+$FRONTEND_URL/curator/institution-requests
+
