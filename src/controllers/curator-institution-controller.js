@@ -30,7 +30,14 @@ export async function listInstitutions(req, res) {
     }
     
     if (active !== undefined && active !== '') {
-      whereConditions.active = parseInt(active)
+      // Handle boolean strings from query params
+      if (active === 'true' || active === '1') {
+        whereConditions.active = 1
+      } else if (active === 'false' || active === '0') {
+        whereConditions.active = 0
+      } else {
+        whereConditions.active = parseInt(active)
+      }
     }
 
     const institutions = await models.Institution.findAndCountAll({
