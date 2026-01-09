@@ -1,0 +1,13 @@
+Dear $name,
+
+Your MorphoBank account has been activated!
+
+To login, go to $FRONTEND_URL and click on the 'Log In' link in the upper-right hand part of the page. Then enter your e-mail address ($email) and the password you selected when registering.
+
+Once logged in you may create as many project spaces as you need by clicking on the 'Create new project' link in the 'My Projects' section of the site. You can invite your collaborators to join your project once it is created. If you are a student, your advisor should be a member of all projects you create.
+
+For help with the site, read the FAQ section. If you need further assistance, please use our Contact Us form on the website for any questions or suggestions. We will be happy to help you in any way!
+
+Regards,
+The MorphoBank Project
+
