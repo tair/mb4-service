@@ -26,6 +26,7 @@ import { duplicationRequestRouter } from './routes/duplication-request-route.js'
 import { institutionRequestRouter } from './routes/institution-request-route.js'
 import { curatorInstitutionRouter } from './routes/curator-institution-route.js'
 import apiServiceRouter from './routes/api-service-route.js'
+import adminMaintenanceRouter from './routes/admin-maintenance-route.js'
 import { trackSession } from './lib/session-middleware.js'
 import { gracefulShutdown } from './controllers/analytics-controller.js'
 import loggingService from './services/logging-service.js'
@@ -99,6 +100,7 @@ app.use('/duplication-requests', duplicationRequestRouter)
 app.use('/curation-requests/institutions', institutionRequestRouter)
 app.use('/curator/institutions', curatorInstitutionRouter)
 app.use('/service', apiServiceRouter)
+app.use('/admin/maintenance', adminMaintenanceRouter)
 
 // Initialize stats cache
 initializeCache().catch((error) => {
