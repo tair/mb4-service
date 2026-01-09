@@ -76,12 +76,9 @@ router.get('/', async (req, res) => {
       }
     }
 
-    // Calculate next maintenance date (second Friday of next month)
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-    const day = nextMonth.getDay()
-    const daysUntilFriday = (5 - day + 7) % 7
-    const secondFriday = new Date(nextMonth)
-    secondFriday.setDate(secondFriday.getDate() + daysUntilFriday + 7)
+    // Simple maintenance mode check - just enabled/disabled with message
+    const maintenanceEnabled =
+      vars.maintenance_mode === '1' || vars.maintenance_mode === 1
 
     res.json({
       featuredProjects: featuredProjects.map((fp) => ({
@@ -120,10 +117,8 @@ router.get('/', async (req, res) => {
         link: p.link,
       })),
       maintenanceStatus: {
-        enabled: vars.maintenance_mode === '1',
+        enabled: maintenanceEnabled,
         message: vars.maintenance_message || '',
-        nextDate: secondFriday.toISOString(),
-        scheduleEnabled: vars.maintenance_mode_schedule_enabled === 1,
       },
     })
   } catch (error) {
