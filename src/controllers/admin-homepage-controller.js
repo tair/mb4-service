@@ -125,7 +125,7 @@ export async function createTool(req, res) {
     const tool = await models.Tool.create({
       title,
       description,
-      link: link || null,
+      link: link || '',
       media: null, // Will be updated after image upload
     }, { user: req.user })
 
@@ -183,7 +183,7 @@ export async function updateTool(req, res) {
     // Update fields
     if (title !== undefined) tool.title = title
     if (description !== undefined) tool.description = description
-    if (link !== undefined) tool.link = link || null
+    if ('link' in req.body) tool.link = link || ''
 
     // Process and upload new image if provided
     if (file) {
