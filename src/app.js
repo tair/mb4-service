@@ -28,6 +28,7 @@ import { curatorInstitutionRouter } from './routes/curator-institution-route.js'
 import apiServiceRouter from './routes/api-service-route.js'
 import adminMaintenanceRouter from './routes/admin-maintenance-route.js'
 import adminUsersRouter from './routes/admin-users-route.js'
+import adminHomepageRouter from './routes/admin-homepage-route.js'
 import { trackSession } from './lib/session-middleware.js'
 import { gracefulShutdown } from './controllers/analytics-controller.js'
 import loggingService from './services/logging-service.js'
@@ -103,6 +104,7 @@ app.use('/curator/institutions', curatorInstitutionRouter)
 app.use('/service', apiServiceRouter)
 app.use('/admin/maintenance', adminMaintenanceRouter)
 app.use('/admin/users', adminUsersRouter)
+app.use('/admin/homepage', adminHomepageRouter)
 
 // Initialize stats cache
 initializeCache().catch((error) => {

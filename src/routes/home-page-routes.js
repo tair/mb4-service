@@ -9,19 +9,26 @@ router.get('/', async (req, res) => {
   try {
     const now = new Date()
 
-    // Get featured projects
-    const featuredProjects = await models.Project.findAll({
+    // Get featured projects from hp_featured_projects table (randomly select 5)
+    const featuredProjects = await models.FeaturedProject.findAll({
       include: [
         {
-          model: models.MediaFile,
-          as: 'media_files',
-          required: false,
-          attributes: ['media_id', 'media_type', 'media'],
+          model: models.Project,
+          as: 'project',
+          required: true,
+          where: {
+            published: true,
+          },
+          include: [
+            {
+              model: models.MediaFile,
+              as: 'media_files',
+              required: false,
+              attributes: ['media_id', 'media_type', 'media'],
+            },
+          ],
         },
       ],
-      where: {
-        published: true,
-      },
       order: literal('RAND()'),
       limit: 5,
     })
@@ -55,8 +62,8 @@ router.get('/', async (req, res) => {
       where: {
         featured: true,
       },
-      order: literal('RAND()'),
-      limit: 2,
+      order: [['press_id', 'DESC']],
+      limit: 10,
     })
 
     // Get maintenance mode status
@@ -82,11 +89,12 @@ router.get('/', async (req, res) => {
 
     res.json({
       featuredProjects: featuredProjects.map((fp) => ({
+        featured_project_id: fp.featured_project_id,
         project_id: fp.project_id,
-        name: fp.name,
-        description: fp.description,
-        media_id: fp.media_files?.[0]?.media_id,
-        media: fp.media_files?.[0]?.media,
+        name: fp.project?.name,
+        description: fp.description || fp.project?.description,
+        media_id: fp.project?.media_files?.[0]?.media_id,
+        media: fp.project?.media_files?.[0]?.media,
       })),
       matrixImages: matrixImages.map((mi) => ({
         image_id: mi.image_id,
