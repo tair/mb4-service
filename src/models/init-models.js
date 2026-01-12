@@ -59,6 +59,7 @@ import _MatrixImage from './matrix-image.js'
 import _Announcement from './announcement.js'
 import _Tool from './tool.js'
 import _Press from './press.js'
+import _FeaturedProject from './featured-project.js'
 import _CaApplicationVar from './ca-application-var.js'
 import sequelizeConn from '../util/db.js'
 import { logCellChange } from './hooks/cell-hooks.js'
@@ -171,6 +172,7 @@ function initModels(sequelizeConn) {
   const Announcement = _Announcement.init(sequelizeConn, DataTypes)
   const Tool = _Tool.init(sequelizeConn, DataTypes)
   const Press = _Press.init(sequelizeConn, DataTypes)
+  const FeaturedProject = _FeaturedProject.init(sequelizeConn, DataTypes)
   const CaApplicationVar = _CaApplicationVar.init(sequelizeConn, DataTypes)
 
   AnnotationEvent.belongsTo(Annotation, {
@@ -736,6 +738,15 @@ function initModels(sequelizeConn) {
     foreignKey: 'project_id',
   })
 
+  FeaturedProject.belongsTo(Project, {
+    as: 'project',
+    foreignKey: 'project_id',
+  })
+  Project.hasMany(FeaturedProject, {
+    as: 'featured_projects',
+    foreignKey: 'project_id',
+  })
+
   const cellTables = [
     Cell,
     CellNote,
@@ -847,6 +858,7 @@ function initModels(sequelizeConn) {
     Announcement,
     Tool,
     Press,
+    FeaturedProject,
     CaApplicationVar,
   }
 }

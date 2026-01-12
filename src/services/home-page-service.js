@@ -6,33 +6,43 @@ const {
   Press,
   CaApplicationVar,
   MatrixImage,
+  FeaturedProject,
 } = require('../models')
 const { Op } = require('sequelize')
 
 class HomePageService {
   async getFeaturedProjects() {
     try {
-      const featuredProjects = await Project.findAll({
+      // Query the hp_featured_projects table and join with projects (randomly select 5)
+      const featuredProjects = await FeaturedProject.findAll({
         include: [
           {
-            model: MediaFile,
-            required: false,
-            attributes: ['media_id', 'media_type', 'media'],
+            model: Project,
+            as: 'project',
+            required: true,
+            where: {
+              published: true,
+            },
+            include: [
+              {
+                model: MediaFile,
+                as: 'media_files',
+                required: false,
+                attributes: ['media_id', 'media_type', 'media'],
+              },
+            ],
           },
         ],
-        where: {
-          published: true,
-        },
-        order: Project.sequelize.random(),
+        order: FeaturedProject.sequelize.random(),
         limit: 5,
-        raw: true,
       })
 
-      return featuredProjects.map((project) => ({
-        project_id: project.project_id,
-        name: project.name,
-        description: project.description,
-        media: project['MediaFiles.media'] || null,
+      return featuredProjects.map((fp) => ({
+        featured_project_id: fp.featured_project_id,
+        project_id: fp.project_id,
+        name: fp.project?.name,
+        description: fp.description || fp.project?.description,
+        media: fp.project?.media_files?.[0]?.media || null,
       }))
     } catch (error) {
       console.error('Error fetching featured projects:', error)
@@ -112,8 +122,7 @@ class HomePageService {
         where: {
           featured: true,
         },
-        order: Press.sequelize.random(),
-        limit: 2,
+        order: [['press_id', 'DESC']],
       })
 
       return press.map((item) => ({
