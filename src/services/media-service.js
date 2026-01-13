@@ -522,7 +522,7 @@ export async function getMediaBySpecimen(projectId, specimenId, excludeMediaId =
   }
 
   const query = `
-    SELECT 
+    SELECT DISTINCT
       mf.media_id, mf.specimen_id, mf.view_id, mf.media,
       mf.is_copyrighted, mf.copyright_permission, mf.copyright_license, mf.copyright_info,
       mv.name AS view_name,

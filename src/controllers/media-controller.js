@@ -2531,7 +2531,8 @@ export async function applyCopyrightToMedia(req, res) {
       if (includeDocument) {
         // Get source document link
         const sourceDocLink = await models.MediaFilesXDocument.findOne({
-          where: { media_id: sourceMediaId }
+          where: { media_id: sourceMediaId },
+          transaction,
         })
 
         if (sourceDocLink) {
