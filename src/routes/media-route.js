@@ -43,6 +43,19 @@ mediaRouter.post(
 )
 mediaRouter.post('/:mediaId/citations/delete', controller.deleteCitations)
 
+// Document linking for copyright (media_files_x_documents)
+mediaRouter.get('/:mediaId/document', controller.getMediaDocument)
+mediaRouter.post('/:mediaId/document', controller.setMediaDocument)
+mediaRouter.delete('/:mediaId/document', controller.removeMediaDocument)
+
+// Bulk apply copyright - query related media
+mediaRouter.get('/:mediaId/related/by-specimen', controller.getRelatedMediaBySpecimen)
+mediaRouter.get('/:mediaId/related/by-citations', controller.getRelatedMediaByCitations)
+
+// Bulk apply copyright settings
+mediaRouter.post('/:mediaId/copyright/apply', controller.applyCopyrightToMedia)
+mediaRouter.post('/:mediaId/copyright-holder/apply', controller.applyCopyrightHolderToMedia)
+
 // This is a sub-route focused on /media/<media ID>/labels
 mediaRouter.use('/:mediaId/labels', mediaLabelsRouter)
 
