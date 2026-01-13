@@ -9,7 +9,7 @@ router.get('/', async (req, res) => {
   try {
     const now = new Date()
 
-    // Get featured projects from hp_featured_projects table (randomly select 5)
+    // Get all featured projects from hp_featured_projects table
     const featuredProjects = await models.FeaturedProject.findAll({
       include: [
         {
@@ -19,6 +19,7 @@ router.get('/', async (req, res) => {
           where: {
             published: true,
           },
+          attributes: ['project_id', 'name', 'description', 'exemplar_media_id'],
           include: [
             {
               model: models.MediaFile,
@@ -29,8 +30,7 @@ router.get('/', async (req, res) => {
           ],
         },
       ],
-      order: literal('RAND()'),
-      limit: 5,
+      order: [['featured_project_id', 'DESC']],
     })
 
     // Get matrix images
@@ -88,14 +88,25 @@ router.get('/', async (req, res) => {
       vars.maintenance_mode === '1' || vars.maintenance_mode === 1
 
     res.json({
-      featuredProjects: featuredProjects.map((fp) => ({
-        featured_project_id: fp.featured_project_id,
-        project_id: fp.project_id,
-        name: fp.project?.name,
-        description: fp.description || fp.project?.description,
-        media_id: fp.project?.media_files?.[0]?.media_id,
-        media: fp.project?.media_files?.[0]?.media,
-      })),
+      featuredProjects: featuredProjects.map((fp) => {
+        // Find the exemplar media file using the project's exemplar_media_id
+        const exemplarMediaId = fp.project?.exemplar_media_id
+        const exemplarMedia = exemplarMediaId
+          ? fp.project?.media_files?.find((m) => m.media_id === exemplarMediaId)
+          : null
+        // Fall back to first media file if exemplar not found
+        const mediaFile = exemplarMedia || fp.project?.media_files?.[0]
+
+        return {
+          featured_project_id: fp.featured_project_id,
+          project_id: fp.project_id,
+          name: fp.project?.name,
+          description: fp.description || fp.project?.description,
+          exemplar_media_id: exemplarMediaId,
+          media_id: mediaFile?.media_id,
+          media: mediaFile?.media,
+        }
+      }),
       matrixImages: matrixImages.map((mi) => ({
         image_id: mi.image_id,
         project_id: mi.project_id,
