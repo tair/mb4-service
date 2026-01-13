@@ -506,3 +506,101 @@ async function getPublishedDownloadsMap(projectId) {
   }
   return downloadMap
 }
+
+/**
+ * Get media files that share the same specimen as the given media.
+ * Used for bulk copyright apply feature.
+ * 
+ * @param {number} projectId - Project ID
+ * @param {number} specimenId - Specimen ID to search for
+ * @param {number} excludeMediaId - Media ID to exclude from results (the current media)
+ * @returns {Promise<Array>} Array of media files with same specimen
+ */
+export async function getMediaBySpecimen(projectId, specimenId, excludeMediaId = null) {
+  if (!specimenId) {
+    return []
+  }
+
+  const query = `
+    SELECT DISTINCT
+      mf.media_id, mf.specimen_id, mf.view_id, mf.media,
+      mf.is_copyrighted, mf.copyright_permission, mf.copyright_license, mf.copyright_info,
+      mv.name AS view_name,
+      s.institution_code, s.collection_code, s.catalog_number, s.reference_source,
+      t.genus, t.specific_epithet
+    FROM media_files mf
+    LEFT JOIN media_views mv ON mf.view_id = mv.view_id
+    LEFT JOIN specimens s ON mf.specimen_id = s.specimen_id
+    LEFT JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
+    LEFT JOIN taxa t ON t.taxon_id = ts.taxon_id
+    WHERE mf.project_id = ? 
+      AND mf.specimen_id = ?
+      ${excludeMediaId ? 'AND mf.media_id != ?' : ''}
+    ORDER BY mf.media_id
+  `
+  
+  const replacements = excludeMediaId 
+    ? [projectId, specimenId, excludeMediaId]
+    : [projectId, specimenId]
+
+  const [rows] = await sequelizeConn.query(query, { replacements })
+  return rows
+}
+
+/**
+ * Get media files that share bibliographic references with the given media.
+ * Used for bulk copyright apply feature.
+ * 
+ * @param {number} projectId - Project ID
+ * @param {number[]} referenceIds - Array of bibliographic reference IDs to search for
+ * @param {number} excludeMediaId - Media ID to exclude from results (the current media)
+ * @returns {Promise<Array>} Array of media files with same citations
+ */
+export async function getMediaByCitations(projectId, referenceIds, excludeMediaId = null) {
+  if (!referenceIds || referenceIds.length === 0) {
+    return []
+  }
+
+  const query = `
+    SELECT DISTINCT
+      mf.media_id, mf.specimen_id, mf.view_id, mf.media,
+      mf.is_copyrighted, mf.copyright_permission, mf.copyright_license, mf.copyright_info,
+      mv.name AS view_name,
+      s.institution_code, s.collection_code, s.catalog_number, s.reference_source,
+      t.genus, t.specific_epithet
+    FROM media_files mf
+    INNER JOIN media_files_x_bibliographic_references mxbr ON mf.media_id = mxbr.media_id
+    LEFT JOIN media_views mv ON mf.view_id = mv.view_id
+    LEFT JOIN specimens s ON mf.specimen_id = s.specimen_id
+    LEFT JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
+    LEFT JOIN taxa t ON t.taxon_id = ts.taxon_id
+    WHERE mf.project_id = ? 
+      AND mxbr.reference_id IN (?)
+      ${excludeMediaId ? 'AND mf.media_id != ?' : ''}
+    ORDER BY mf.media_id
+  `
+  
+  const replacements = excludeMediaId 
+    ? [projectId, referenceIds, excludeMediaId]
+    : [projectId, referenceIds]
+
+  const [rows] = await sequelizeConn.query(query, { replacements })
+  return rows
+}
+
+/**
+ * Get the citation (bibliographic reference) IDs for a media file.
+ * 
+ * @param {number} mediaId - Media ID
+ * @returns {Promise<number[]>} Array of reference IDs
+ */
+export async function getMediaCitationIds(mediaId) {
+  const [rows] = await sequelizeConn.query(
+    `
+    SELECT reference_id FROM media_files_x_bibliographic_references
+    WHERE media_id = ?
+    `,
+    { replacements: [mediaId] }
+  )
+  return rows.map(r => r.reference_id)
+}

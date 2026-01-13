@@ -2481,6 +2481,416 @@ export async function initiateStacksUpload(req, res) {
  * 
  * POST /projects/:projectId/media/stacks/:mediaId/complete
  */
+/**
+ * Apply full copyright settings from one media to multiple target media.
+ * POST /projects/:projectId/media/:mediaId/copyright/apply
+ * Body: { target_media_ids: number[], include_document: boolean }
+ */
+export async function applyCopyrightToMedia(req, res) {
+  const projectId = req.project.project_id
+  const sourceMediaId = req.params.mediaId
+  const targetMediaIds = req.body.target_media_ids
+  const includeDocument = req.body.include_document !== false // Default to true
+
+  if (!targetMediaIds || !Array.isArray(targetMediaIds) || targetMediaIds.length === 0) {
+    return res.status(400).json({ message: 'target_media_ids must be a non-empty array' })
+  }
+
+  try {
+    // Get source media
+    const sourceMedia = await models.MediaFile.findByPk(sourceMediaId)
+    if (!sourceMedia || sourceMedia.project_id != projectId) {
+      return res.status(404).json({ message: 'Source media not found' })
+    }
+
+    // Verify all target media are in the same project
+    const isInProject = await service.isMediaInProject(targetMediaIds, projectId)
+    if (!isInProject) {
+      return res.status(400).json({ message: 'Not all target media are in this project' })
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    try {
+      // Apply copyright settings to all target media
+      const updateValues = {
+        is_copyrighted: sourceMedia.is_copyrighted,
+        copyright_permission: sourceMedia.copyright_permission,
+        copyright_license: sourceMedia.copyright_license,
+        copyright_info: sourceMedia.copyright_info,
+      }
+
+      await models.MediaFile.update(updateValues, {
+        where: { media_id: targetMediaIds },
+        transaction,
+        individualHooks: true,
+        user: req.user,
+      })
+
+      // If includeDocument, also copy the document link
+      if (includeDocument) {
+        // Get source document link
+        const sourceDocLink = await models.MediaFilesXDocument.findOne({
+          where: { media_id: sourceMediaId },
+          transaction,
+        })
+
+        if (sourceDocLink) {
+          // Remove existing document links for target media
+          await models.MediaFilesXDocument.destroy({
+            where: { media_id: targetMediaIds },
+            transaction,
+            user: req.user,
+          })
+
+          // Create new document links for all target media
+          const newLinks = targetMediaIds.map(mediaId => ({
+            media_id: mediaId,
+            document_id: sourceDocLink.document_id,
+            user_id: req.user.user_id,
+          }))
+
+          await models.MediaFilesXDocument.bulkCreate(newLinks, {
+            transaction,
+            ignoreDuplicates: true,
+            user: req.user,
+          })
+        }
+      }
+
+      await transaction.commit()
+
+      res.status(200).json({
+        success: true,
+        updatedCount: targetMediaIds.length,
+        message: `Copyright settings applied to ${targetMediaIds.length} media files`,
+      })
+    } catch (error) {
+      await transaction.rollback()
+      throw error
+    }
+  } catch (error) {
+    console.error('Error applying copyright to media:', error)
+    res.status(500).json({ message: 'Error applying copyright settings' })
+  }
+}
+
+/**
+ * Apply only copyright holder (copyright_info) from one media to multiple target media.
+ * POST /projects/:projectId/media/:mediaId/copyright-holder/apply
+ * Body: { target_media_ids: number[] }
+ */
+export async function applyCopyrightHolderToMedia(req, res) {
+  const projectId = req.project.project_id
+  const sourceMediaId = req.params.mediaId
+  const targetMediaIds = req.body.target_media_ids
+
+  if (!targetMediaIds || !Array.isArray(targetMediaIds) || targetMediaIds.length === 0) {
+    return res.status(400).json({ message: 'target_media_ids must be a non-empty array' })
+  }
+
+  try {
+    // Get source media
+    const sourceMedia = await models.MediaFile.findByPk(sourceMediaId)
+    if (!sourceMedia || sourceMedia.project_id != projectId) {
+      return res.status(404).json({ message: 'Source media not found' })
+    }
+
+    if (!sourceMedia.copyright_info) {
+      return res.status(400).json({ message: 'Source media has no copyright holder information' })
+    }
+
+    // Verify all target media are in the same project
+    const isInProject = await service.isMediaInProject(targetMediaIds, projectId)
+    if (!isInProject) {
+      return res.status(400).json({ message: 'Not all target media are in this project' })
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    try {
+      // Apply only copyright holder to all target media
+      await models.MediaFile.update(
+        { copyright_info: sourceMedia.copyright_info },
+        {
+          where: { media_id: targetMediaIds },
+          transaction,
+          individualHooks: true,
+          user: req.user,
+        }
+      )
+
+      await transaction.commit()
+
+      res.status(200).json({
+        success: true,
+        updatedCount: targetMediaIds.length,
+        copyrightHolder: sourceMedia.copyright_info,
+        message: `Copyright holder applied to ${targetMediaIds.length} media files`,
+      })
+    } catch (error) {
+      await transaction.rollback()
+      throw error
+    }
+  } catch (error) {
+    console.error('Error applying copyright holder to media:', error)
+    res.status(500).json({ message: 'Error applying copyright holder' })
+  }
+}
+
+/**
+ * Get media files that share the same specimen as the current media.
+ * Used for bulk copyright apply feature.
+ * GET /projects/:projectId/media/:mediaId/related/by-specimen
+ */
+export async function getRelatedMediaBySpecimen(req, res) {
+  const projectId = req.project.project_id
+  const mediaId = req.params.mediaId
+
+  try {
+    // Get the current media to find its specimen_id
+    const media = await models.MediaFile.findByPk(mediaId)
+    if (!media || media.project_id != projectId) {
+      return res.status(404).json({ message: 'Media not found' })
+    }
+
+    if (!media.specimen_id) {
+      return res.status(200).json({ 
+        media: [],
+        message: 'This media is not associated with a specimen'
+      })
+    }
+
+    // Get related media by specimen
+    const relatedMedia = await service.getMediaBySpecimen(
+      projectId, 
+      media.specimen_id, 
+      mediaId
+    )
+
+    res.status(200).json({
+      media: relatedMedia.map(m => ({
+        media_id: m.media_id,
+        view_name: m.view_name,
+        thumbnail: m.media?.thumbnail,
+        is_copyrighted: m.is_copyrighted,
+        copyright_permission: m.copyright_permission,
+        copyright_license: m.copyright_license,
+        copyright_info: m.copyright_info,
+      })),
+      specimenId: media.specimen_id,
+      count: relatedMedia.length
+    })
+  } catch (error) {
+    console.error('Error getting related media by specimen:', error)
+    res.status(500).json({ message: 'Error fetching related media' })
+  }
+}
+
+/**
+ * Get media files that share bibliographic references with the current media.
+ * Used for bulk copyright apply feature.
+ * GET /projects/:projectId/media/:mediaId/related/by-citations
+ */
+export async function getRelatedMediaByCitations(req, res) {
+  const projectId = req.project.project_id
+  const mediaId = req.params.mediaId
+
+  try {
+    // Get the current media
+    const media = await models.MediaFile.findByPk(mediaId)
+    if (!media || media.project_id != projectId) {
+      return res.status(404).json({ message: 'Media not found' })
+    }
+
+    // Get the citation (reference) IDs for this media
+    const citationIds = await service.getMediaCitationIds(mediaId)
+
+    if (citationIds.length === 0) {
+      return res.status(200).json({ 
+        media: [],
+        message: 'This media has no bibliographic references'
+      })
+    }
+
+    // Get related media by citations
+    const relatedMedia = await service.getMediaByCitations(
+      projectId, 
+      citationIds, 
+      mediaId
+    )
+
+    res.status(200).json({
+      media: relatedMedia.map(m => ({
+        media_id: m.media_id,
+        view_name: m.view_name,
+        thumbnail: m.media?.thumbnail,
+        is_copyrighted: m.is_copyrighted,
+        copyright_permission: m.copyright_permission,
+        copyright_license: m.copyright_license,
+        copyright_info: m.copyright_info,
+      })),
+      citationIds: citationIds,
+      count: relatedMedia.length
+    })
+  } catch (error) {
+    console.error('Error getting related media by citations:', error)
+    res.status(500).json({ message: 'Error fetching related media' })
+  }
+}
+
+/**
+ * Get document linked to a media file for copyright purposes.
+ * GET /projects/:projectId/media/:mediaId/document
+ */
+export async function getMediaDocument(req, res) {
+  const projectId = req.project.project_id
+  const mediaId = req.params.mediaId
+
+  try {
+    // Verify media exists and belongs to project
+    const media = await models.MediaFile.findByPk(mediaId)
+    if (!media || media.project_id != projectId) {
+      return res.status(404).json({ message: 'Media not found' })
+    }
+
+    // Get linked document
+    const link = await models.MediaFilesXDocument.findOne({
+      where: { media_id: mediaId }
+    })
+
+    if (!link) {
+      return res.status(200).json({ document: null })
+    }
+
+    // Get document details
+    const document = await models.ProjectDocument.findByPk(link.document_id)
+
+    res.status(200).json({
+      document: document ? {
+        document_id: document.document_id,
+        title: document.title,
+        description: document.description,
+        filename: document.filename,
+        uploaded: document.uploaded,
+      } : null,
+      link_id: link.link_id,
+    })
+  } catch (error) {
+    console.error('Error getting media document:', error)
+    res.status(500).json({ message: 'Error fetching document link' })
+  }
+}
+
+/**
+ * Link a document to a media file for copyright purposes.
+ * POST /projects/:projectId/media/:mediaId/document
+ * Body: { document_id: number }
+ */
+export async function setMediaDocument(req, res) {
+  const projectId = req.project.project_id
+  const mediaId = req.params.mediaId
+  const documentId = req.body.document_id
+
+  if (!documentId) {
+    return res.status(400).json({ message: 'document_id is required' })
+  }
+
+  try {
+    // Verify media exists and belongs to project
+    const media = await models.MediaFile.findByPk(mediaId)
+    if (!media || media.project_id != projectId) {
+      return res.status(404).json({ message: 'Media not found' })
+    }
+
+    // Verify document exists and belongs to project
+    const document = await models.ProjectDocument.findByPk(documentId)
+    if (!document || document.project_id != projectId) {
+      return res.status(404).json({ message: 'Document not found in this project' })
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    try {
+      // Remove any existing link for this media
+      await models.MediaFilesXDocument.destroy({
+        where: { media_id: mediaId },
+        transaction,
+        user: req.user,
+      })
+
+      // Create new link
+      const link = await models.MediaFilesXDocument.create({
+        media_id: mediaId,
+        document_id: documentId,
+        user_id: req.user.user_id,
+      }, {
+        transaction,
+        user: req.user,
+      })
+
+      await transaction.commit()
+
+      res.status(200).json({
+        link_id: link.link_id,
+        document: {
+          document_id: document.document_id,
+          title: document.title,
+          description: document.description,
+          filename: document.filename,
+        },
+        message: 'Document linked to media successfully',
+      })
+    } catch (error) {
+      await transaction.rollback()
+      throw error
+    }
+  } catch (error) {
+    console.error('Error linking document to media:', error)
+    res.status(500).json({ message: 'Error linking document to media' })
+  }
+}
+
+/**
+ * Remove document link from a media file.
+ * DELETE /projects/:projectId/media/:mediaId/document
+ */
+export async function removeMediaDocument(req, res) {
+  const projectId = req.project.project_id
+  const mediaId = req.params.mediaId
+
+  try {
+    // Verify media exists and belongs to project
+    const media = await models.MediaFile.findByPk(mediaId)
+    if (!media || media.project_id != projectId) {
+      return res.status(404).json({ message: 'Media not found' })
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    try {
+      const deleted = await models.MediaFilesXDocument.destroy({
+        where: { media_id: mediaId },
+        transaction,
+        user: req.user,
+      })
+
+      await transaction.commit()
+
+      res.status(200).json({
+        removed: deleted > 0,
+        message: deleted > 0 ? 'Document link removed' : 'No document link found',
+      })
+    } catch (error) {
+      await transaction.rollback()
+      throw error
+    }
+  } catch (error) {
+    console.error('Error removing document link:', error)
+    res.status(500).json({ message: 'Error removing document link' })
+  }
+}
+
 export async function completeStacksUpload(req, res) {
   const projectId = req.params.projectId
   const mediaId = req.params.mediaId
