@@ -32,6 +32,16 @@ export default class UserAuthenticationHandler {
         throw error
       }
 
+      // Update last login timestamp
+      const currentTimestamp = Math.floor(Date.now() / 1000)
+      user.setVar('last_login', currentTimestamp)
+      try {
+        await user.save({ user: user })
+      } catch (saveError) {
+        console.error('Failed to update last_login timestamp:', saveError)
+        // Continue with login even if timestamp update fails
+      }
+
       // Get user access roles using the service
       const access = await getRoles(user.user_id)
 
