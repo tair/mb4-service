@@ -10,10 +10,12 @@ import {
 export async function getProjectSpecimens(projectId) {
   const [rows] = await sequelizeConn.query(
     `
-      SELECT s.*, ts.taxon_id
+      SELECT s.*, ts.taxon_id, COUNT(mf.media_id) as media_count
       FROM specimens AS s
       LEFT JOIN taxa_x_specimens AS ts ON s.specimen_id = ts.specimen_id
-      WHERE s.project_id = ?`,
+      LEFT JOIN media_files AS mf ON s.specimen_id = mf.specimen_id
+      WHERE s.project_id = ?
+      GROUP BY s.specimen_id, ts.taxon_id`,
     { replacements: [projectId] }
   )
   return rows
@@ -48,12 +50,16 @@ export async function getSpecimenDetails(projectId) {
   const [rows] = await sequelizeConn.query(
     `
       SELECT s.specimen_id, s.reference_source, s.institution_code, s.description,
-          s.collection_code, s.catalog_number, s.created_on, t.*, u.fname, u.lname
+          s.collection_code, s.catalog_number, s.created_on, t.*, u.fname, u.lname,
+          COUNT(DISTINCT mf.media_id) as media_count
       FROM specimens s
       LEFT JOIN ca_users u ON u.user_id = s.user_id
       INNER JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
       INNER JOIN taxa t ON t.taxon_id = ts.taxon_id
-      WHERE s.project_id = ?`,
+      LEFT JOIN media_files AS mf ON s.specimen_id = mf.specimen_id
+      WHERE s.project_id = ?
+      GROUP BY s.specimen_id, s.reference_source, s.institution_code, s.description,
+          s.collection_code, s.catalog_number, s.created_on, t.taxon_id, u.fname, u.lname`,
     { replacements: [projectId] }
   )
   const bibRefMap = await getBibliographicReferencesMap(projectId)
@@ -71,6 +77,7 @@ export async function getSpecimenDetails(projectId) {
       specimen_name: getSpecimenNameForPublishedProject(r),
       taxon_name: getSpecimenTaxonNameForPublishedProject(r),
       sort_fields: getSpecimenTaxaSortFieldValues(r),
+      media_count: parseInt(r.media_count) || 0,
     }
     if (hitMap[r.specimen_id]) {
       obj['hits'] = hitMap[r.specimen_id]
@@ -91,11 +98,15 @@ export async function getUnidentifiedSpecimenDetails(projectId) {
   const [rows] = await sequelizeConn.query(
     `
       SELECT s.specimen_id, s.reference_source, s.institution_code, s.description,
-          s.collection_code, s.catalog_number, s.created_on, u.fname, u.lname
+          s.collection_code, s.catalog_number, s.created_on, u.fname, u.lname,
+          COUNT(DISTINCT mf.media_id) as media_count
       FROM specimens s
       LEFT JOIN ca_users u ON u.user_id = s.user_id
       LEFT JOIN taxa_x_specimens ts ON s.specimen_id = ts.specimen_id
+      LEFT JOIN media_files AS mf ON s.specimen_id = mf.specimen_id
       WHERE ts.specimen_id is null AND s.project_id = ?
+      GROUP BY s.specimen_id, s.reference_source, s.institution_code, s.description,
+          s.collection_code, s.catalog_number, s.created_on, u.fname, u.lname
       ORDER BY s.reference_source DESC, s.institution_code, s.collection_code, s.catalog_number;`,
     { replacements: [projectId] }
   )
@@ -104,6 +115,7 @@ export async function getUnidentifiedSpecimenDetails(projectId) {
   // biblicoreferences
   return rows.map((r) => {
     const obj = {
+      specimen_id: r.specimen_id, // need specimen_id for navigation link
       reference_source: getReferenceSourceText(r.reference_source),
       institution_code: r.institution_code,
       collection_code: r.collection_code,
@@ -111,6 +123,7 @@ export async function getUnidentifiedSpecimenDetails(projectId) {
       created_on: r.created_on,
       user_name: User.getName(r.fname, r.lname),
       specimen_name: getSpecimenNameForPublishedProject(r),
+      media_count: parseInt(r.media_count) || 0,
     }
     if (hitMap[r.specimen_id]) {
       obj['hits'] = r.specimen_id

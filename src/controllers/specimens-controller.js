@@ -585,5 +585,6 @@ function convertSpecimenResponse(specimen, taxonId) {
     reference_source: parseInt(specimen.reference_source),
     uuid: specimen.uuid,
     occurrence_id: specimen.occurrence_id,
+    media_count: parseInt(specimen.media_count) || 0,
   }
 }
