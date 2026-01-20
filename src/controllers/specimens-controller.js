@@ -1,6 +1,7 @@
 import sequelizeConn from '../util/db.js'
 import * as specimenService from '../services/specimen-service.js'
 import * as taxaService from '../services/taxa-service.js'
+import * as mediaService from '../services/media-service.js'
 import { models } from '../models/init-models.js'
 import { getTaxonHash } from '../models/taxon.js'
 import { TAXA_FIELD_NAMES } from '../util/taxa.js'
@@ -567,6 +568,48 @@ async function getSpecimenIdsWithDuplicateTaxonId(specimen, taxonId) {
       specimen.collection_code,
       specimen.catalog_number
     )
+  }
+}
+
+/**
+ * Get the most recently assigned copyright from existing media for a specimen.
+ * Used for auto-populating copyright fields when uploading new media.
+ * GET /projects/:projectId/specimens/:specimenId/copyright
+ */
+export async function getSpecimenCopyright(req, res) {
+  const projectId = req.project.project_id
+  const specimenId = parseInt(req.params.specimenId)
+
+  if (!specimenId || isNaN(specimenId)) {
+    return res.status(400).json({ message: 'Invalid specimen ID' })
+  }
+
+  try {
+    // Verify the specimen belongs to this project
+    const specimen = await models.Specimen.findByPk(specimenId)
+    if (!specimen || specimen.project_id != projectId) {
+      return res.status(404).json({ message: 'Specimen not found' })
+    }
+
+    // Get the most recent copyright
+    const copyright = await mediaService.getMostRecentCopyrightForSpecimen(
+      projectId,
+      specimenId
+    )
+
+    if (!copyright) {
+      return res.status(200).json({
+        copyright: null,
+        message: 'No copyright information found for this specimen'
+      })
+    }
+
+    res.status(200).json({
+      copyright: copyright
+    })
+  } catch (error) {
+    console.error('Error getting specimen copyright:', error)
+    res.status(500).json({ message: 'Error fetching copyright information' })
   }
 }
 

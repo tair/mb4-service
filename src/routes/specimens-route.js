@@ -20,4 +20,7 @@ specimenRouter.post(
 )
 specimenRouter.post('/:specimenId/citations/delete', controller.deleteCitations)
 
+// Get most recent copyright for specimen (for auto-populate feature)
+specimenRouter.get('/:specimenId/copyright', controller.getSpecimenCopyright)
+
 export default specimenRouter
