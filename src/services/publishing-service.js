@@ -126,7 +126,7 @@ export async function getUnfinishedMedia(
       SELECT media_id FROM media_files 
       WHERE project_id = ? AND in_use_in_matrix = 1
     `
-    const [matrixMedia] = await sequelizeConn.query(matrixMediaQuery, {
+    const matrixMedia = await sequelizeConn.query(matrixMediaQuery, {
       replacements: [projectId],
       type: QueryTypes.SELECT,
     })
@@ -266,7 +266,7 @@ export async function updateMatrixMediaFlags(
     INNER JOIN matrices as m on cm.matrix_id = m.matrix_id 
     WHERE m.published = 0 AND m.project_id = ? AND mf.project_id = ?
   `
-  const [cellMedia] = await sequelizeConn.query(cellMediaQuery, {
+  const cellMedia = await sequelizeConn.query(cellMediaQuery, {
     replacements: [projectId, projectId],
     transaction,
     type: QueryTypes.SELECT,
@@ -283,7 +283,7 @@ export async function updateMatrixMediaFlags(
     INNER JOIN matrices as m on c.matrix_id = m.matrix_id 
     WHERE m.published = 0 AND m.project_id = ? AND mf.project_id = ?
   `
-  const [characterMedia] = await sequelizeConn.query(characterMediaQuery, {
+  const characterMedia = await sequelizeConn.query(characterMediaQuery, {
     replacements: [projectId, projectId],
     transaction,
     type: QueryTypes.SELECT,
@@ -300,7 +300,7 @@ export async function updateMatrixMediaFlags(
     INNER JOIN matrices as m on c.matrix_id = m.matrix_id 
     WHERE m.published = 0 AND m.project_id = ? AND mf.project_id = ?
   `
-  const [taxaMedia] = await sequelizeConn.query(taxaMediaQuery, {
+  const taxaMedia = await sequelizeConn.query(taxaMediaQuery, {
     replacements: [projectId, projectId],
     transaction,
     type: QueryTypes.SELECT,
