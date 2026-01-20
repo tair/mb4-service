@@ -604,3 +604,54 @@ export async function getMediaCitationIds(mediaId) {
   )
   return rows.map(r => r.reference_id)
 }
+
+/**
+ * Get the most recently assigned copyright from existing media for a specimen.
+ * Used for auto-populating copyright fields when uploading new media.
+ * 
+ * @param {number} projectId - Project ID
+ * @param {number} specimenId - Specimen ID
+ * @returns {Promise<Object|null>} Copyright data object or null if none found
+ */
+export async function getMostRecentCopyrightForSpecimen(projectId, specimenId) {
+  if (!specimenId) {
+    return null
+  }
+
+  const query = `
+    SELECT 
+      mf.media_id,
+      mf.is_copyrighted,
+      mf.copyright_permission,
+      mf.copyright_license,
+      mf.copyright_info,
+      mf.created_on,
+      mf.last_modified_on
+    FROM media_files mf
+    WHERE mf.project_id = ? 
+      AND mf.specimen_id = ?
+      AND mf.is_copyrighted = 1
+      AND (
+        mf.copyright_permission IS NOT NULL 
+        AND mf.copyright_permission != 0
+      )
+    ORDER BY COALESCE(mf.last_modified_on, mf.created_on) DESC, mf.media_id DESC
+    LIMIT 1
+  `
+  
+  const [rows] = await sequelizeConn.query(query, { 
+    replacements: [projectId, specimenId] 
+  })
+  
+  if (rows.length === 0) {
+    return null
+  }
+  
+  const media = rows[0]
+  return {
+    is_copyrighted: media.is_copyrighted,
+    copyright_permission: media.copyright_permission,
+    copyright_license: media.copyright_license,
+    copyright_info: media.copyright_info || ''
+  }
+}
