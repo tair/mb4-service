@@ -16,10 +16,11 @@ import { Multimap } from '../lib/multimap.js'
 export async function getTaxa(req, res) {
   const projectId = req.params.projectId
 
-  const [taxa, partitions, matrices] = await Promise.all([
+  const [taxa, partitions, matrices, mediaCountMap] = await Promise.all([
     taxaService.getTaxaInProject(projectId),
     partitionService.getPartitions(projectId),
     matrixService.getMatrices(projectId),
+    taxaService.getTaxaMediaCounts(projectId),
   ])
 
   const partitionIds = partitions.map((partition) => partition.partition_id)
@@ -38,6 +39,11 @@ export async function getTaxa(req, res) {
   for (const matrix of matrices) {
     const taxaIds = taxaMatrices.get(matrix.matrix_id) ?? []
     matrix.taxon_ids = taxaIds
+  }
+
+  // Add media counts to each taxon
+  for (const taxon of taxa) {
+    taxon.media_count = mediaCountMap[taxon.taxon_id] || 0
   }
 
   res.status(200).json({
