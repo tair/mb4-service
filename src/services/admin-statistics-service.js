@@ -34,17 +34,20 @@ export async function getSiteTotals() {
       sequelizeConn.query(`SELECT COUNT(*) as count FROM cells`)
     ])
 
+    const numProjects = parseInt(projectsResult[0][0]?.count) || 0
+    const numPublishedProjects = parseInt(publishedProjectsResult[0][0]?.count) || 0
+
     return {
-      numProjects: projectsResult[0][0]?.count || 0,
-      numPublishedProjects: publishedProjectsResult[0][0]?.count || 0,
-      numUnpublishedProjects: (projectsResult[0][0]?.count || 0) - (publishedProjectsResult[0][0]?.count || 0),
-      numUsers: usersResult[0][0]?.count || 0,
-      numMedia: mediaResult[0][0]?.count || 0,
-      numTaxa: taxaResult[0][0]?.count || 0,
-      numMatrices: matricesResult[0][0]?.count || 0,
-      numSpecimens: specimensResult[0][0]?.count || 0,
-      numCharacters: charactersResult[0][0]?.count || 0,
-      numCells: cellsResult[0][0]?.count || 0
+      numProjects,
+      numPublishedProjects,
+      numUnpublishedProjects: numProjects - numPublishedProjects,
+      numUsers: parseInt(usersResult[0][0]?.count) || 0,
+      numMedia: parseInt(mediaResult[0][0]?.count) || 0,
+      numTaxa: parseInt(taxaResult[0][0]?.count) || 0,
+      numMatrices: parseInt(matricesResult[0][0]?.count) || 0,
+      numSpecimens: parseInt(specimensResult[0][0]?.count) || 0,
+      numCharacters: parseInt(charactersResult[0][0]?.count) || 0,
+      numCells: parseInt(cellsResult[0][0]?.count) || 0
     }
   } catch (error) {
     console.error('Error in getSiteTotals:', error)
@@ -155,8 +158,8 @@ export async function getMemberProjectStats(startDate, endDate) {
     )
 
     return {
-      newMembers: newMembers[0]?.count || 0,
-      newProjects: newProjects[0]?.count || 0
+      newMembers: parseInt(newMembers[0]?.count) || 0,
+      newProjects: parseInt(newProjects[0]?.count) || 0
     }
   } catch (error) {
     console.error('Error in getMemberProjectStats:', error)
@@ -197,7 +200,7 @@ export async function getUploadStats(startDate, endDate) {
     )
 
     return {
-      numMediaUploaded: mediaUploaded[0]?.count || 0
+      numMediaUploaded: parseInt(mediaUploaded[0]?.count) || 0
     }
   } catch (error) {
     console.error('Error in getUploadStats:', error)
@@ -371,17 +374,20 @@ export async function getProjectStatsTotals() {
       sequelizeConn.query(`SELECT COUNT(*) as count FROM cipres_requests`)
     ])
 
+    const numProjects = parseInt(projectsResult[0][0]?.count) || 0
+    const numPublished = parseInt(publishedResult[0][0]?.count) || 0
+
     return {
-      numProjects: projectsResult[0][0]?.count || 0,
-      numPublished: publishedResult[0][0]?.count || 0,
-      numUnpublished: (projectsResult[0][0]?.count || 0) - (publishedResult[0][0]?.count || 0),
-      numMatrices: matricesResult[0][0]?.count || 0,
-      numTaxa: taxaResult[0][0]?.count || 0,
-      numMedia: mediaResult[0][0]?.count || 0,
-      numCharacters: charactersResult[0][0]?.count || 0,
-      numCells: cellsResult[0][0]?.count || 0,
-      numUniqueMembers: membersResult[0][0]?.count || 0,
-      numCipresRequests: cipresResult[0][0]?.count || 0
+      numProjects,
+      numPublished,
+      numUnpublished: numProjects - numPublished,
+      numMatrices: parseInt(matricesResult[0][0]?.count) || 0,
+      numTaxa: parseInt(taxaResult[0][0]?.count) || 0,
+      numMedia: parseInt(mediaResult[0][0]?.count) || 0,
+      numCharacters: parseInt(charactersResult[0][0]?.count) || 0,
+      numCells: parseInt(cellsResult[0][0]?.count) || 0,
+      numUniqueMembers: parseInt(membersResult[0][0]?.count) || 0,
+      numCipresRequests: parseInt(cipresResult[0][0]?.count) || 0
     }
   } catch (error) {
     console.error('Error in getProjectStatsTotals:', error)
@@ -413,7 +419,7 @@ export async function getProjectsListPaginated({ limit = 50, offset = 0, sort = 
       `SELECT COUNT(*) as total FROM projects p ${whereClause}`,
       { replacements }
     )
-    const totalCount = countResult[0]?.total || 0
+    const totalCount = parseInt(countResult[0]?.total) || 0
 
     // Get paginated projects with basic info
     const [projects] = await sequelizeConn.query(
@@ -449,7 +455,7 @@ export async function getProjectsListPaginated({ limit = 50, offset = 0, sort = 
        GROUP BY project_id`,
       { replacements: { projectIds } }
     )
-    const matrixMap = new Map(matrixCounts.map(m => [m.project_id, m.count]))
+    const matrixMap = new Map(matrixCounts.map(m => [m.project_id, parseInt(m.count) || 0]))
 
     // Get taxa counts
     const [taxaCounts] = await sequelizeConn.query(
@@ -459,7 +465,7 @@ export async function getProjectsListPaginated({ limit = 50, offset = 0, sort = 
        GROUP BY project_id`,
       { replacements: { projectIds } }
     )
-    const taxaMap = new Map(taxaCounts.map(t => [t.project_id, t.count]))
+    const taxaMap = new Map(taxaCounts.map(t => [t.project_id, parseInt(t.count) || 0]))
 
     // Get media counts
     const [mediaCounts] = await sequelizeConn.query(
@@ -469,7 +475,7 @@ export async function getProjectsListPaginated({ limit = 50, offset = 0, sort = 
        GROUP BY project_id`,
       { replacements: { projectIds } }
     )
-    const mediaMap = new Map(mediaCounts.map(m => [m.project_id, m.count]))
+    const mediaMap = new Map(mediaCounts.map(m => [m.project_id, parseInt(m.count) || 0]))
 
     // Get member counts
     const [memberCounts] = await sequelizeConn.query(
@@ -479,7 +485,7 @@ export async function getProjectsListPaginated({ limit = 50, offset = 0, sort = 
        GROUP BY project_id`,
       { replacements: { projectIds } }
     )
-    const memberMap = new Map(memberCounts.map(m => [m.project_id, m.count]))
+    const memberMap = new Map(memberCounts.map(m => [m.project_id, parseInt(m.count) || 0]))
 
     // Format results
     const formattedProjects = projects.map(project => ({

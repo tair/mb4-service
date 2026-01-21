@@ -8,6 +8,60 @@ import { parseDateRange } from '../util/date-parser.js'
  * All endpoints require admin authentication.
  */
 
+// Maximum allowed date range: 1 year (366 days)
+const MAX_RANGE_SECONDS = 366 * 24 * 60 * 60
+
+/**
+ * Validates and parses custom timestamp parameters.
+ * Returns an object with either valid timestamps or an error.
+ * 
+ * @param {string} start - Start timestamp string
+ * @param {string} end - End timestamp string
+ * @returns {{ valid: boolean, startTimestamp?: number, endTimestamp?: number, error?: string }}
+ */
+function validateCustomTimestamps(start, end) {
+  const startTimestamp = parseInt(start, 10)
+  const endTimestamp = parseInt(end, 10)
+  
+  // Check for NaN (non-numeric input)
+  if (isNaN(startTimestamp) || isNaN(endTimestamp)) {
+    return {
+      valid: false,
+      error: 'Invalid timestamp values. Start and end must be numeric Unix timestamps.'
+    }
+  }
+  
+  // Check for negative timestamps
+  if (startTimestamp < 0 || endTimestamp < 0) {
+    return {
+      valid: false,
+      error: 'Timestamps cannot be negative.'
+    }
+  }
+  
+  // Check for inverted range (start > end)
+  if (startTimestamp > endTimestamp) {
+    return {
+      valid: false,
+      error: 'Invalid date range: start timestamp cannot be greater than end timestamp.'
+    }
+  }
+  
+  // Check that range doesn't exceed maximum
+  if ((endTimestamp - startTimestamp) > MAX_RANGE_SECONDS) {
+    return {
+      valid: false,
+      error: 'Custom date range cannot exceed 1 year (366 days).'
+    }
+  }
+  
+  return {
+    valid: true,
+    startTimestamp,
+    endTimestamp
+  }
+}
+
 /**
  * Get site statistics with optional date range
  * GET /admin/statistics/site
@@ -27,18 +81,16 @@ export async function getSiteStatistics(req, res) {
     
     // Check if custom timestamps are provided directly
     if (start && end) {
-      startTimestamp = parseInt(start)
-      endTimestamp = parseInt(end)
-      displayText = 'Custom Range'
-      
-      // Validate custom range doesn't exceed 1 year (366 days)
-      const maxRangeSeconds = 366 * 24 * 60 * 60
-      if ((endTimestamp - startTimestamp) > maxRangeSeconds) {
+      const validation = validateCustomTimestamps(start, end)
+      if (!validation.valid) {
         return res.status(400).json({
           success: false,
-          message: 'Custom date range cannot exceed 1 year (366 days)'
+          message: validation.error
         })
       }
+      startTimestamp = validation.startTimestamp
+      endTimestamp = validation.endTimestamp
+      displayText = 'Custom Range'
     } else {
       // Parse natural language date range (defaults to "today")
       const dateRange = parseDateRange(daterange || 'today')
@@ -211,8 +263,15 @@ export async function getUploadInfo(req, res) {
     let startTimestamp, endTimestamp
     
     if (start && end) {
-      startTimestamp = parseInt(start)
-      endTimestamp = parseInt(end)
+      const validation = validateCustomTimestamps(start, end)
+      if (!validation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: validation.error
+        })
+      }
+      startTimestamp = validation.startTimestamp
+      endTimestamp = validation.endTimestamp
     } else {
       const dateRange = parseDateRange(daterange || 'today')
       startTimestamp = dateRange.start
@@ -255,8 +314,15 @@ export async function getRegistrationInfo(req, res) {
     let startTimestamp, endTimestamp
     
     if (start && end) {
-      startTimestamp = parseInt(start)
-      endTimestamp = parseInt(end)
+      const validation = validateCustomTimestamps(start, end)
+      if (!validation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: validation.error
+        })
+      }
+      startTimestamp = validation.startTimestamp
+      endTimestamp = validation.endTimestamp
     } else {
       const dateRange = parseDateRange(daterange || 'today')
       startTimestamp = dateRange.start
@@ -298,8 +364,15 @@ export async function getProjectPubInfo(req, res) {
     let startTimestamp, endTimestamp
     
     if (start && end) {
-      startTimestamp = parseInt(start)
-      endTimestamp = parseInt(end)
+      const validation = validateCustomTimestamps(start, end)
+      if (!validation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: validation.error
+        })
+      }
+      startTimestamp = validation.startTimestamp
+      endTimestamp = validation.endTimestamp
     } else {
       const dateRange = parseDateRange(daterange || 'today')
       startTimestamp = dateRange.start
