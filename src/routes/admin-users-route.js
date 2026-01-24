@@ -94,5 +94,20 @@ router.put('/:id/institutions', adminUsersController.updateUserInstitutions)
  */
 router.get('/roles/all', adminUsersController.getRoles)
 
+/**
+ * @route GET /admin/users/:id/usage
+ * @desc Get user's data usage across all tables (for merge preview)
+ * @access Admin only
+ */
+router.get('/:id/usage', adminUsersController.getUserUsage)
+
+/**
+ * @route POST /admin/users/merge
+ * @desc Merge one user's data into another user
+ * @body { sourceUserId: number, targetUserId: number }
+ * @access Admin only
+ */
+router.post('/merge', adminUsersController.mergeUsers)
+
 export default router
 
