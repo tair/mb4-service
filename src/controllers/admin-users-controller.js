@@ -917,10 +917,18 @@ export async function mergeUsers(req, res) {
       })
     }
 
+    // Prevent admin from using themselves as source when deleteSourceUser is enabled
+    if (deleteSourceUser && sourceId === req.user.user_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot merge from your own account when deleteSourceUser is enabled',
+      })
+    }
+
     // Verify both users exist
     const [sourceUser, targetUser] = await Promise.all([
       models.User.findByPk(sourceId, {
-        attributes: ['user_id', 'email', 'fname', 'lname', 'userclass'],
+        attributes: ['user_id', 'email', 'fname', 'lname', 'userclass', 'active'],
       }),
       models.User.findByPk(targetId, {
         attributes: ['user_id', 'email', 'fname', 'lname', 'userclass'],
@@ -1055,6 +1063,40 @@ export async function mergeUsers(req, res) {
                 duplicatesRemoved: deleted,
               })
             }
+          } else if (tableConfig.model === 'User' && tableConfig.column === 'advisor_user_id') {
+            // Special handling for advisor references to prevent self-referential advisor
+            // If target user had source user as their advisor, we should NOT make them their own advisor
+            const [updated] = await model.update(
+              { advisor_user_id: targetId },
+              {
+                where: {
+                  advisor_user_id: sourceId,
+                  user_id: { [Op.ne]: targetId }, // Exclude target user to prevent self-reference
+                },
+                transaction,
+              }
+            )
+
+            // Clear target user's advisor if it was the source user (prevent self-reference)
+            const [clearedSelfRef] = await model.update(
+              { advisor_user_id: null },
+              {
+                where: {
+                  user_id: targetId,
+                  advisor_user_id: sourceId,
+                },
+                transaction,
+              }
+            )
+
+            if (updated > 0 || clearedSelfRef > 0) {
+              mergeResults.push({
+                table: tableConfig.model,
+                description: tableConfig.description,
+                transferred: updated,
+                selfReferenceCleared: clearedSelfRef > 0,
+              })
+            }
           } else {
             // Standard update for other tables
             const [updated] = await model.update(
@@ -1074,8 +1116,8 @@ export async function mergeUsers(req, res) {
             }
           }
         } catch (e) {
-          console.warn(`Error updating ${tableConfig.model}:`, e.message)
-          // Continue with other tables
+          // Rethrow to rollback transaction - partial merges leave data inconsistent
+          throw new Error(`Failed to update ${tableConfig.model}: ${e.message}`)
         }
       }
 
@@ -1113,6 +1155,10 @@ export async function mergeUsers(req, res) {
     res.status(500).json({
       success: false,
       message: 'Failed to merge users: ' + error.message,
+      data: {
+        // Include any partial results for debugging (transaction was rolled back)
+        note: 'The merge operation was rolled back. No changes were made.',
+      },
     })
   }
 }
