@@ -32,6 +32,22 @@ export default class UserAuthenticationHandler {
         throw error
       }
 
+      // Check if user is deleted
+      if (user.userclass === 255) {
+        const error = new Error('This account has been deleted.')
+        error.statusCode = 403
+        error.response = { message: error.message }
+        throw error
+      }
+
+      // Check if user is active
+      if (user.active === 0 || user.active === false) {
+        const error = new Error('The user is inactive, please contact admin to reactivate the user.')
+        error.statusCode = 403
+        error.response = { message: error.message }
+        throw error
+      }
+
       // Update last login timestamp
       const currentTimestamp = Math.floor(Date.now() / 1000)
       user.setVar('last_login', currentTimestamp)

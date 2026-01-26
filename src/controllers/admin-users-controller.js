@@ -761,3 +761,405 @@ function getStatusLabel(active, userclass) {
   return 'inactive'
 }
 
+/**
+ * Tables that contain user_id foreign key reference
+ * Each entry contains: model name, column name referencing user
+ */
+const USER_LINKED_TABLES = [
+  { model: 'Project', column: 'user_id', description: 'Project Owner' },
+  { model: 'ProjectsXUser', column: 'user_id', description: 'Project Memberships' },
+  { model: 'MediaFile', column: 'user_id', description: 'Media Files' },
+  { model: 'Taxon', column: 'user_id', description: 'Taxa' },
+  { model: 'Matrix', column: 'user_id', description: 'Matrices' },
+  { model: 'Character', column: 'user_id', description: 'Characters' },
+  { model: 'CharacterState', column: 'user_id', description: 'Character States' },
+  { model: 'CharacterOrdering', column: 'user_id', description: 'Character Orderings' },
+  { model: 'CharacterRule', column: 'user_id', description: 'Character Rules' },
+  { model: 'CharacterRuleAction', column: 'user_id', description: 'Character Rule Actions' },
+  { model: 'CharactersXPartition', column: 'user_id', description: 'Characters in Partitions' },
+  { model: 'CharactersXMedium', column: 'user_id', description: 'Character Media Links' },
+  { model: 'CharactersXBibliographicReference', column: 'user_id', description: 'Character Bibliography Links' },
+  { model: 'Cell', column: 'user_id', description: 'Cells' },
+  { model: 'CellNote', column: 'user_id', description: 'Cell Notes' },
+  { model: 'CellsXMedium', column: 'user_id', description: 'Cell Media Links' },
+  { model: 'CellsXBibliographicReference', column: 'user_id', description: 'Cell Bibliography Links' },
+  { model: 'CellBatchLog', column: 'user_id', description: 'Cell Batch Logs' },
+  { model: 'BibliographicReference', column: 'user_id', description: 'Bibliographic References' },
+  { model: 'Specimen', column: 'user_id', description: 'Specimens' },
+  { model: 'SpecimensXBibliographicReference', column: 'user_id', description: 'Specimen Bibliography Links' },
+  { model: 'TaxaXMedium', column: 'user_id', description: 'Taxa Media Links' },
+  { model: 'TaxaXSpecimen', column: 'user_id', description: 'Taxa Specimen Links' },
+  { model: 'TaxaXPartition', column: 'user_id', description: 'Taxa in Partitions' },
+  { model: 'TaxaXBibliographicReference', column: 'user_id', description: 'Taxa Bibliography Links' },
+  { model: 'Folio', column: 'user_id', description: 'Folios' },
+  { model: 'Partition', column: 'user_id', description: 'Partitions' },
+  { model: 'MediaView', column: 'user_id', description: 'Media Views' },
+  { model: 'MediaLabel', column: 'user_id', description: 'Media Labels' },
+  { model: 'MediaFilesXDocument', column: 'user_id', description: 'Media Document Links' },
+  { model: 'MediaFilesXBibliographicReference', column: 'user_id', description: 'Media Bibliography Links' },
+  { model: 'MatrixTaxaOrder', column: 'user_id', description: 'Matrix Taxa Orders' },
+  { model: 'MatrixFileUpload', column: 'user_id', description: 'Matrix File Uploads' },
+  { model: 'ProjectDocument', column: 'user_id', description: 'Project Documents' },
+  { model: 'ProjectDocumentFolder', column: 'user_id', description: 'Project Document Folders' },
+  { model: 'ProjectGroup', column: 'user_id', description: 'Project Groups' },
+  { model: 'ProjectDuplicationRequest', column: 'user_id', description: 'Duplication Requests' },
+  { model: 'CurationRequest', column: 'user_id', description: 'Curation Requests' },
+  { model: 'CipresRequest', column: 'user_id', description: 'CIPRES Requests' },
+  { model: 'Institution', column: 'user_id', description: 'Institution Creator' },
+  { model: 'InstitutionsXUser', column: 'user_id', description: 'Institution Memberships' },
+  { model: 'UsersXRole', column: 'user_id', description: 'User Roles' },
+  { model: 'TaskQueue', column: 'user_id', description: 'Task Queue' },
+  { model: 'Annotation', column: 'user_id', description: 'Annotations' },
+  { model: 'AnnotationEvent', column: 'user_id', description: 'Annotation Events' },
+  { model: 'CuratorPotentialProject', column: 'approved_by_id', description: 'Curator Approvals' },
+  { model: 'User', column: 'advisor_user_id', description: 'Student Advisees' },
+]
+
+/**
+ * Get user's data usage across all tables
+ * GET /admin/users/:id/usage
+ */
+export async function getUserUsage(req, res) {
+  try {
+    const userId = parseInt(req.params.id)
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID',
+      })
+    }
+
+    const user = await models.User.findByPk(userId, {
+      attributes: ['user_id', 'email', 'fname', 'lname'],
+    })
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      })
+    }
+
+    const usage = []
+
+    for (const tableConfig of USER_LINKED_TABLES) {
+      const model = models[tableConfig.model]
+      if (!model) {
+        continue
+      }
+
+      try {
+        const count = await model.count({
+          where: { [tableConfig.column]: userId },
+        })
+
+        if (count > 0) {
+          usage.push({
+            table: tableConfig.model,
+            column: tableConfig.column,
+            description: tableConfig.description,
+            count,
+          })
+        }
+      } catch (e) {
+        console.warn(`Error counting ${tableConfig.model}:`, e.message)
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        user: {
+          user_id: user.user_id,
+          email: user.email,
+          name: `${user.fname} ${user.lname}`,
+        },
+        usage,
+        totalRecords: usage.reduce((sum, item) => sum + item.count, 0),
+      },
+    })
+  } catch (error) {
+    console.error('Error getting user usage:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get user usage',
+    })
+  }
+}
+
+/**
+ * Merge one user's data into another user
+ * POST /admin/users/merge
+ * 
+ * This transfers all database records from sourceUserId to targetUserId.
+ * The source user will have all their data transferred and can optionally be deleted.
+ */
+export async function mergeUsers(req, res) {
+  try {
+    const { sourceUserId, targetUserId, deleteSourceUser = false } = req.body
+
+    // Validate input
+    if (!sourceUserId || !targetUserId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both sourceUserId and targetUserId are required',
+      })
+    }
+
+    const sourceId = parseInt(sourceUserId)
+    const targetId = parseInt(targetUserId)
+
+    if (sourceId === targetId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot merge user into themselves',
+      })
+    }
+
+    // Prevent admin from using themselves as source when deleteSourceUser is enabled
+    if (deleteSourceUser && sourceId === req.user.user_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot merge from your own account when deleteSourceUser is enabled',
+      })
+    }
+
+    // Verify both users exist
+    const [sourceUser, targetUser] = await Promise.all([
+      models.User.findByPk(sourceId, {
+        attributes: ['user_id', 'email', 'fname', 'lname', 'userclass', 'active'],
+      }),
+      models.User.findByPk(targetId, {
+        attributes: ['user_id', 'email', 'fname', 'lname', 'userclass'],
+      }),
+    ])
+
+    if (!sourceUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'Source user not found',
+      })
+    }
+
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'Target user not found',
+      })
+    }
+
+    // Perform merge in a transaction
+    const mergeResults = []
+
+    await models.User.sequelize.transaction(async (transaction) => {
+      for (const tableConfig of USER_LINKED_TABLES) {
+        const model = models[tableConfig.model]
+        if (!model) {
+          continue
+        }
+
+        try {
+          // For tables with unique constraints involving user_id,
+          // we need to handle duplicates
+          if (tableConfig.model === 'ProjectsXUser') {
+            // Special handling for project memberships - avoid duplicate user in same project
+            const existingMemberships = await model.findAll({
+              where: { user_id: targetId },
+              attributes: ['project_id'],
+              transaction,
+            })
+            const existingProjectIds = existingMemberships.map(m => m.project_id)
+
+            // Update only memberships that won't cause duplicates
+            const [updated] = await model.update(
+              { user_id: targetId },
+              {
+                where: {
+                  user_id: sourceId,
+                  project_id: { [Op.notIn]: existingProjectIds },
+                },
+                transaction,
+              }
+            )
+
+            // Delete remaining source memberships (duplicates)
+            const deleted = await model.destroy({
+              where: { user_id: sourceId },
+              transaction,
+            })
+
+            if (updated > 0 || deleted > 0) {
+              mergeResults.push({
+                table: tableConfig.model,
+                description: tableConfig.description,
+                transferred: updated,
+                duplicatesRemoved: deleted,
+              })
+            }
+          } else if (tableConfig.model === 'InstitutionsXUser') {
+            // Special handling for institution memberships
+            const existingMemberships = await model.findAll({
+              where: { user_id: targetId },
+              attributes: ['institution_id'],
+              transaction,
+            })
+            const existingInstitutionIds = existingMemberships.map(m => m.institution_id)
+
+            const [updated] = await model.update(
+              { user_id: targetId },
+              {
+                where: {
+                  user_id: sourceId,
+                  institution_id: { [Op.notIn]: existingInstitutionIds },
+                },
+                transaction,
+              }
+            )
+
+            const deleted = await model.destroy({
+              where: { user_id: sourceId },
+              transaction,
+            })
+
+            if (updated > 0 || deleted > 0) {
+              mergeResults.push({
+                table: tableConfig.model,
+                description: tableConfig.description,
+                transferred: updated,
+                duplicatesRemoved: deleted,
+              })
+            }
+          } else if (tableConfig.model === 'UsersXRole') {
+            // Special handling for user roles
+            const existingRoles = await model.findAll({
+              where: { user_id: targetId },
+              attributes: ['role_id'],
+              transaction,
+            })
+            const existingRoleIds = existingRoles.map(r => r.role_id)
+
+            const [updated] = await model.update(
+              { user_id: targetId },
+              {
+                where: {
+                  user_id: sourceId,
+                  role_id: { [Op.notIn]: existingRoleIds },
+                },
+                transaction,
+              }
+            )
+
+            const deleted = await model.destroy({
+              where: { user_id: sourceId },
+              transaction,
+            })
+
+            if (updated > 0 || deleted > 0) {
+              mergeResults.push({
+                table: tableConfig.model,
+                description: tableConfig.description,
+                transferred: updated,
+                duplicatesRemoved: deleted,
+              })
+            }
+          } else if (tableConfig.model === 'User' && tableConfig.column === 'advisor_user_id') {
+            // Special handling for advisor references to prevent self-referential advisor
+            // If target user had source user as their advisor, we should NOT make them their own advisor
+            const [updated] = await model.update(
+              { advisor_user_id: targetId },
+              {
+                where: {
+                  advisor_user_id: sourceId,
+                  user_id: { [Op.ne]: targetId }, // Exclude target user to prevent self-reference
+                },
+                transaction,
+              }
+            )
+
+            // Clear target user's advisor if it was the source user (prevent self-reference)
+            const [clearedSelfRef] = await model.update(
+              { advisor_user_id: null },
+              {
+                where: {
+                  user_id: targetId,
+                  advisor_user_id: sourceId,
+                },
+                transaction,
+              }
+            )
+
+            if (updated > 0 || clearedSelfRef > 0) {
+              mergeResults.push({
+                table: tableConfig.model,
+                description: tableConfig.description,
+                transferred: updated,
+                selfReferenceCleared: clearedSelfRef > 0,
+              })
+            }
+          } else {
+            // Standard update for other tables
+            const [updated] = await model.update(
+              { [tableConfig.column]: targetId },
+              {
+                where: { [tableConfig.column]: sourceId },
+                transaction,
+              }
+            )
+
+            if (updated > 0) {
+              mergeResults.push({
+                table: tableConfig.model,
+                description: tableConfig.description,
+                transferred: updated,
+              })
+            }
+          }
+        } catch (e) {
+          // Rethrow to rollback transaction - partial merges leave data inconsistent
+          throw new Error(`Failed to update ${tableConfig.model}: ${e.message}`)
+        }
+      }
+
+      // Optionally delete/soft-delete the source user
+      if (deleteSourceUser) {
+        sourceUser.userclass = 255
+        sourceUser.active = 0
+        await sourceUser.save({ transaction, user: req.user })
+      }
+    })
+
+    const totalTransferred = mergeResults.reduce((sum, r) => sum + (r.transferred || 0), 0)
+
+    res.json({
+      success: true,
+      message: `Successfully merged user data. ${totalTransferred} records transferred.`,
+      data: {
+        sourceUser: {
+          user_id: sourceUser.user_id,
+          email: sourceUser.email,
+          name: `${sourceUser.fname} ${sourceUser.lname}`,
+          deleted: deleteSourceUser,
+        },
+        targetUser: {
+          user_id: targetUser.user_id,
+          email: targetUser.email,
+          name: `${targetUser.fname} ${targetUser.lname}`,
+        },
+        mergeResults,
+        totalTransferred,
+      },
+    })
+  } catch (error) {
+    console.error('Error merging users:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Failed to merge users: ' + error.message,
+      data: {
+        // Include any partial results for debugging (transaction was rolled back)
+        note: 'The merge operation was rolled back. No changes were made.',
+      },
+    })
+  }
+}
+
