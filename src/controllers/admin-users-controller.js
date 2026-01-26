@@ -753,7 +753,11 @@ export async function getUserStats(req, res) {
 }
 
 /**
- * Helper function to get status label
+ * Determine the user's status label from the active flag and userclass.
+ *
+ * @param {number} active - Active flag (1 for active, 0 for inactive).
+ * @param {number} userclass - Numeric user class (255 denotes deleted).
+ * @returns {string} `'deleted'` if `userclass` is 255, `'active'` if `active` equals 1, `'inactive'` otherwise.
  */
 function getStatusLabel(active, userclass) {
   if (userclass === 255) return 'deleted'
@@ -816,8 +820,11 @@ const USER_LINKED_TABLES = [
 ]
 
 /**
- * Get user's data usage across all tables
- * GET /admin/users/:id/usage
+ * Collect counts of records that reference a user across configured tables.
+ *
+ * Validates the route user ID and the user's existence, then computes per-table counts
+ * for tables listed in USER_LINKED_TABLES and returns the user metadata, an array of
+ * usage entries (table, column, description, count), and the totalRecords sum.
  */
 export async function getUserUsage(req, res) {
   try {
@@ -889,11 +896,16 @@ export async function getUserUsage(req, res) {
 }
 
 /**
- * Merge one user's data into another user
- * POST /admin/users/merge
- * 
- * This transfers all database records from sourceUserId to targetUserId.
- * The source user will have all their data transferred and can optionally be deleted.
+ * Merge all database records from a source user into a target user.
+ *
+ * Performs a transactional transfer of records that reference the source user's ID to the target user's ID across the configured USER_LINKED_TABLES.
+ * Special duplicate-aware handling is applied for ProjectsXUser, InstitutionsXUser, and UsersXRole to avoid creating duplicate memberships/roles.
+ * Optionally marks the source user as deleted (sets userclass to 255 and active to 0) when `deleteSourceUser` is true.
+ *
+ * Expects the request body to include `sourceUserId`, `targetUserId`, and optional `deleteSourceUser` (boolean).
+ * Sends HTTP 400 for missing/invalid input, 404 if either user is not found, and 500 for unexpected failures.
+ *
+ * On success, responds with JSON containing `mergeResults` (per-table transfer details), `totalTransferred`, and metadata for the source and target users.
  */
 export async function mergeUsers(req, res) {
   try {
@@ -1116,4 +1128,3 @@ export async function mergeUsers(req, res) {
     })
   }
 }
-
