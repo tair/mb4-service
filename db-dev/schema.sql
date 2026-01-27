@@ -849,6 +849,52 @@ CREATE TABLE `characters_x_partitions` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
+-- Table structure for table `composite_taxa`
+--
+
+DROP TABLE IF EXISTS `composite_taxa`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `composite_taxa` (
+  `composite_taxon_id` int unsigned NOT NULL AUTO_INCREMENT,
+  `taxon_id` int unsigned NOT NULL COMMENT 'The composite taxon row in the matrix',
+  `matrix_id` int unsigned NOT NULL,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'User-provided name for the composite taxon',
+  `user_id` int unsigned NOT NULL COMMENT 'Creator of the composite taxon',
+  `created_on` int unsigned NOT NULL,
+  `last_modified_on` int unsigned NOT NULL,
+  PRIMARY KEY (`composite_taxon_id`),
+  UNIQUE KEY `u_taxon_id` (`taxon_id`),
+  KEY `i_matrix_id` (`matrix_id`),
+  KEY `i_user_id` (`user_id`),
+  CONSTRAINT `fk_composite_taxa_taxon_id` FOREIGN KEY (`taxon_id`) REFERENCES `taxa` (`taxon_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_composite_taxa_matrix_id` FOREIGN KEY (`matrix_id`) REFERENCES `matrices` (`matrix_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_composite_taxa_user_id` FOREIGN KEY (`user_id`) REFERENCES `ca_users` (`user_id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `composite_taxa_sources`
+--
+
+DROP TABLE IF EXISTS `composite_taxa_sources`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `composite_taxa_sources` (
+  `id` int unsigned NOT NULL AUTO_INCREMENT,
+  `composite_taxon_id` int unsigned NOT NULL,
+  `source_taxon_id` int unsigned NOT NULL COMMENT 'Source taxon that contributes to the composite',
+  `position` smallint unsigned NOT NULL DEFAULT '0' COMMENT 'Ordering of source taxa',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `u_composite_source` (`composite_taxon_id`,`source_taxon_id`),
+  KEY `i_source_taxon_id` (`source_taxon_id`),
+  KEY `i_composite_position` (`composite_taxon_id`,`position`),
+  CONSTRAINT `fk_composite_taxa_sources_composite_taxon_id` FOREIGN KEY (`composite_taxon_id`) REFERENCES `composite_taxa` (`composite_taxon_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_composite_taxa_sources_source_taxon_id` FOREIGN KEY (`source_taxon_id`) REFERENCES `taxa` (`taxon_id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
 -- Table structure for table `cipres_requests`
 --
 

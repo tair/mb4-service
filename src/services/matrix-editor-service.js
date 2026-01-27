@@ -18,6 +18,7 @@ import { models } from '../models/init-models.js'
 import { UserError } from '../lib/user-errors.js'
 import { ForbiddenError } from '../lib/forbidden-error.js'
 import { TABLE_NUMBERS } from '../lib/table-number.js'
+import { findCompositeTaxaForSources } from '../models/hooks/cell-hooks.js'
 
 export default class MatrixEditorService {
   constructor(project, matrix, user, readonly) {
@@ -1114,11 +1115,13 @@ export default class MatrixEditorService {
         t.scientific_name_author, t.scientific_name_year,
         t.color, t.user_id taxon_user_id, t.notes, t.is_extinct,
         mto.notes matrix_notes, mto.position, mto.user_id, mto.group_id,
-        wu.fname, wu.lname, wu.email
+        wu.fname, wu.lname, wu.email,
+        ct.composite_taxon_id, ct.name as composite_name
       FROM taxa t
       INNER JOIN matrix_taxa_order AS mto ON mto.taxon_id = t.taxon_id
       INNER JOIN matrices AS m ON m.matrix_id = mto.matrix_id
       INNER JOIN ca_users AS wu ON wu.user_id = t.user_id
+      LEFT JOIN composite_taxa AS ct ON ct.taxon_id = t.taxon_id AND ct.matrix_id = m.matrix_id
       WHERE m.matrix_id = ? AND mto.matrix_id = m.matrix_id ${clause}
       ORDER BY mto.position`,
       { replacements: replacements }
@@ -1126,12 +1129,37 @@ export default class MatrixEditorService {
 
     const mediaList = await this.getMediaForTaxa(taxaIds)
 
+    // Get source taxa for composite taxa
+    const compositeTaxonIds = rows
+      .filter((r) => r.composite_taxon_id)
+      .map((r) => parseInt(r.composite_taxon_id))
+
+    const sourcesByComposite = new Map()
+    if (compositeTaxonIds.length > 0) {
+      const [sourceRows] = await sequelizeConn.query(
+        `
+        SELECT composite_taxon_id, source_taxon_id
+        FROM composite_taxa_sources
+        WHERE composite_taxon_id IN (?)
+        ORDER BY composite_taxon_id, position`,
+        { replacements: [compositeTaxonIds] }
+      )
+      for (const row of sourceRows) {
+        const ctId = parseInt(row.composite_taxon_id)
+        if (!sourcesByComposite.has(ctId)) {
+          sourcesByComposite.set(ctId, [])
+        }
+        sourcesByComposite.get(ctId).push(parseInt(row.source_taxon_id))
+      }
+    }
+
     const taxaList = []
     let position = 0
     for (const row of rows) {
       const taxonId = parseInt(row.taxon_id)
       const userId = parseInt(row.user_id)
       const groupId = parseInt(row.group_id)
+      const compositeTaxonId = row.composite_taxon_id ? parseInt(row.composite_taxon_id) : null
       const taxonName = getTaxonName(
         row,
         /* out= */ null,
@@ -1139,7 +1167,7 @@ export default class MatrixEditorService {
         /* showAuthor= */ false,
         /* skipSubgenus= */ true
       )
-      taxaList.push({
+      const taxonData = {
         id: taxonId,
         gid: groupId,
         uid: userId,
@@ -1148,7 +1176,16 @@ export default class MatrixEditorService {
         dn: taxonName,
         on: taxonName,
         m: mediaList.get(taxonId) ?? {},
-      })
+      }
+
+      // Add composite taxon info if this is a composite
+      if (compositeTaxonId) {
+        taxonData.ctid = compositeTaxonId
+        taxonData.ctn = row.composite_name
+        taxonData.cts = sourcesByComposite.get(compositeTaxonId) || []
+      }
+
+      taxaList.push(taxonData)
     }
     return taxaList
   }
@@ -3806,10 +3843,15 @@ export default class MatrixEditorService {
     }
 
     await transaction.commit()
+
+    // After committing, recalculate any affected composite taxa
+    const compositeCells = await this.recalculateAffectedCompositeTaxa(taxaIds)
+
     return {
       ts: time(),
       cells: await this.convertCellQueryToResults(cellChangesResults),
       deleted_cell_media: deletedCellMedia,
+      composite_cells: compositeCells,
     }
   }
 
@@ -3935,9 +3977,14 @@ export default class MatrixEditorService {
     }
 
     await transaction.commit()
+
+    // After committing, recalculate any affected composite taxa
+    const compositeCells = await this.recalculateAffectedCompositeTaxa(taxaIds)
+
     return {
       ts: time(),
       cells: await this.convertCellQueryToResults(cellChangesResults),
+      composite_cells: compositeCells,
     }
   }
 
@@ -7258,6 +7305,593 @@ export default class MatrixEditorService {
       media.set(mediaId, row.media)
     }
     return media
+  }
+
+  /**
+   * Get all composite taxa for this matrix
+   * @returns {Promise<Array>} List of composite taxa with their source taxa
+   */
+  async getCompositeTaxa() {
+    const [rows] = await sequelizeConn.query(
+      `
+      SELECT
+        ct.composite_taxon_id, ct.taxon_id, ct.name, ct.user_id, ct.created_on,
+        cts.source_taxon_id, cts.position
+      FROM composite_taxa ct
+      LEFT JOIN composite_taxa_sources cts ON cts.composite_taxon_id = ct.composite_taxon_id
+      WHERE ct.matrix_id = ?
+      ORDER BY ct.composite_taxon_id, cts.position`,
+      { replacements: [this.matrix.matrix_id] }
+    )
+
+    const compositeTaxaMap = new Map()
+    for (const row of rows) {
+      const compositeTaxonId = parseInt(row.composite_taxon_id)
+      if (!compositeTaxaMap.has(compositeTaxonId)) {
+        compositeTaxaMap.set(compositeTaxonId, {
+          composite_taxon_id: compositeTaxonId,
+          taxon_id: parseInt(row.taxon_id),
+          name: row.name,
+          user_id: parseInt(row.user_id),
+          created_on: parseInt(row.created_on),
+          source_taxa_ids: [],
+        })
+      }
+      if (row.source_taxon_id) {
+        compositeTaxaMap.get(compositeTaxonId).source_taxa_ids.push(parseInt(row.source_taxon_id))
+      }
+    }
+
+    return Array.from(compositeTaxaMap.values())
+  }
+
+  /**
+   * Create a composite taxon from multiple source taxa
+   * @param {number[]} sourceTaxaIds - Array of source taxon IDs to combine
+   * @param {string} genus - Genus name for the composite taxon (required)
+   * @param {string} specificEpithet - Species name (optional)
+   * @param {string} subspecificEpithet - Subspecies name (optional)
+   * @returns {Promise<Object>} The created composite taxon with calculated scores
+   */
+  async createCompositeTaxon(sourceTaxaIds, genus, specificEpithet = '', subspecificEpithet = '') {
+    await this.checkCanDo('addTaxon', 'You are not allowed to create composite taxa')
+
+    if (!sourceTaxaIds || sourceTaxaIds.length < 2) {
+      throw new UserError('At least two source taxa are required to create a composite')
+    }
+
+    if (!genus || genus.trim().length === 0) {
+      throw new UserError('A genus name is required for the composite taxon')
+    }
+
+    // Check if project is published - composite taxa only allowed in unpublished projects
+    if (this.project.published) {
+      throw new UserError('Composite taxa cannot be created in published projects')
+    }
+
+    // Verify all source taxa exist in this matrix
+    const [[{ count }]] = await sequelizeConn.query(
+      `
+      SELECT COUNT(*) AS count
+      FROM matrix_taxa_order
+      WHERE matrix_id = ? AND taxon_id IN (?)`,
+      { replacements: [this.matrix.matrix_id, sourceTaxaIds] }
+    )
+    if (parseInt(count) !== sourceTaxaIds.length) {
+      throw new UserError('One or more source taxa are not in this matrix')
+    }
+
+    // Check that none of the source taxa are already composite taxa
+    const [[{ compositeCount }]] = await sequelizeConn.query(
+      `
+      SELECT COUNT(*) AS compositeCount
+      FROM composite_taxa
+      WHERE matrix_id = ? AND taxon_id IN (?)`,
+      { replacements: [this.matrix.matrix_id, sourceTaxaIds] }
+    )
+    if (parseInt(compositeCount) > 0) {
+      throw new UserError('Source taxa cannot include existing composite taxa')
+    }
+
+    // Fetch source taxon names for the notes
+    const sourceTaxa = await models.Taxon.findAll({
+      where: { taxon_id: sourceTaxaIds },
+      attributes: ['taxon_id', 'genus', 'specific_epithet', 'subspecific_epithet'],
+    })
+    const sourceTaxonNames = sourceTaxa.map((t) => {
+      const parts = [t.genus, t.specific_epithet, t.subspecific_epithet].filter(Boolean)
+      return parts.join(' ') || `Taxon ${t.taxon_id}`
+    })
+
+    const transaction = await sequelizeConn.transaction()
+
+    try {
+      // Create a new taxon for the composite with proper taxonomic fields
+      const compositeTaxon = await models.Taxon.create(
+        {
+          genus: genus.trim(),
+          specific_epithet: specificEpithet.trim(),
+          subspecific_epithet: subspecificEpithet.trim(),
+          user_id: this.user.user_id,
+          project_id: this.project.project_id,
+          notes: `Composite taxon combining: ${sourceTaxonNames.join(', ')}`,
+        },
+        { user: this.user, transaction }
+      )
+
+      // Get max position in matrix
+      const [[{ maxPosition }]] = await sequelizeConn.query(
+        `SELECT MAX(position) AS maxPosition FROM matrix_taxa_order WHERE matrix_id = ?`,
+        { replacements: [this.matrix.matrix_id], transaction }
+      )
+
+      // Add the composite taxon to the matrix at the end
+      await models.MatrixTaxaOrder.create(
+        {
+          matrix_id: this.matrix.matrix_id,
+          taxon_id: compositeTaxon.taxon_id,
+          user_id: this.user.user_id,
+          position: (parseInt(maxPosition) || 0) + 1,
+        },
+        { user: this.user, transaction }
+      )
+
+      // Build display name from taxonomic fields
+      const displayNameParts = [genus.trim(), specificEpithet.trim(), subspecificEpithet.trim()].filter(Boolean)
+      const displayName = displayNameParts.join(' ')
+
+      // Create the composite_taxa record
+      const compositeRecord = await models.CompositeTaxon.create(
+        {
+          taxon_id: compositeTaxon.taxon_id,
+          matrix_id: this.matrix.matrix_id,
+          name: displayName,
+          user_id: this.user.user_id,
+        },
+        { user: this.user, transaction }
+      )
+
+      // Create the source links
+      for (let i = 0; i < sourceTaxaIds.length; i++) {
+        await models.CompositeTaxonSource.create(
+          {
+            composite_taxon_id: compositeRecord.composite_taxon_id,
+            source_taxon_id: sourceTaxaIds[i],
+            position: i + 1,
+          },
+          { user: this.user, transaction }
+        )
+      }
+
+      // Calculate and create the combined scores
+      const cells = await this.calculateCompositeTaxonScores(
+        compositeTaxon.taxon_id,
+        sourceTaxaIds,
+        transaction
+      )
+
+      await transaction.commit()
+
+      // Return the full taxon data needed by the frontend
+      const position = (parseInt(maxPosition) || 0) + 1
+      return {
+        composite_taxon_id: compositeRecord.composite_taxon_id,
+        taxon_id: compositeTaxon.taxon_id,
+        name: displayName,
+        source_taxa_ids: sourceTaxaIds,
+        cells: cells,
+        // Taxon data for frontend to add to the taxa list (matching getTaxa format)
+        taxon: {
+          id: compositeTaxon.taxon_id,
+          gid: 0,  // no group restriction
+          uid: this.user.user_id,
+          r: position,  // row/position number
+          n: `Composite taxon combining: ${sourceTaxonNames.join(', ')}`,  // notes
+          dn: displayName,  // display name
+          on: displayName,  // original name
+          m: {},  // no media
+          ctid: compositeRecord.composite_taxon_id,  // composite taxon id
+          ctn: displayName,  // composite name
+          cts: sourceTaxaIds,  // source taxa ids
+        },
+      }
+    } catch (error) {
+      await transaction.rollback()
+      throw error
+    }
+  }
+
+  /**
+   * Calculate and create combined scores for a composite taxon
+   * @param {number} compositeTaxonId - The taxon_id of the composite taxon
+   * @param {number[]} sourceTaxaIds - Array of source taxon IDs
+   * @param {Transaction} transaction - Database transaction
+   * @returns {Promise<Array>} Array of created cell records
+   */
+  async calculateCompositeTaxonScores(compositeTaxonId, sourceTaxaIds, transaction) {
+    const numSourceTaxa = sourceTaxaIds.length
+
+    // Get all cells for source taxa in this matrix
+    const [sourceCells] = await sequelizeConn.query(
+      `
+      SELECT
+        c.taxon_id, c.character_id, c.state_id, c.is_npa, c.is_uncertain,
+        c.start_value, c.end_value, ch.type as character_type
+      FROM cells c
+      INNER JOIN characters ch ON ch.character_id = c.character_id
+      WHERE c.matrix_id = ? AND c.taxon_id IN (?)
+      ORDER BY c.character_id, c.taxon_id`,
+      { replacements: [this.matrix.matrix_id, sourceTaxaIds], transaction }
+    )
+
+    // Get all characters in this matrix to check for missing scores
+    const [allCharacters] = await sequelizeConn.query(
+      `
+      SELECT ch.character_id, ch.type as character_type
+      FROM characters ch
+      INNER JOIN matrix_character_order mco ON mco.character_id = ch.character_id
+      WHERE mco.matrix_id = ?`,
+      { replacements: [this.matrix.matrix_id], transaction }
+    )
+
+    // Initialize all characters - we need to track which taxa have scores for each
+    const cellsByCharacter = new Map()
+    for (const char of allCharacters) {
+      const characterId = parseInt(char.character_id)
+      cellsByCharacter.set(characterId, {
+        states: new Set(),
+        isNpa: false,
+        hasScores: false,
+        characterType: char.character_type,
+        startValues: [],
+        endValues: [],
+        taxaWithScores: new Set(), // Track which source taxa have scores
+      })
+    }
+
+    // Group cells by character_id and track which taxa have scores
+    for (const cell of sourceCells) {
+      const characterId = parseInt(cell.character_id)
+      const taxonId = parseInt(cell.taxon_id)
+      
+      if (!cellsByCharacter.has(characterId)) {
+        continue // Character not in matrix order, skip
+      }
+      
+      const charData = cellsByCharacter.get(characterId)
+      charData.taxaWithScores.add(taxonId)
+
+      if (cell.is_npa) {
+        charData.isNpa = true
+      }
+
+      // Handle continuous characters
+      if (cell.character_type > 0) {
+        if (cell.start_value !== null) {
+          charData.startValues.push(parseFloat(cell.start_value))
+          charData.hasScores = true
+        }
+        if (cell.end_value !== null) {
+          charData.endValues.push(parseFloat(cell.end_value))
+        }
+      } else {
+        // Discrete character - collect all states
+        if (cell.state_id !== null) {
+          charData.states.add(parseInt(cell.state_id))
+          charData.hasScores = true
+        } else if (!cell.is_npa) {
+          // state_id is null and not NPA means inapplicable (-)
+          charData.states.add(0) // 0 represents inapplicable
+          charData.hasScores = true
+        }
+      }
+    }
+
+    // Create combined cells for the composite taxon
+    const createdCells = []
+    for (const [characterId, charData] of cellsByCharacter) {
+      // Check if some source taxa are missing scores (have "?")
+      const hasPartialUncertainty = charData.taxaWithScores.size < numSourceTaxa && charData.taxaWithScores.size > 0
+
+      if (!charData.hasScores && !charData.isNpa) {
+        // All sources are unscored (?) - leave composite unscored
+        continue
+      }
+
+      if (charData.characterType > 0) {
+        // Continuous character - use min start and max end
+        if (charData.startValues.length > 0) {
+          const minStart = Math.min(...charData.startValues)
+          const maxEnd = charData.endValues.length > 0
+            ? Math.max(...charData.endValues)
+            : Math.max(...charData.startValues)
+
+          const cell = await models.Cell.create(
+            {
+              matrix_id: this.matrix.matrix_id,
+              taxon_id: compositeTaxonId,
+              character_id: characterId,
+              user_id: this.user.user_id,
+              state_id: null,
+              is_npa: 0,
+              is_uncertain: hasPartialUncertainty ? 1 : 0,
+              start_value: minStart,
+              end_value: maxEnd,
+            },
+            { user: this.user, transaction }
+          )
+          createdCells.push(cell)
+        }
+      } else {
+        // Discrete character - create polymorphic score with all unique states
+        const states = Array.from(charData.states)
+
+        if (states.length === 0 && charData.isNpa) {
+          // Only NPA scores - create NPA cell
+          const cell = await models.Cell.create(
+            {
+              matrix_id: this.matrix.matrix_id,
+              taxon_id: compositeTaxonId,
+              character_id: characterId,
+              user_id: this.user.user_id,
+              state_id: null,
+              is_npa: 1,
+              is_uncertain: hasPartialUncertainty ? 1 : 0,
+            },
+            { user: this.user, transaction }
+          )
+          createdCells.push(cell)
+        } else {
+          // Create a cell for each unique state (polymorphic)
+          // Set is_uncertain on all cells if some sources are unscored
+          for (const stateId of states) {
+            const cell = await models.Cell.create(
+              {
+                matrix_id: this.matrix.matrix_id,
+                taxon_id: compositeTaxonId,
+                character_id: characterId,
+                user_id: this.user.user_id,
+                state_id: stateId > 0 ? stateId : null, // 0 means inapplicable (null state_id)
+                is_npa: 0,
+                is_uncertain: hasPartialUncertainty ? 1 : 0,
+              },
+              { user: this.user, transaction }
+            )
+            createdCells.push(cell)
+          }
+        }
+      }
+    }
+
+    return await this.convertCellQueryToResults(createdCells)
+  }
+
+  /**
+   * Recalculate scores for a composite taxon based on its source taxa
+   * Called when source taxa scores change
+   * @param {number} compositeTaxonId - The composite_taxon_id to recalculate
+   * @returns {Promise<Object>} Updated cells
+   */
+  async recalculateCompositeTaxonScores(compositeTaxonId) {
+    const compositeRecord = await models.CompositeTaxon.findByPk(compositeTaxonId, {
+      include: [{ model: models.CompositeTaxonSource, as: 'sources' }],
+    })
+
+    if (!compositeRecord) {
+      throw new UserError('Composite taxon not found')
+    }
+
+    if (compositeRecord.matrix_id !== this.matrix.matrix_id) {
+      throw new UserError('Composite taxon does not belong to this matrix')
+    }
+
+    const sourceTaxaIds = compositeRecord.sources.map((s) => s.source_taxon_id)
+    const taxonId = compositeRecord.taxon_id
+
+    const transaction = await sequelizeConn.transaction()
+
+    try {
+      // Delete existing cells for the composite taxon
+      await models.Cell.destroy({
+        where: {
+          matrix_id: this.matrix.matrix_id,
+          taxon_id: taxonId,
+        },
+        transaction,
+        individualHooks: true,
+        user: this.user,
+      })
+
+      // Recalculate scores
+      const cells = await this.calculateCompositeTaxonScores(
+        taxonId,
+        sourceTaxaIds,
+        transaction
+      )
+
+      // Update last_modified_on
+      compositeRecord.last_modified_on = time()
+      await compositeRecord.save({ transaction })
+
+      await transaction.commit()
+
+      return {
+        composite_taxon_id: compositeTaxonId,
+        taxon_id: taxonId,
+        cells: cells,
+      }
+    } catch (error) {
+      await transaction.rollback()
+      throw error
+    }
+  }
+
+  /**
+   * Recalculate all composite taxa affected by changes to the given source taxa
+   * This should be called after cell changes to update composite taxa scores
+   * @param {number[]} sourceTaxaIds - Array of source taxon IDs that were modified
+   * @param {Transaction} transaction - Database transaction (optional, will create new one if not provided)
+   * @returns {Promise<Array>} Array of updated composite cells
+   */
+  async recalculateAffectedCompositeTaxa(sourceTaxaIds, transaction = null) {
+    // Find all composite taxa that use any of these source taxa
+    const affectedComposites = await findCompositeTaxaForSources(
+      sourceTaxaIds,
+      this.matrix.matrix_id,
+      transaction
+    )
+
+    if (affectedComposites.length === 0) {
+      return []
+    }
+
+    const allUpdatedCells = []
+    const shouldCommit = !transaction
+    const tx = transaction || await sequelizeConn.transaction()
+
+    try {
+      for (const composite of affectedComposites) {
+        // Get the source taxa for this composite
+        const [sourceRows] = await sequelizeConn.query(
+          `SELECT source_taxon_id FROM composite_taxa_sources WHERE composite_taxon_id = ? ORDER BY position`,
+          { replacements: [composite.compositeTaxonId], transaction: tx }
+        )
+        const compositeSources = sourceRows.map(r => parseInt(r.source_taxon_id))
+
+        // Delete existing cells for the composite taxon
+        await models.Cell.destroy({
+          where: {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: composite.compositeTaxonRowId,
+          },
+          transaction: tx,
+          individualHooks: false, // Don't trigger hooks to avoid infinite loops
+          user: this.user,
+        })
+
+        // Recalculate scores
+        const cells = await this.calculateCompositeTaxonScores(
+          composite.compositeTaxonRowId,
+          compositeSources,
+          tx
+        )
+
+        allUpdatedCells.push(...cells)
+
+        // Update last_modified_on
+        await models.CompositeTaxon.update(
+          { last_modified_on: time() },
+          { where: { composite_taxon_id: composite.compositeTaxonId }, transaction: tx }
+        )
+      }
+
+      if (shouldCommit) {
+        await tx.commit()
+      }
+
+      return allUpdatedCells
+    } catch (error) {
+      if (shouldCommit) {
+        await tx.rollback()
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Delete a composite taxon
+   * @param {number} compositeTaxonId - The composite_taxon_id to delete
+   * @returns {Promise<Object>} Deletion result
+   */
+  async deleteCompositeTaxon(compositeTaxonId) {
+    await this.checkCanDo('addTaxon', 'You are not allowed to delete composite taxa')
+
+    const compositeRecord = await models.CompositeTaxon.findByPk(compositeTaxonId)
+
+    if (!compositeRecord) {
+      throw new UserError('Composite taxon not found')
+    }
+
+    if (compositeRecord.matrix_id !== this.matrix.matrix_id) {
+      throw new UserError('Composite taxon does not belong to this matrix')
+    }
+
+    const taxonId = compositeRecord.taxon_id
+
+    const transaction = await sequelizeConn.transaction()
+
+    try {
+      // Delete cells for the composite taxon
+      await models.Cell.destroy({
+        where: {
+          matrix_id: this.matrix.matrix_id,
+          taxon_id: taxonId,
+        },
+        transaction,
+        individualHooks: true,
+        user: this.user,
+      })
+
+      // Delete from matrix_taxa_order
+      await models.MatrixTaxaOrder.destroy({
+        where: {
+          matrix_id: this.matrix.matrix_id,
+          taxon_id: taxonId,
+        },
+        transaction,
+        individualHooks: true,
+        user: this.user,
+      })
+
+      // Delete composite_taxa_sources (cascade should handle this, but be explicit)
+      await models.CompositeTaxonSource.destroy({
+        where: { composite_taxon_id: compositeTaxonId },
+        transaction,
+      })
+
+      // Delete composite_taxa record
+      await compositeRecord.destroy({ transaction, user: this.user })
+
+      // Delete the taxon itself
+      await models.Taxon.destroy({
+        where: { taxon_id: taxonId },
+        transaction,
+        individualHooks: true,
+        user: this.user,
+      })
+
+      await transaction.commit()
+
+      return {
+        deleted: true,
+        composite_taxon_id: compositeTaxonId,
+        taxon_id: taxonId,
+      }
+    } catch (error) {
+      await transaction.rollback()
+      throw error
+    }
+  }
+
+  /**
+   * Get composite taxa that use a specific taxon as a source
+   * @param {number} sourceTaxonId - The source taxon ID to check
+   * @returns {Promise<Array>} List of composite taxa IDs that use this source
+   */
+  async getCompositeTaxaForSource(sourceTaxonId) {
+    const [rows] = await sequelizeConn.query(
+      `
+      SELECT ct.composite_taxon_id, ct.taxon_id
+      FROM composite_taxa ct
+      INNER JOIN composite_taxa_sources cts ON cts.composite_taxon_id = ct.composite_taxon_id
+      WHERE ct.matrix_id = ? AND cts.source_taxon_id = ?`,
+      { replacements: [this.matrix.matrix_id, sourceTaxonId] }
+    )
+
+    return rows.map((row) => ({
+      composite_taxon_id: parseInt(row.composite_taxon_id),
+      taxon_id: parseInt(row.taxon_id),
+    }))
   }
 }
 

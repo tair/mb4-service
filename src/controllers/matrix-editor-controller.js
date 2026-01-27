@@ -856,6 +856,44 @@ function sentSyncEventToClients(matrixId, user) {
     .forEach((client) => client.response.write(response))
 }
 
+// Composite Taxa endpoints
+export async function getCompositeTaxa(req, res) {
+  await applyMatrix(req, res, (service) => service.getCompositeTaxa())
+}
+
+export async function createCompositeTaxon(req, res) {
+  const sourceTaxaIds = parseIntArray(req.body.source_taxa_ids)
+  const genus = req.body.genus || ''
+  const specificEpithet = req.body.specific_epithet || ''
+  const subspecificEpithet = req.body.subspecific_epithet || ''
+  const success = await applyMatrix(req, res, (service) =>
+    service.createCompositeTaxon(sourceTaxaIds, genus, specificEpithet, subspecificEpithet)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function deleteCompositeTaxon(req, res) {
+  const compositeTaxonId = parseInt(req.body.composite_taxon_id)
+  const success = await applyMatrix(req, res, (service) =>
+    service.deleteCompositeTaxon(compositeTaxonId)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function recalculateCompositeTaxon(req, res) {
+  const compositeTaxonId = parseInt(req.body.composite_taxon_id)
+  const success = await applyMatrix(req, res, (service) =>
+    service.recalculateCompositeTaxonScores(compositeTaxonId)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
 export async function logError(req) {
   console.log('JS error: ', req.body)
 }
