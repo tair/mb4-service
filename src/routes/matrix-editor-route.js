@@ -14,6 +14,11 @@ router.post('/setTaxaAccess', controller.setTaxaAccess)
 router.post('/addTaxonMedia', controller.addTaxonMedia)
 router.post('/loadTaxaMedia', controller.loadTaxaMedia)
 router.post('/removeTaxonMedia', controller.removeTaxonMedia)
+// Composite Taxa
+router.post('/getCompositeTaxa', controller.getCompositeTaxa)
+router.post('/createCompositeTaxon', controller.createCompositeTaxon)
+router.post('/deleteCompositeTaxon', controller.deleteCompositeTaxon)
+router.post('/recalculateCompositeTaxon', controller.recalculateCompositeTaxon)
 
 // Character endpoints
 router.post('/addCharacter', controller.addCharacter)
