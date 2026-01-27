@@ -46,7 +46,7 @@ import _ProjectMemberGroup from './project-member-group.js'
 import _ProjectMembersXGroup from './project-members-x-group.js'
 import _Project from './project.js'
 import _ProjectsXUser from './projects-x-user.js'
-import _ProjectsXOrcidWork from './projects-x-orcid-work.js'
+// import _ProjectsXOrcidWork from './projects-x-orcid-work.js'
 import _Specimen from './specimen.js'
 import _SpecimensXBibliographicReference from './specimens-x-bibliographic-reference.js'
 import _TaskQueue from './task-queue.js'
@@ -161,7 +161,7 @@ function initModels(sequelizeConn) {
   )
   const Project = _Project.init(sequelizeConn, DataTypes)
   const ProjectsXUser = _ProjectsXUser.init(sequelizeConn, DataTypes)
-  const ProjectsXOrcidWork = _ProjectsXOrcidWork.init(sequelizeConn, DataTypes)
+  // const ProjectsXOrcidWork = _ProjectsXOrcidWork.init(sequelizeConn, DataTypes)
   const Specimen = _Specimen.init(sequelizeConn, DataTypes)
   const SpecimensXBibliographicReference =
     _SpecimensXBibliographicReference.init(sequelizeConn, DataTypes)
