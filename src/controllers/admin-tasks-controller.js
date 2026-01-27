@@ -335,7 +335,12 @@ export async function getCipresStatus(req, res) {
       { type: QueryTypes.SELECT }
     )
 
-    // Get active (non-completed) jobs
+    // Get active (non-completed) jobs for UI display.
+    // Note: This filter differs from cipres-request-service.js syncCipresJobs() which
+    // excludes ('COMPLETED', 'EXPIRED'). The difference is intentional:
+    // - UI (here): excludes FAILED/CANCELLED since they are user-facing terminal states
+    // - Sync service: excludes EXPIRED (CIPRES-specific status) but may sync FAILED/CANCELLED
+    //   to verify final state from CIPRES API
     const activeJobs = await sequelizeConn.query(
       `SELECT cr.*, u.fname, u.lname, m.title as matrix_title
        FROM cipres_requests cr
@@ -456,7 +461,7 @@ export async function retryTask(req, res) {
     await sequelizeConn.query(
       `UPDATE ca_task_queue 
        SET status = 0, error_code = 0, completed_on = NULL, 
-           notes = CONCAT('Retried by admin at ', NOW(), '. Previous error: ', notes)
+           notes = CONCAT('Retried by admin at ', NOW(), '. Previous error: ', COALESCE(notes, ''))
        WHERE task_id = ?`,
       { replacements: [taskId], type: QueryTypes.UPDATE }
     )
