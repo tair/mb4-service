@@ -30,6 +30,7 @@ import adminMaintenanceRouter from './routes/admin-maintenance-route.js'
 import adminUsersRouter from './routes/admin-users-route.js'
 import adminHomepageRouter from './routes/admin-homepage-route.js'
 import adminStatisticsRouter from './routes/admin-statistics-route.js'
+import adminTasksRouter from './routes/admin-tasks-route.js'
 import { trackSession } from './lib/session-middleware.js'
 import { gracefulShutdown } from './controllers/analytics-controller.js'
 import loggingService from './services/logging-service.js'
@@ -107,6 +108,7 @@ app.use('/admin/maintenance', adminMaintenanceRouter)
 app.use('/admin/users', adminUsersRouter)
 app.use('/admin/homepage', adminHomepageRouter)
 app.use('/admin/statistics', adminStatisticsRouter)
+app.use('/admin/tasks', adminTasksRouter)
 
 // Initialize stats cache
 initializeCache().catch((error) => {
