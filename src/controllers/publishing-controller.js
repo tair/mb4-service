@@ -458,6 +458,21 @@ export async function publishProject(req, res) {
         )
       }
 
+      // Schedule ORCID Works push for eligible project members
+      await models.TaskQueue.create(
+        {
+          user_id: userId,
+          priority: 400,
+          handler: 'ORCIDWorks',
+          parameters: {
+            project_id: projectId,
+          },
+        },
+        {
+          user: user,
+        }
+      )
+
       processTasks()
     } catch (taskError) {
       // Log task scheduling errors but don't fail the publication

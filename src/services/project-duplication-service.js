@@ -241,8 +241,10 @@ export class ProjectDuplicationService {
       const request = await models.ProjectDuplicationRequest.findByPk(requestId)
       if (request) {
         await request.update({
-          status: 3, // Failed status
+          status: 150, // Failed status
           notes: `Duplication failed: ${errorMessage}`,
+        }, {
+          shouldSkipLogChange: true,
         })
         console.log(`[PROJECT_DUPLICATION_SERVICE] Marked request ${requestId} as failed`)
       }
@@ -305,6 +307,8 @@ const IGNORED_TABLES = [
   models.Institution,
   models.InstitutionsXProject,
   models.InstitutionsXUser,
+  models.ProjectsXOrcidWork,
+  models.FeaturedProject,
 ]
 
 const NUMBERED_TABLES = new Map([[models.MediaLabel, 'link_id']])

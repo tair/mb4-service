@@ -33,11 +33,16 @@ const config = {
   },
   orcid: {
     domain: process.env.ORCID_DOMAIN,
+    // Public API for reading (email lookups, profile info) - no membership required
     apiDomain: process.env.ORCID_API_DOMAIN,
+    // Member API for writing (adding works) - requires ORCID membership
+    memberApiDomain: process.env.ORCID_MEMBER_API_DOMAIN,
     clientId: process.env.ORCID_CLIENT_ID,
     cliendSecret: process.env.ORCID_CLIENT_SECRET,
     clientAccessToken: process.env.ORCID_CLIENT_ACCESS_TOKEN,
     redirect: process.env.ORCID_REDIRECT_URL,
+    // Enable ORCID Works feature (requires Member API credentials with write scope)
+    worksEnabled: process.env.ORCID_WORKS_ENABLED === 'true',
   },
   auth: {
     accessTokenSecret: process.env.ACCESS_TOKEN_SECRET,
