@@ -667,22 +667,22 @@ function initModels(sequelizeConn) {
     as: 'projects_x_users',
     foreignKey: 'project_id',
   })
-  ProjectsXOrcidWork.belongsTo(Project, {
-    as: 'project',
-    foreignKey: 'project_id',
-  })
-  Project.hasMany(ProjectsXOrcidWork, {
-    as: 'projects_x_orcid_works',
-    foreignKey: 'project_id',
-  })
-  ProjectsXOrcidWork.belongsTo(User, {
-    as: 'user',
-    foreignKey: 'user_id',
-  })
-  User.hasMany(ProjectsXOrcidWork, {
-    as: 'projects_x_orcid_works',
-    foreignKey: 'user_id',
-  })
+  // ProjectsXOrcidWork.belongsTo(Project, {
+  //   as: 'project',
+  //   foreignKey: 'project_id',
+  // })
+  // Project.hasMany(ProjectsXOrcidWork, {
+  //   as: 'projects_x_orcid_works',
+  //   foreignKey: 'project_id',
+  // })
+  // ProjectsXOrcidWork.belongsTo(User, {
+  //   as: 'user',
+  //   foreignKey: 'user_id',
+  // })
+  // User.hasMany(ProjectsXOrcidWork, {
+  //   as: 'projects_x_orcid_works',
+  //   foreignKey: 'user_id',
+  // })
   Project.belongsTo(User, { as: 'User', foreignKey: 'user_id' })
   User.hasMany(Project, { as: 'projects', foreignKey: 'user_id' })
   Specimen.belongsTo(Project, { as: 'projects', foreignKey: 'project_id' })
@@ -912,7 +912,7 @@ function initModels(sequelizeConn) {
     ProjectMembersXGroup,
     Project,
     ProjectsXUser,
-    ProjectsXOrcidWork,
+    // ProjectsXOrcidWork,
     Specimen,
     SpecimensXBibliographicReference,
     TaskQueue,
