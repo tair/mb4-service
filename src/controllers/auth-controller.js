@@ -254,11 +254,23 @@ async function setNewPassword(req, res) {
 }
 
 async function getORCIDAuthUrl(req, res) {
+  // Default scope for authentication only
+  let scope = '/authenticate'
+  
+  // Only request write scope if ORCID Works feature is explicitly enabled
+  // This requires ORCID Member API credentials with proper registration
+  if (config.orcid.worksEnabled) {
+    // URL-encode the space between scopes
+    scope = '/authenticate%20/activities/update'
+  }
+  
+  console.log(`[ORCID] Generating auth URL:`)
+  console.log(`  - API Domain: ${config.orcid.apiDomain}`)
+  console.log(`  - Works Enabled: ${config.orcid.worksEnabled}`)
+  console.log(`  - Requested Scope: ${decodeURIComponent(scope)}`)
+  
   const url = `${config.orcid.domain}/oauth/authorize?client_id=${config.orcid.clientId}\
-&response_type=code&scope=/authenticate&redirect_uri=${config.orcid.redirect}`
-  // url below is available for member API
-  // const url = `${config.orcid.domain}/oauth/authorize?client_id=${config.orcid.clientId}\
-  // &response_type=code&scope=/read-limited&redirect_uri=${config.orcid.redirect}`
+&response_type=code&scope=${scope}&redirect_uri=${config.orcid.redirect}`
   res.status(200).json({ url: url })
 }
 
@@ -303,6 +315,14 @@ async function authenticateORCID(req, res) {
       const name = response.data.name
       const orcidAccessToken = response.data.access_token
       const orcidRefreshToken = response.data.refresh_token
+      const grantedScope = response.data.scope
+      
+      console.log(`[ORCID] Authentication successful:`)
+      console.log(`  - ORCID: ${orcid}`)
+      console.log(`  - Name: ${name}`)
+      console.log(`  - Granted Scope: ${grantedScope}`)
+      console.log(`  - Has Write Access: ${grantedScope?.includes('/activities/update') ? 'YES' : 'NO'}`)
+      
       const orcidProfile = {
         orcid: orcid,
         name: name,
@@ -362,14 +382,18 @@ async function authenticateORCID(req, res) {
       }
 
       if (userWithOrcid) {
-        // Update last login timestamp
+        // Update last login timestamp and refresh ORCID tokens
+        // Tokens must be updated on every ORCID login to prevent them from expiring
         const currentTimestamp = Math.floor(Date.now() / 1000)
         userWithOrcid.setVar('last_login', currentTimestamp)
+        userWithOrcid.orcid_access_token = orcidAccessToken
+        userWithOrcid.orcid_refresh_token = orcidRefreshToken
         try {
           await userWithOrcid.save({ user: userWithOrcid })
+          console.log(`[ORCID] Updated tokens for user ${userWithOrcid.user_id}`)
         } catch (saveError) {
-          console.error('Failed to update last_login timestamp for ORCID user:', saveError)
-          // Continue with login even if timestamp update fails
+          console.error('Failed to update ORCID tokens for user:', saveError)
+          // Continue with login even if token update fails
         }
 
         const access = await getRoles(userWithOrcid.user_id)
@@ -503,11 +527,55 @@ function getTokenExpiry(token) {
   return expiry
 }
 
+/**
+ * Unlink ORCID from the current user's account
+ * Clears orcid, orcid_access_token, and orcid_refresh_token
+ */
+async function unlinkORCID(req, res) {
+  try {
+    // User must be authenticated
+    if (!req.credential || !req.credential.user_id) {
+      return res.status(401).json({ message: 'Authentication required' })
+    }
+
+    const userId = req.credential.user_id
+    const user = await models.User.findByPk(userId)
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    if (!user.orcid) {
+      return res.status(400).json({ message: 'No ORCID linked to this account' })
+    }
+
+    const previousOrcid = user.orcid
+
+    // Clear ORCID fields
+    user.orcid = null
+    user.orcid_access_token = null
+    user.orcid_refresh_token = null
+
+    await user.save({ user: user })
+
+    console.log(`ORCID ${previousOrcid} unlinked from user ${userId}`)
+
+    return res.status(200).json({
+      message: 'ORCID successfully unlinked from your account',
+      success: true,
+    })
+  } catch (error) {
+    console.error('Error unlinking ORCID:', error)
+    return res.status(500).json({ message: 'Failed to unlink ORCID' })
+  }
+}
+
 export {
   login,
   logout,
   getORCIDAuthUrl,
   authenticateORCID,
+  unlinkORCID,
   resetPassword,
   validateResetKey,
   setNewPassword,
