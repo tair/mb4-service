@@ -7621,6 +7621,23 @@ export default class MatrixEditorService {
             { user: this.user, transaction }
           )
           createdCells.push(cell)
+        } else if (charData.isNpa) {
+          // All sources are NPA for this continuous character
+          const cell = await models.Cell.create(
+            {
+              matrix_id: this.matrix.matrix_id,
+              taxon_id: compositeTaxonId,
+              character_id: characterId,
+              user_id: this.user.user_id,
+              state_id: null,
+              is_npa: 1,
+              is_uncertain: hasPartialUncertainty ? 1 : 0,
+              start_value: null,
+              end_value: null,
+            },
+            { user: this.user, transaction }
+          )
+          createdCells.push(cell)
         }
       } else {
         // Discrete character - create polymorphic score with all unique states
