@@ -54,18 +54,12 @@ const server = http.createServer(app)
 server.on('error', onError)
 server.on('listening', onListening)
 
-// Test database connection but don't sync in production
+// Test database connection - schema is managed via migrations only
+// Run: npx sequelize-cli db:migrate
 sequelizeConn
   .authenticate()
   .then(() => {
     console.log('Database connection established successfully.')
-    
-    // Only sync in development environment
-    const shouldSync = process.env.MB_ENV !== 'production'
-    if (shouldSync) {
-      console.log('Development mode: syncing database models...')
-      return sequelizeConn.sync()
-    }
     return Promise.resolve()
   })
   .then(() => {
