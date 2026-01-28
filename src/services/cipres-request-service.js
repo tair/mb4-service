@@ -163,9 +163,9 @@ export default class CipresRequestService {
               `Updated job ${jobHandle} (ID: ${row.request_id}) to status: ${jobStage}`
             )
           } else {
-            console.warn(
-              `No valid status received for job ${jobHandle} (ID: ${row.request_id})`
-            )
+            // console.warn(
+            //   `No valid status received for job ${jobHandle} (ID: ${row.request_id})`
+            // )
           }
         } catch (error) {
           errorCount++
