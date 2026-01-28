@@ -345,9 +345,11 @@ export async function editSpecimen(req, res) {
       })
       let shouldCreateLink = true
       for (const link of taxaSpecimen) {
-        if (link.specimen_id == specimenId) {
+        if (link.taxon_id == taxonId) {
+          // Link already exists for this taxon, don't create duplicate
           shouldCreateLink = false
         } else {
+          // Remove links to other taxa
           await link.destroy({ user: req.user, transaction: transaction })
         }
       }
