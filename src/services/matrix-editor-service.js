@@ -1697,7 +1697,47 @@ export default class MatrixEditorService {
       taxonomicClause = ` AND (${taxonomicConditions.join(' AND ')})`
     }
 
+    // Query finds media from two sources:
+    // 1. Direct taxon-media link via taxa_x_media
+    // 2. Specimen-based media via taxa_x_specimens
+    // Both apply the same taxonomic filtering to include:
+    // - Media for the exact taxon being scored
+    // - Media for all hierarchically lower taxa (e.g., subspecies under a species)
+    
+    // Duplicate replacements for the UNION (each part needs projectId + taxonomic conditions)
+    const unionReplacements = [...replacements, ...replacements]
+
     const query = `
+      SELECT DISTINCT 
+        mf.project_id,
+        mf.media_id, 
+        mf.media,
+        mf.notes as media_notes,
+        mf.view_id,
+        mf.is_sided,
+        mv.name as view_name,
+        NULL as specimen_id,
+        NULL as reference_source,
+        NULL as institution_code,
+        NULL as collection_code,
+        NULL as catalog_number,
+        NULL as specimen_description,
+        t.genus,
+        t.subgenus,
+        t.specific_epithet,
+        t.subspecific_epithet,
+        t.scientific_name_author,
+        t.scientific_name_year,
+        t.is_extinct,
+        t.taxon_id
+      FROM media_files mf
+      INNER JOIN taxa_x_media AS txm ON mf.media_id = txm.media_id
+      INNER JOIN taxa AS t ON txm.taxon_id = t.taxon_id
+      LEFT JOIN media_views mv ON mf.view_id = mv.view_id
+      WHERE mf.project_id = ? 
+        AND t.project_id = mf.project_id
+        AND mf.cataloguing_status = 0 ${taxonomicClause}
+      UNION
       SELECT DISTINCT 
         mf.project_id,
         mf.media_id, 
@@ -1713,29 +1753,32 @@ export default class MatrixEditorService {
         s.catalog_number,
         s.description as specimen_description,
         t.genus,
+        t.subgenus,
         t.specific_epithet,
         t.subspecific_epithet,
         t.scientific_name_author,
         t.scientific_name_year,
         t.is_extinct,
         t.taxon_id
-      FROM media_files mf
-      INNER JOIN specimens AS s ON s.specimen_id = mf.specimen_id
-      INNER JOIN taxa_x_specimens AS txs ON s.specimen_id = txs.specimen_id
-      INNER JOIN taxa AS t ON txs.taxon_id = t.taxon_id
+      FROM taxa t
+      INNER JOIN taxa_x_specimens AS ts ON t.taxon_id = ts.taxon_id
+      INNER JOIN specimens AS s ON ts.specimen_id = s.specimen_id
+      INNER JOIN media_files AS mf ON s.specimen_id = mf.specimen_id
       LEFT JOIN media_views mv ON mf.view_id = mv.view_id
-      WHERE mf.project_id = ? AND mf.cataloguing_status = 0 ${taxonomicClause}
-      ORDER BY mf.media_id`
+      WHERE mf.project_id = ? 
+        AND t.project_id = mf.project_id
+        AND mf.cataloguing_status = 0 ${taxonomicClause}
+      ORDER BY media_id`
 
     const results = await sequelizeConn.query(query, {
-      replacements: replacements,
+      replacements: unionReplacements,
       type: QueryTypes.SELECT,
     })
 
-    // If no media matched the taxonomic filters, fall back to showing
-    // a general list of project media so users can still attach media.
+    // If no media matched the taxonomic filters, return empty results
+    // (only show media that are actually associated with this taxon)
     if (!results || results.length === 0) {
-      return await this.getAllProjectMedia(projectId, matrixId, userId)
+      return { media: [], media_ids: [] }
     }
 
     return await this.formatMediaResults(results, userId, matrixId)
