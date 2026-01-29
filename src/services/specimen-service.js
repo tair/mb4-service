@@ -13,7 +13,7 @@ export async function getProjectSpecimens(projectId) {
       SELECT s.*, ts.taxon_id, COUNT(mf.media_id) as media_count
       FROM specimens AS s
       LEFT JOIN taxa_x_specimens AS ts ON s.specimen_id = ts.specimen_id
-      LEFT JOIN media_files AS mf ON s.specimen_id = mf.specimen_id
+      LEFT JOIN media_files AS mf ON s.specimen_id = mf.specimen_id AND mf.cataloguing_status = 0
       WHERE s.project_id = ?
       GROUP BY s.specimen_id, ts.taxon_id`,
     { replacements: [projectId] }

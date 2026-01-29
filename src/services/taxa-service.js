@@ -313,7 +313,7 @@ export async function getTaxaMediaCounts(projectId) {
     SELECT t.taxon_id, COUNT(DISTINCT mf.media_id) as media_count
     FROM taxa t
     LEFT JOIN taxa_x_specimens ts ON t.taxon_id = ts.taxon_id
-    LEFT JOIN media_files mf ON ts.specimen_id = mf.specimen_id
+    LEFT JOIN media_files mf ON ts.specimen_id = mf.specimen_id AND mf.cataloguing_status = 0
     WHERE t.project_id = ?
     GROUP BY t.taxon_id`,
     { replacements: [projectId] }
