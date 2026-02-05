@@ -797,15 +797,17 @@ async function processAndUploadImage(file, folder, itemId) {
         outputWidth = resizedMeta.width
         outputHeight = resizedMeta.height
       } else if (sizeName === 'thumbnail') {
-        // Resize to exact dimensions with cover
+        // Resize to fit within dimensions while preserving aspect ratio
         outputBuffer = await image
           .resize(dimensions.width, dimensions.height, {
-            fit: 'cover',
+            fit: 'inside',
+            withoutEnlargement: true,
           })
           .jpeg({ quality: 85 })
           .toBuffer()
-        outputWidth = dimensions.width
-        outputHeight = dimensions.height
+        const thumbMeta = await sharp(outputBuffer).metadata()
+        outputWidth = thumbMeta.width
+        outputHeight = thumbMeta.height
       }
 
       const extension = sizeName === 'original' ? getExtension(file.originalname) : 'jpg'

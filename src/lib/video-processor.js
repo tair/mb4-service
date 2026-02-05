@@ -155,11 +155,11 @@ export class VideoProcessor {
         .jpeg({ quality: 85 })
         .toFile(thumbnails.large.path)
 
-      // Generate small thumbnail (120x120, cropped to center)
+      // Generate small thumbnail (120x120, fit inside preserving aspect ratio)
       await baseImage
         .resize(thumbnails.thumbnail.width, thumbnails.thumbnail.height, { 
-          fit: 'cover',
-          position: 'center'
+          fit: 'inside',
+          withoutEnlargement: true,
         })
         .jpeg({ quality: 80 })
         .toFile(thumbnails.thumbnail.path)
@@ -167,16 +167,20 @@ export class VideoProcessor {
       // Clean up base thumbnail
       await fs.unlink(baseThumbnailPath)
 
+      // Read actual dimensions from generated files (fit: 'inside' may produce non-square thumbnails)
+      const largeMeta = await sharp(thumbnails.large.path).metadata()
+      const thumbMeta = await sharp(thumbnails.thumbnail.path).metadata()
+
       return {
         large: {
           path: thumbnails.large.path,
-          width: thumbnails.large.width,
-          height: thumbnails.large.height,
+          width: largeMeta.width,
+          height: largeMeta.height,
         },
         thumbnail: {
           path: thumbnails.thumbnail.path,
-          width: thumbnails.thumbnail.width,
-          height: thumbnails.thumbnail.height,
+          width: thumbMeta.width,
+          height: thumbMeta.height,
         },
       }
     } catch (error) {

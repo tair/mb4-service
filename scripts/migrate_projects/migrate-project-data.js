@@ -1151,7 +1151,7 @@ async function migrateMediaFilesToS3(projectId, s3Client, bucket, db) {
                   .toBuffer()
               } else if (size === 'thumbnail') {
                 buffer = await sharp(buffer)
-                  .resize(120, 120, { fit: 'cover' })
+                  .resize(120, 120, { fit: 'inside', withoutEnlargement: true })
                   .jpeg({ quality: 85 })
                   .toBuffer()
               }
