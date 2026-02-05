@@ -2194,9 +2194,10 @@ export async function createStacksMediaFile(req, res) {
               )
             }
           } else if (sizeName === 'thumbnail') {
-            // For thumbnail, resize to exact dimensions
+            // For thumbnail, resize to fit within dimensions while preserving aspect ratio
             processedImage = image.resize(dimensions.width, dimensions.height, {
-              fit: 'cover',
+              fit: 'inside',
+              withoutEnlargement: true,
             })
           }
 
@@ -3028,7 +3029,8 @@ export async function completeStacksUpload(req, res) {
               }
             } else if (sizeName === 'thumbnail') {
               processedImage = image.resize(dimensions.width, dimensions.height, {
-                fit: 'cover',
+                fit: 'inside',
+                withoutEnlargement: true,
               })
             }
 

@@ -209,7 +209,7 @@ async function generateVariant(buf, size, derivedFormat) {
     return { buf: await img.resize(800, 800, { fit: 'inside', withoutEnlargement: true })[methodName]({ quality: 85 }).toBuffer(), ext: derivedFormat }
   }
   if (size === 'thumbnail') {
-    return { buf: await img.resize(120, 120, { fit: 'cover' })[methodName]({ quality: 85 }).toBuffer(), ext: derivedFormat }
+    return { buf: await img.resize(120, 120, { fit: 'inside', withoutEnlargement: true })[methodName]({ quality: 85 }).toBuffer(), ext: derivedFormat }
   }
   return { buf, ext: 'jpg' }
 }

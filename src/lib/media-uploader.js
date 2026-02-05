@@ -48,7 +48,10 @@ export class MediaUploader {
 
       const rule = rules[ruleName]
       const resizedMedia = rule.scale
-        ? media.resize(rule.scale.width, rule.scale.heigth)
+        ? media.resize(rule.scale.width, rule.scale.height, {
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
         : media
       const info = await resizedMedia.toFile(path)
       this.newlyCreatedFiles.push(path)
