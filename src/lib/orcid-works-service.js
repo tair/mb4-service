@@ -147,41 +147,6 @@ export class ORCIDWorksService {
   }
 
   /**
-   * Build a citation text from project data
-   * @param {Object} project - Project model instance
-   * @returns {string} Citation text
-   */
-  buildCitationText(project) {
-    const parts = []
-    
-    if (project.article_authors) {
-      parts.push(project.article_authors.trim())
-    }
-    
-    if (project.journal_year) {
-      parts.push(`(${project.journal_year.trim()})`)
-    }
-    
-    if (project.article_title) {
-      parts.push(project.article_title.trim())
-    }
-    
-    if (project.journal_title) {
-      parts.push(`<i>${project.journal_title.trim()}</i>`)
-    }
-    
-    if (project.journal_volume) {
-      parts.push(`Volume ${project.journal_volume.trim()}`)
-    }
-    
-    if (project.article_pp) {
-      parts.push(`pp. ${project.article_pp.trim()}`)
-    }
-    
-    return parts.join('. ')
-  }
-
-  /**
    * Escape XML special characters
    * @param {string} text - Text to escape
    * @returns {string} Escaped text
