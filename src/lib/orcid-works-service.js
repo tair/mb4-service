@@ -10,8 +10,8 @@ import { models } from '../models/init-models.js'
  */
 export class ORCIDWorksService {
   constructor() {
-    // Use Member API domain for writing works (requires ORCID membership)
-    this.apiDomain = config.orcid.memberApiDomain
+    // Use ORCID API domain for writing works (requires ORCID membership)
+    this.apiDomain = config.orcid.apiDomain
   }
 
   /**

@@ -40,14 +40,14 @@ export class ORCIDWorksHandler extends Handler {
     }
 
     // Check if ORCID Works feature is enabled
-    const memberApiDomain = config.orcid?.memberApiDomain || 'NOT SET'
+    const apiDomain = config.orcid?.apiDomain || 'NOT SET'
     const worksEnabled = config.orcid?.worksEnabled || false
-    console.log(`[ORCIDWorksHandler] Member API Domain: ${memberApiDomain}, Works Enabled: ${worksEnabled}`)
+    console.log(`[ORCIDWorksHandler] API Domain: ${apiDomain}, Works Enabled: ${worksEnabled}`)
     
     if (!this.isWorksEnabled()) {
       console.log(
         '[ORCIDWorksHandler] ORCID Works feature not enabled. Skipping ORCID Works push.',
-        'To enable, set ORCID_WORKS_ENABLED=true and ORCID_MEMBER_API_DOMAIN to api.orcid.org (production) or api.sandbox.orcid.org (sandbox).'
+        'To enable, set ORCID_WORKS_ENABLED=true and ORCID_API_DOMAIN to api.orcid.org (production) or api.sandbox.orcid.org (sandbox).'
       )
       return {
         result: {
@@ -58,11 +58,11 @@ export class ORCIDWorksHandler extends Handler {
       }
     }
     
-    if (!memberApiDomain || memberApiDomain === 'NOT SET') {
-      console.log('[ORCIDWorksHandler] ORCID_MEMBER_API_DOMAIN not configured. Skipping ORCID Works push.')
+    if (!apiDomain || apiDomain === 'NOT SET') {
+      console.log('[ORCIDWorksHandler] ORCID_API_DOMAIN not configured. Skipping ORCID Works push.')
       return {
         result: {
-          message: 'ORCID Member API domain not configured - skipping works push',
+          message: 'ORCID API domain not configured - skipping works push',
           works_added: 0,
           skipped: true,
         },

@@ -460,7 +460,7 @@ export async function publishProject(req, res) {
       }
 
       // Schedule ORCID Works push for eligible project members
-      if (config.orcid.worksEnabled && config.orcid.memberApiDomain) {
+      if (config.orcid.worksEnabled && config.orcid.apiDomain) {
         await models.TaskQueue.create(
           {
             user_id: userId,
