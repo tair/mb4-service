@@ -33,10 +33,8 @@ const config = {
   },
   orcid: {
     domain: process.env.ORCID_DOMAIN,
-    // Public API for reading (email lookups, profile info) - no membership required
+    // API domain for all ORCID API calls (Member API - requires ORCID membership)
     apiDomain: process.env.ORCID_API_DOMAIN,
-    // Member API for writing (adding works) - requires ORCID membership
-    memberApiDomain: process.env.ORCID_MEMBER_API_DOMAIN,
     clientId: process.env.ORCID_CLIENT_ID,
     cliendSecret: process.env.ORCID_CLIENT_SECRET,
     clientAccessToken: process.env.ORCID_CLIENT_ACCESS_TOKEN,
