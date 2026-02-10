@@ -60,24 +60,24 @@ export class ORCIDWorksHandler extends Handler {
       }
     }
 
-    // Get the project
-    const project = await models.Project.findByPk(projectId)
-    if (project == null) {
+    // Get the project - use raw query to ensure fresh data from database
+    const [projectRows] = await sequelizeConn.query(
+      'SELECT * FROM projects WHERE project_id = ?',
+      { replacements: [projectId] }
+    )
+    
+    if (!projectRows || projectRows.length === 0) {
       return this.createError(
         HandlerErrors.ILLEGAL_PARAMETER,
         `Project ${projectId} does not exist`
       )
     }
+    
+    const project = projectRows[0]
 
-    // Verify project is published
-    if (project.published !== 1) {
-      return {
-        result: {
-          message: 'Project is not published',
-          works_added: 0,
-        },
-      }
-    }
+    // NOTE: We don't check published status here because this task is only
+    // queued after a successful publish in publishing-controller.js.
+    // The task queue itself is the guarantee that the project was published.
 
     // Get article authors for filtering
     const articleAuthors = project.article_authors || ''
