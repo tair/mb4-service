@@ -30,8 +30,9 @@ export class Datamodel {
             throw new Error(`Invalid table ${referencedTableName}`)
           }
           const cost = attributes.cost ?? 10
+          const referencedKey = attributes.references.key
 
-          const edge = { field, cost }
+          const edge = { field, referencedKey, cost }
 
           this.#addReferencedTables(referencedTable, table)
           this.graph.addEdge(table, referencedTable, edge)
