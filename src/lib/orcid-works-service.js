@@ -191,8 +191,9 @@ export class ORCIDWorksService {
 
       if (response.status === 201) {
         // Extract put-code from Location header
+        // ORCID API returns Location in format: {domain}/v3.0/{orcid}/work/{put-code}
         const location = response.headers.location
-        const putCodeMatch = location?.match(/put-code\/(\d+)/)
+        const putCodeMatch = location?.match(/\/work\/(\d+)/)
         const putCode = putCodeMatch ? putCodeMatch[1] : null
 
         return {
@@ -242,8 +243,9 @@ export class ORCIDWorksService {
           )
 
           if (retryResponse.status === 201) {
+            // ORCID API returns Location in format: {domain}/v3.0/{orcid}/work/{put-code}
             const location = retryResponse.headers.location
-            const putCodeMatch = location?.match(/put-code\/(\d+)/)
+            const putCodeMatch = location?.match(/\/work\/(\d+)/)
             const putCode = putCodeMatch ? putCodeMatch[1] : null
 
             return {
