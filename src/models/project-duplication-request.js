@@ -46,6 +46,7 @@ export default class ProjectDuplicationRequest extends Model {
                 1, // Newly Submitted
                 50, // Approved
                 100, // Completed
+                150, // Failed
                 200, // Denied
               ],
             ],

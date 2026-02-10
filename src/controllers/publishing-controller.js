@@ -4,6 +4,7 @@ import * as publishingService from '../services/publishing-service.js'
 import { time } from '../util/util.js'
 import sequelizeConn from '../util/db.js'
 import { processTasks } from '../services/task-queue-service.js'
+import config from '../config.js'
 
 /**
  * Get publishing preferences form
@@ -449,6 +450,23 @@ export async function publishProject(req, res) {
             handler: 'Email',
             parameters: {
               template: 'publication_media_notification',
+              project_id: projectId,
+            },
+          },
+          {
+            user: user,
+          }
+        )
+      }
+
+      // Schedule ORCID Works push for eligible project members
+      if (config.orcid.worksEnabled && config.orcid.apiDomain) {
+        await models.TaskQueue.create(
+          {
+            user_id: userId,
+            priority: 400,
+            handler: 'ORCIDWorks',
+            parameters: {
               project_id: projectId,
             },
           },
