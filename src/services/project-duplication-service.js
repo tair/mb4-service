@@ -294,6 +294,8 @@ const DUPLICATED_TABLES = [
   models.MatrixAdditionalBlock,
   models.BibliographicAuthor,
   models.MediaLabel,
+  models.CompositeTaxon,
+  models.CompositeTaxonSource,
 ]
 
 const IGNORED_TABLES = [
