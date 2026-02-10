@@ -17,6 +17,8 @@ import _Character from './character.js'
 import _CharactersXBibliographicReference from './characters-x-bibliographic-reference.js'
 import _CharactersXMedium from './characters-x-medium.js'
 import _CharactersXPartition from './characters-x-partition.js'
+import _CompositeTaxon from './composite-taxon.js'
+import _CompositeTaxonSource from './composite-taxon-source.js'
 import _CipresRequest from './cipres-request.js'
 import _CurationRequest from './curation-request.js'
 import _CuratorPotentialProject from './curator-potential-project.js'
@@ -44,6 +46,7 @@ import _ProjectMemberGroup from './project-member-group.js'
 import _ProjectMembersXGroup from './project-members-x-group.js'
 import _Project from './project.js'
 import _ProjectsXUser from './projects-x-user.js'
+// import _ProjectsXOrcidWork from './projects-x-orcid-work.js'
 import _Specimen from './specimen.js'
 import _SpecimensXBibliographicReference from './specimens-x-bibliographic-reference.js'
 import _TaskQueue from './task-queue.js'
@@ -59,6 +62,7 @@ import _MatrixImage from './matrix-image.js'
 import _Announcement from './announcement.js'
 import _Tool from './tool.js'
 import _Press from './press.js'
+import _FeaturedProject from './featured-project.js'
 import _CaApplicationVar from './ca-application-var.js'
 import sequelizeConn from '../util/db.js'
 import { logCellChange } from './hooks/cell-hooks.js'
@@ -97,6 +101,11 @@ function initModels(sequelizeConn) {
     _CharactersXBibliographicReference.init(sequelizeConn, DataTypes)
   const CharactersXMedium = _CharactersXMedium.init(sequelizeConn, DataTypes)
   const CharactersXPartition = _CharactersXPartition.init(
+    sequelizeConn,
+    DataTypes
+  )
+  const CompositeTaxon = _CompositeTaxon.init(sequelizeConn, DataTypes)
+  const CompositeTaxonSource = _CompositeTaxonSource.init(
     sequelizeConn,
     DataTypes
   )
@@ -152,6 +161,7 @@ function initModels(sequelizeConn) {
   )
   const Project = _Project.init(sequelizeConn, DataTypes)
   const ProjectsXUser = _ProjectsXUser.init(sequelizeConn, DataTypes)
+  // const ProjectsXOrcidWork = _ProjectsXOrcidWork.init(sequelizeConn, DataTypes)
   const Specimen = _Specimen.init(sequelizeConn, DataTypes)
   const SpecimensXBibliographicReference =
     _SpecimensXBibliographicReference.init(sequelizeConn, DataTypes)
@@ -171,6 +181,7 @@ function initModels(sequelizeConn) {
   const Announcement = _Announcement.init(sequelizeConn, DataTypes)
   const Tool = _Tool.init(sequelizeConn, DataTypes)
   const Press = _Press.init(sequelizeConn, DataTypes)
+  const FeaturedProject = _FeaturedProject.init(sequelizeConn, DataTypes)
   const CaApplicationVar = _CaApplicationVar.init(sequelizeConn, DataTypes)
 
   AnnotationEvent.belongsTo(Annotation, {
@@ -391,6 +402,14 @@ function initModels(sequelizeConn) {
   Institution.hasMany(InstitutionsXUser, {
     as: 'institutions_x_users',
     foreignKey: 'institution_id',
+  })
+  Institution.belongsTo(User, {
+    as: 'creator',
+    foreignKey: 'user_id',
+  })
+  User.hasMany(Institution, {
+    as: 'created_institutions',
+    foreignKey: 'user_id',
   })
   Institution.belongsToMany(User, {
     through: InstitutionsXUser,
@@ -624,6 +643,14 @@ function initModels(sequelizeConn) {
     as: 'project_duplication_requests',
     foreignKey: 'user_id',
   })
+  CurationRequest.belongsTo(User, {
+    as: 'User',
+    foreignKey: 'user_id',
+  })
+  User.hasMany(CurationRequest, {
+    as: 'curation_requests',
+    foreignKey: 'user_id',
+  })
   ProjectMemberGroup.belongsTo(Project, {
     as: 'projects',
     foreignKey: 'project_id',
@@ -640,6 +667,22 @@ function initModels(sequelizeConn) {
     as: 'projects_x_users',
     foreignKey: 'project_id',
   })
+  // ProjectsXOrcidWork.belongsTo(Project, {
+  //   as: 'project',
+  //   foreignKey: 'project_id',
+  // })
+  // Project.hasMany(ProjectsXOrcidWork, {
+  //   as: 'projects_x_orcid_works',
+  //   foreignKey: 'project_id',
+  // })
+  // ProjectsXOrcidWork.belongsTo(User, {
+  //   as: 'user',
+  //   foreignKey: 'user_id',
+  // })
+  // User.hasMany(ProjectsXOrcidWork, {
+  //   as: 'projects_x_orcid_works',
+  //   foreignKey: 'user_id',
+  // })
   Project.belongsTo(User, { as: 'User', foreignKey: 'user_id' })
   User.hasMany(Project, { as: 'projects', foreignKey: 'user_id' })
   Specimen.belongsTo(Project, { as: 'projects', foreignKey: 'project_id' })
@@ -715,8 +758,59 @@ function initModels(sequelizeConn) {
     foreignKey: 'taxon_id',
   })
 
+  // CompositeTaxon associations
+  CompositeTaxon.belongsTo(Taxon, {
+    as: 'taxon',
+    foreignKey: 'taxon_id',
+  })
+  Taxon.hasOne(CompositeTaxon, {
+    as: 'composite_taxon',
+    foreignKey: 'taxon_id',
+  })
+  CompositeTaxon.belongsTo(Matrix, {
+    as: 'matrix',
+    foreignKey: 'matrix_id',
+  })
+  Matrix.hasMany(CompositeTaxon, {
+    as: 'composite_taxa',
+    foreignKey: 'matrix_id',
+  })
+  CompositeTaxon.belongsTo(User, {
+    as: 'user',
+    foreignKey: 'user_id',
+  })
+  User.hasMany(CompositeTaxon, {
+    as: 'composite_taxa',
+    foreignKey: 'user_id',
+  })
+  CompositeTaxonSource.belongsTo(CompositeTaxon, {
+    as: 'composite_taxon',
+    foreignKey: 'composite_taxon_id',
+  })
+  CompositeTaxon.hasMany(CompositeTaxonSource, {
+    as: 'sources',
+    foreignKey: 'composite_taxon_id',
+  })
+  CompositeTaxonSource.belongsTo(Taxon, {
+    as: 'source_taxon',
+    foreignKey: 'source_taxon_id',
+  })
+  Taxon.hasMany(CompositeTaxonSource, {
+    as: 'composite_taxon_sources',
+    foreignKey: 'source_taxon_id',
+  })
+
   MatrixImage.belongsTo(Project, {
     as: 'project',
+    foreignKey: 'project_id',
+  })
+
+  FeaturedProject.belongsTo(Project, {
+    as: 'project',
+    foreignKey: 'project_id',
+  })
+  Project.hasMany(FeaturedProject, {
+    as: 'featured_projects',
     foreignKey: 'project_id',
   })
 
@@ -789,6 +883,8 @@ function initModels(sequelizeConn) {
     CharactersXBibliographicReference,
     CharactersXMedium,
     CharactersXPartition,
+    CompositeTaxon,
+    CompositeTaxonSource,
     CipresRequest,
     CurationRequest,
     CuratorPotentialProject,
@@ -816,6 +912,7 @@ function initModels(sequelizeConn) {
     ProjectMembersXGroup,
     Project,
     ProjectsXUser,
+    // ProjectsXOrcidWork,
     Specimen,
     SpecimensXBibliographicReference,
     TaskQueue,
@@ -831,6 +928,7 @@ function initModels(sequelizeConn) {
     Announcement,
     Tool,
     Press,
+    FeaturedProject,
     CaApplicationVar,
   }
 }

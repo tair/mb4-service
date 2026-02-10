@@ -9,21 +9,28 @@ router.get('/', async (req, res) => {
   try {
     const now = new Date()
 
-    // Get featured projects
-    const featuredProjects = await models.Project.findAll({
+    // Get all featured projects from hp_featured_projects table
+    const featuredProjects = await models.FeaturedProject.findAll({
       include: [
         {
-          model: models.MediaFile,
-          as: 'media_files',
-          required: false,
-          attributes: ['media_id', 'media_type', 'media'],
+          model: models.Project,
+          as: 'project',
+          required: true,
+          where: {
+            published: true,
+          },
+          attributes: ['project_id', 'name', 'description', 'exemplar_media_id'],
+          include: [
+            {
+              model: models.MediaFile,
+              as: 'media_files',
+              required: false,
+              attributes: ['media_id', 'media_type', 'media'],
+            },
+          ],
         },
       ],
-      where: {
-        published: true,
-      },
-      order: literal('RAND()'),
-      limit: 5,
+      order: [['featured_project_id', 'DESC']],
     })
 
     // Get matrix images
@@ -55,8 +62,8 @@ router.get('/', async (req, res) => {
       where: {
         featured: true,
       },
-      order: literal('RAND()'),
-      limit: 2,
+      order: [['press_id', 'DESC']],
+      limit: 10,
     })
 
     // Get maintenance mode status
@@ -76,21 +83,30 @@ router.get('/', async (req, res) => {
       }
     }
 
-    // Calculate next maintenance date (second Friday of next month)
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-    const day = nextMonth.getDay()
-    const daysUntilFriday = (5 - day + 7) % 7
-    const secondFriday = new Date(nextMonth)
-    secondFriday.setDate(secondFriday.getDate() + daysUntilFriday + 7)
+    // Simple maintenance mode check - just enabled/disabled with message
+    const maintenanceEnabled =
+      vars.maintenance_mode === '1' || vars.maintenance_mode === 1
 
     res.json({
-      featuredProjects: featuredProjects.map((fp) => ({
-        project_id: fp.project_id,
-        name: fp.name,
-        description: fp.description,
-        media_id: fp.media_files?.[0]?.media_id,
-        media: fp.media_files?.[0]?.media,
-      })),
+      featuredProjects: featuredProjects.map((fp) => {
+        // Find the exemplar media file using the project's exemplar_media_id
+        const exemplarMediaId = fp.project?.exemplar_media_id
+        const exemplarMedia = exemplarMediaId
+          ? fp.project?.media_files?.find((m) => m.media_id === exemplarMediaId)
+          : null
+        // Fall back to first media file if exemplar not found
+        const mediaFile = exemplarMedia || fp.project?.media_files?.[0]
+
+        return {
+          featured_project_id: fp.featured_project_id,
+          project_id: fp.project_id,
+          name: fp.project?.name,
+          description: fp.description || fp.project?.description,
+          exemplar_media_id: exemplarMediaId,
+          media_id: mediaFile?.media_id,
+          media: mediaFile?.media,
+        }
+      }),
       matrixImages: matrixImages.map((mi) => ({
         image_id: mi.image_id,
         project_id: mi.project_id,
@@ -120,10 +136,8 @@ router.get('/', async (req, res) => {
         link: p.link,
       })),
       maintenanceStatus: {
-        enabled: vars.maintenance_mode === '1',
+        enabled: maintenanceEnabled,
         message: vars.maintenance_message || '',
-        nextDate: secondFriday.toISOString(),
-        scheduleEnabled: vars.maintenance_mode_schedule_enabled === 1,
       },
     })
   } catch (error) {

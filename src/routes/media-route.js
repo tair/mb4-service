@@ -22,6 +22,11 @@ mediaRouter.post('/create/3d', upload.single('file'), controller.create3DMediaFi
 mediaRouter.post('/create/video', upload.single('file'), controller.createVideoMediaFile)
 mediaRouter.post('/create/stacks', upload.single('file'), controller.createStacksMediaFile)
 
+// Direct-to-S3 upload routes for large CT scan files (bypasses proxy timeouts)
+mediaRouter.post('/stacks/initiate', controller.initiateStacksUpload)
+// Complete accepts optional thumbnail file extracted in browser (avoids backend downloading entire ZIP)
+mediaRouter.post('/stacks/:mediaId/complete', upload.single('thumbnail'), controller.completeStacksUpload)
+
 mediaRouter.get('/:mediaId', controller.getMediaFile)
 mediaRouter.get('/:mediaId/details', controller.getMediaFileDetails)
 mediaRouter.post(
@@ -37,6 +42,19 @@ mediaRouter.post(
   controller.editCitation
 )
 mediaRouter.post('/:mediaId/citations/delete', controller.deleteCitations)
+
+// Document linking for copyright (media_files_x_documents)
+mediaRouter.get('/:mediaId/document', controller.getMediaDocument)
+mediaRouter.post('/:mediaId/document', controller.setMediaDocument)
+mediaRouter.delete('/:mediaId/document', controller.removeMediaDocument)
+
+// Bulk apply copyright - query related media
+mediaRouter.get('/:mediaId/related/by-specimen', controller.getRelatedMediaBySpecimen)
+mediaRouter.get('/:mediaId/related/by-citations', controller.getRelatedMediaByCitations)
+
+// Bulk apply copyright settings
+mediaRouter.post('/:mediaId/copyright/apply', controller.applyCopyrightToMedia)
+mediaRouter.post('/:mediaId/copyright-holder/apply', controller.applyCopyrightHolderToMedia)
 
 // This is a sub-route focused on /media/<media ID>/labels
 mediaRouter.use('/:mediaId/labels', mediaLabelsRouter)

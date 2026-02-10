@@ -32,6 +32,32 @@ export default class UserAuthenticationHandler {
         throw error
       }
 
+      // Check if user is deleted
+      if (user.userclass === 255) {
+        const error = new Error('This account has been deleted.')
+        error.statusCode = 403
+        error.response = { message: error.message }
+        throw error
+      }
+
+      // Check if user is active
+      if (user.active === 0 || user.active === false) {
+        const error = new Error('The user is inactive, please contact admin to reactivate the user.')
+        error.statusCode = 403
+        error.response = { message: error.message }
+        throw error
+      }
+
+      // Update last login timestamp
+      const currentTimestamp = Math.floor(Date.now() / 1000)
+      user.setVar('last_login', currentTimestamp)
+      try {
+        await user.save({ user: user })
+      } catch (saveError) {
+        console.error('Failed to update last_login timestamp:', saveError)
+        // Continue with login even if timestamp update fails
+      }
+
       // Get user access roles using the service
       const access = await getRoles(user.user_id)
 

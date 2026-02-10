@@ -300,3 +300,28 @@ export async function isTaxonCitationsInProject(
   )
   return count == citationIds.length
 }
+
+/**
+ * Get media counts for all taxa in a project.
+ * Media is linked to taxa through specimens (media_files -> specimens -> taxa_x_specimens -> taxa).
+ * @param {number} projectId - The project ID
+ * @returns {Promise<Object>} Map of taxon_id to media_count
+ */
+export async function getTaxaMediaCounts(projectId) {
+  const [rows] = await sequelizeConn.query(
+    `
+    SELECT t.taxon_id, COUNT(DISTINCT mf.media_id) as media_count
+    FROM taxa t
+    LEFT JOIN taxa_x_specimens ts ON t.taxon_id = ts.taxon_id
+    LEFT JOIN media_files mf ON ts.specimen_id = mf.specimen_id AND mf.cataloguing_status = 0
+    WHERE t.project_id = ?
+    GROUP BY t.taxon_id`,
+    { replacements: [projectId] }
+  )
+
+  const mediaCountMap = {}
+  for (const row of rows) {
+    mediaCountMap[row.taxon_id] = parseInt(row.media_count) || 0
+  }
+  return mediaCountMap
+}

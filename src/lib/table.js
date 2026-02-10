@@ -41,6 +41,22 @@ export class Table {
     return submap.get(col)
   }
 
+  delete(row, col) {
+    if (!this.map.has(row)) {
+      return false
+    }
+
+    const submap = this.map.get(row)
+    const deleted = submap.delete(col)
+
+    // Clean up empty row maps
+    if (submap.size === 0) {
+      this.map.delete(row)
+    }
+
+    return deleted
+  }
+
   [Symbol.iterator]() {
     return this.map[Symbol.iterator]()
   }

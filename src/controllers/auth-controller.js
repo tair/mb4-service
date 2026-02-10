@@ -362,6 +362,16 @@ async function authenticateORCID(req, res) {
       }
 
       if (userWithOrcid) {
+        // Update last login timestamp
+        const currentTimestamp = Math.floor(Date.now() / 1000)
+        userWithOrcid.setVar('last_login', currentTimestamp)
+        try {
+          await userWithOrcid.save({ user: userWithOrcid })
+        } catch (saveError) {
+          console.error('Failed to update last_login timestamp for ORCID user:', saveError)
+          // Continue with login even if timestamp update fails
+        }
+
         const access = await getRoles(userWithOrcid.user_id)
         let userResponse = {
           name: userWithOrcid.getName(),

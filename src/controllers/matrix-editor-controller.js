@@ -107,10 +107,9 @@ export async function setTaxaNotes(req, res) {
 
 export async function setTaxaAccess(req, res) {
   const taxaIds = parseIntArray(req.body.taxa_ids)
-  const userId = parseInt(req.body.user_id) || null
   const groupId = parseInt(req.body.group_id) || null
   const success = await applyMatrix(req, res, (service) =>
-    service.setTaxaAccess(taxaIds, userId, groupId)
+    service.setTaxaAccess(taxaIds, groupId)
   )
   if (success) {
     sentSyncEventToClients(req.params.matrixId, req.user)
@@ -855,6 +854,53 @@ function sentSyncEventToClients(matrixId, user) {
     .getClients(parseInt(matrixId))
     .filter((client) => client.userId != userId)
     .forEach((client) => client.response.write(response))
+}
+
+// Composite Taxa endpoints
+export async function getCompositeTaxa(req, res) {
+  await applyMatrix(req, res, (service) => service.getCompositeTaxa())
+}
+
+export async function createCompositeTaxon(req, res) {
+  const sourceTaxaIds = parseIntArray(req.body.source_taxa_ids)
+  if (!sourceTaxaIds || sourceTaxaIds.length < 2) {
+    return res.status(400).json({ ok: false, errors: ['At least two source taxa IDs are required'] })
+  }
+  const genus = req.body.genus || ''
+  const specificEpithet = req.body.specific_epithet || ''
+  const subspecificEpithet = req.body.subspecific_epithet || ''
+  const success = await applyMatrix(req, res, (service) =>
+    service.createCompositeTaxon(sourceTaxaIds, genus, specificEpithet, subspecificEpithet)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function deleteCompositeTaxon(req, res) {
+  const compositeTaxonId = parseInt(req.body.composite_taxon_id)
+  if (!compositeTaxonId || compositeTaxonId <= 0 || isNaN(compositeTaxonId)) {
+    return res.status(400).json({ ok: false, errors: ['Valid composite_taxon_id is required'] })
+  }
+  const success = await applyMatrix(req, res, (service) =>
+    service.deleteCompositeTaxon(compositeTaxonId)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
+}
+
+export async function recalculateCompositeTaxon(req, res) {
+  const compositeTaxonId = parseInt(req.body.composite_taxon_id)
+  if (!compositeTaxonId || compositeTaxonId <= 0 || isNaN(compositeTaxonId)) {
+    return res.status(400).json({ ok: false, errors: ['Valid composite_taxon_id is required'] })
+  }
+  const success = await applyMatrix(req, res, (service) =>
+    service.recalculateCompositeTaxonScores(compositeTaxonId)
+  )
+  if (success) {
+    sentSyncEventToClients(req.params.matrixId, req.user)
+  }
 }
 
 export async function logError(req) {

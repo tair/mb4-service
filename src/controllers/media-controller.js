@@ -3,7 +3,7 @@ import * as service from '../services/media-service.js'
 import * as bibliographyService from '../services/bibliography-service.js'
 import * as folioService from '../services/folios-service.js'
 import { convertMediaTypeFromMimeType } from '../util/media.js'
-import { unzip, cleanupTempDirectory } from '../util/zip.js'
+import { unzip, cleanupTempDirectory, extractFirstImageFromZip } from '../util/zip.js'
 import { models } from '../models/init-models.js'
 import { S3MediaUploader } from '../lib/s3-media-uploader.js'
 import { VideoProcessor } from '../lib/video-processor.js'
@@ -97,7 +97,9 @@ export async function getMediaFiles(req, res) {
   try {
     const media = await service.getMediaFiles(projectId)
     res.status(200).json({
-      media: media.map((row) => convertMediaResponse(row)),
+      media: media
+        .filter((row) => row.media != null || row.url)  // Skip entries with no media AND no URL
+        .map((row) => convertMediaResponse(row)),
     })
   } catch (err) {
     console.error(`Error: Cannot media files for ${projectId}`, err)
@@ -1271,7 +1273,7 @@ function convertMediaResponse(row) {
     created_on: row.created_on,
     url: row.url,
     url_description: row.url_description,
-    original_filename: row.media.ORIGINAL_FILENAME,
+    original_filename: row.media?.ORIGINAL_FILENAME,  // Add optional chaining (?.)
   }
   
   // Add view name if available
@@ -2130,7 +2132,7 @@ export async function createStacksMediaFile(req, res) {
 
   const transaction = await sequelizeConn.transaction()
   const mediaUploader = new S3MediaUploader(transaction, req.user)
-  let files = []
+  let firstImageFile = null
 
   try {
     // Save the media record first
@@ -2142,41 +2144,10 @@ export async function createStacksMediaFile(req, res) {
     // Upload the entire ZIP file as non-image media
     await mediaUploader.setNonImageMedia(media, 'media', req.file)
 
-    // Extract the ZIP to find the first image file for thumbnail generation
-    files = await unzip(req.file.path)
-
-    if (files.length === 0) {
-      await transaction.rollback()
-      await mediaUploader.rollback()
-      res
-        .status(400)
-        .json({ message: 'ZIP file is empty or contains no valid files' })
-      return
-    }
-
-    // Find the first suitable image file for thumbnail generation
-    const imageExtensions = ['png', 'jpg', 'jpeg', 'tif', 'tiff', 'gif', 'bmp', 'webp']
-    const firstImageFile = files.find((file) => {
-      // Skip macOS metadata files and system files
-      if (
-        file.originalname.startsWith('__MACOSX/') ||
-        file.originalname.startsWith('._') ||
-        file.originalname.startsWith('.DS_Store') ||
-        file.originalname.includes('/.DS_Store') ||
-        file.originalname.startsWith('Thumbs.db') ||
-        file.originalname.includes('/Thumbs.db')
-      ) {
-        return false
-      }
-
-      // Skip directories
-      if (!file.originalname.includes('.')) {
-        return false
-      }
-
-      const extension = file.originalname.split('.').pop().toLowerCase()
-      return imageExtensions.includes(extension)
-    })
+    // Use lazy extraction to find ONLY the first image file for thumbnail generation
+    // This is much more efficient for large CT scan archives (up to 1.5GB)
+    // Instead of extracting ALL files, we stream through entries and stop at the first image
+    firstImageFile = await extractFirstImageFromZip(req.file.path)
 
     // Generate thumbnails if we found a suitable image file
     if (firstImageFile) {
@@ -2223,9 +2194,10 @@ export async function createStacksMediaFile(req, res) {
               )
             }
           } else if (sizeName === 'thumbnail') {
-            // For thumbnail, resize to exact dimensions
+            // For thumbnail, resize to fit within dimensions while preserving aspect ratio
             processedImage = image.resize(dimensions.width, dimensions.height, {
-              fit: 'cover',
+              fit: 'inside',
+              withoutEnlargement: true,
             })
           }
 
@@ -2288,6 +2260,15 @@ export async function createStacksMediaFile(req, res) {
           console.warn('Failed to generate thumbnails from first image file:', thumbnailError.message)
         }
         // Continue without thumbnails - the ZIP file is still uploaded
+      } finally {
+        // Clean up the extracted image file from lazy extraction
+        if (firstImageFile.tempDirectory) {
+          try {
+            await cleanupTempDirectory(firstImageFile.tempDirectory)
+          } catch (cleanupError) {
+            console.warn('Error cleaning up extracted image temp directory:', cleanupError)
+          }
+        }
       }
     } else {
       console.log('No suitable image file found in ZIP for thumbnail generation')
@@ -2312,25 +2293,18 @@ export async function createStacksMediaFile(req, res) {
     await transaction.commit()
     mediaUploader.commit()
 
-    // Clean up temporary files
-    try {
-      await cleanupTempDirectory(path.dirname(files[0]?.path || ''))
-    } catch (cleanupError) {
-      console.error('Error cleaning up temporary files:', cleanupError)
-    }
-
   } catch (e) {
     await transaction.rollback()
     await mediaUploader.rollback()
     console.error('Error creating stack media:', e)
 
     // Clean up temporary files on error
-    try {
-      if (files && files.length > 0) {
-        await cleanupTempDirectory(path.dirname(files[0].path))
+    if (firstImageFile?.tempDirectory) {
+      try {
+        await cleanupTempDirectory(firstImageFile.tempDirectory)
+      } catch (cleanupError) {
+        console.error('Error cleaning up temporary files on error:', cleanupError)
       }
-    } catch (cleanupError) {
-      console.error('Error cleaning up temporary files on error:', cleanupError)
     }
 
     // Provide more specific error messages based on error type
@@ -2359,4 +2333,798 @@ export async function createStacksMediaFile(req, res) {
     media: convertMediaResponse(media),
     message: 'Successfully uploaded stack archive.',
   })
+}
+
+/**
+ * Initiate a direct-to-S3 upload for CT scan stacks.
+ * Returns a presigned URL for the client to upload directly to S3,
+ * bypassing CloudFront/httpd proxy timeouts for large files.
+ * 
+ * POST /projects/:projectId/media/stacks/initiate
+ */
+export async function initiateStacksUpload(req, res) {
+  const projectId = req.params.projectId
+  const values = req.body
+
+  // Validate required fields
+  if (!values.filename) {
+    res.status(400).json({ message: 'filename is required' })
+    return
+  }
+
+  // Validate file extension
+  if (!values.filename.toLowerCase().endsWith('.zip')) {
+    res.status(400).json({ message: 'File must be a ZIP archive' })
+    return
+  }
+
+  // Validate expected file size (optional but recommended)
+  const maxZipSize = 1536 * 1024 * 1024 // 1.5GB
+  if (values.filesize && values.filesize > maxZipSize) {
+    res.status(400).json({
+      message: 'ZIP file is too large. Maximum size is 1.5GB.',
+    })
+    return
+  }
+
+  // Ensure that the specimen is within the same project.
+  if (
+    values.specimen_id &&
+    values.specimen_id !== '' &&
+    values.specimen_id !== 'null'
+  ) {
+    const specimen = await models.Specimen.findByPk(values.specimen_id)
+    if (specimen == null || specimen.project_id != projectId) {
+      res.status(404).json({ message: 'Specimen is not found' })
+      return
+    }
+  } else {
+    values.specimen_id = null
+  }
+
+  // Ensure that the view is within the same project.
+  if (values.view_id && values.view_id !== '' && values.view_id !== 'null') {
+    const view = await models.MediaView.findByPk(values.view_id)
+    if (view == null || view.project_id != projectId) {
+      res.status(404).json({ message: 'View is not found' })
+      return
+    }
+  } else {
+    values.view_id = null
+  }
+
+  if (values.is_copyrighted == 0) {
+    values.copyright_permission = 0
+  }
+
+  // Validate specimen and view IDs
+  try {
+    const validated = await validateSpecimenAndView(values.specimen_id, values.view_id, projectId)
+    values.specimen_id = validated.specimen_id
+    values.view_id = validated.view_id
+  } catch (validationError) {
+    res.status(400).json({ message: validationError.message })
+    return
+  }
+
+  // Determine cataloguing status - if specimen and view are provided, auto-release
+  const cataloguingStatus = (values.specimen_id && values.view_id) ? 0 : 1
+
+  const transaction = await sequelizeConn.transaction()
+
+  try {
+    // Create a pending media record
+    const media = models.MediaFile.build({
+      specimen_id: values.specimen_id,
+      view_id: values.view_id,
+      is_copyrighted: values.is_copyrighted,
+      copyright_permission: values.copyright_permission,
+      copyright_license: values.copyright_license,
+      copyright_info: values.copyright_info,
+      notes: values.notes,
+      project_id: projectId,
+      user_id: req.user.user_id,
+      cataloguing_status: cataloguingStatus,
+      media_type: MEDIA_TYPES.IMAGE, // CT scan stacks are treated as images
+    })
+
+    // Set initial media data with pending status
+    media.set('media', {
+      ORIGINAL_FILENAME: values.filename,
+      UPLOAD_STATUS: 'pending',
+    })
+
+    await media.save({
+      transaction,
+      user: req.user,
+    })
+
+    // Generate S3 key for the upload
+    const extension = 'zip'
+    const fileName = `${projectId}_${media.media_id}_original.${extension}`
+    const s3Key = `media_files/images/${projectId}/${media.media_id}/${fileName}`
+
+    // Generate presigned upload URL (valid for 1 hour)
+    const bucket = config.aws.defaultBucket
+    const uploadUrl = await s3Service.getSignedUploadUrl(
+      bucket,
+      s3Key,
+      'application/zip',
+      3600 // 1 hour expiration
+    )
+
+    await transaction.commit()
+
+    res.status(200).json({
+      mediaId: media.media_id,
+      uploadUrl: uploadUrl,
+      s3Key: s3Key,
+      expiresIn: 3600,
+      message: 'Upload URL generated. Upload the ZIP file directly to this URL.',
+    })
+
+  } catch (e) {
+    await transaction.rollback()
+    console.error('Error initiating stacks upload:', e)
+    res.status(500).json({
+      message: 'Failed to initiate upload',
+      error: e.message,
+    })
+  }
+}
+
+/**
+ * Complete a direct-to-S3 upload for CT scan stacks.
+ * Verifies the upload, generates thumbnails, and updates the media record.
+ * 
+ * Optionally accepts a thumbnail image file (extracted from ZIP in browser).
+ * This avoids having the backend download the entire ZIP for thumbnail generation.
+ * 
+ * POST /projects/:projectId/media/stacks/:mediaId/complete
+ */
+/**
+ * Apply full copyright settings from one media to multiple target media.
+ * POST /projects/:projectId/media/:mediaId/copyright/apply
+ * Body: { target_media_ids: number[], include_document: boolean }
+ */
+export async function applyCopyrightToMedia(req, res) {
+  const projectId = req.project.project_id
+  const sourceMediaId = req.params.mediaId
+  const targetMediaIds = req.body.target_media_ids
+  const includeDocument = req.body.include_document !== false // Default to true
+
+  if (!targetMediaIds || !Array.isArray(targetMediaIds) || targetMediaIds.length === 0) {
+    return res.status(400).json({ message: 'target_media_ids must be a non-empty array' })
+  }
+
+  try {
+    // Get source media
+    const sourceMedia = await models.MediaFile.findByPk(sourceMediaId)
+    if (!sourceMedia || sourceMedia.project_id != projectId) {
+      return res.status(404).json({ message: 'Source media not found' })
+    }
+
+    // Verify all target media are in the same project
+    const isInProject = await service.isMediaInProject(targetMediaIds, projectId)
+    if (!isInProject) {
+      return res.status(400).json({ message: 'Not all target media are in this project' })
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    try {
+      // Apply copyright settings to all target media
+      const updateValues = {
+        is_copyrighted: sourceMedia.is_copyrighted,
+        copyright_permission: sourceMedia.copyright_permission,
+        copyright_license: sourceMedia.copyright_license,
+        copyright_info: sourceMedia.copyright_info,
+      }
+
+      await models.MediaFile.update(updateValues, {
+        where: { media_id: targetMediaIds },
+        transaction,
+        individualHooks: true,
+        user: req.user,
+      })
+
+      // If includeDocument, also copy the document link
+      if (includeDocument) {
+        // Get source document link
+        const sourceDocLink = await models.MediaFilesXDocument.findOne({
+          where: { media_id: sourceMediaId },
+          transaction,
+        })
+
+        if (sourceDocLink) {
+          // Remove existing document links for target media
+          await models.MediaFilesXDocument.destroy({
+            where: { media_id: targetMediaIds },
+            transaction,
+            user: req.user,
+          })
+
+          // Create new document links for all target media
+          const newLinks = targetMediaIds.map(mediaId => ({
+            media_id: mediaId,
+            document_id: sourceDocLink.document_id,
+            user_id: req.user.user_id,
+          }))
+
+          await models.MediaFilesXDocument.bulkCreate(newLinks, {
+            transaction,
+            ignoreDuplicates: true,
+            user: req.user,
+          })
+        }
+      }
+
+      await transaction.commit()
+
+      res.status(200).json({
+        success: true,
+        updatedCount: targetMediaIds.length,
+        message: `Copyright settings applied to ${targetMediaIds.length} media files`,
+      })
+    } catch (error) {
+      await transaction.rollback()
+      throw error
+    }
+  } catch (error) {
+    console.error('Error applying copyright to media:', error)
+    res.status(500).json({ message: 'Error applying copyright settings' })
+  }
+}
+
+/**
+ * Apply only copyright holder (copyright_info) from one media to multiple target media.
+ * POST /projects/:projectId/media/:mediaId/copyright-holder/apply
+ * Body: { target_media_ids: number[] }
+ */
+export async function applyCopyrightHolderToMedia(req, res) {
+  const projectId = req.project.project_id
+  const sourceMediaId = req.params.mediaId
+  const targetMediaIds = req.body.target_media_ids
+
+  if (!targetMediaIds || !Array.isArray(targetMediaIds) || targetMediaIds.length === 0) {
+    return res.status(400).json({ message: 'target_media_ids must be a non-empty array' })
+  }
+
+  try {
+    // Get source media
+    const sourceMedia = await models.MediaFile.findByPk(sourceMediaId)
+    if (!sourceMedia || sourceMedia.project_id != projectId) {
+      return res.status(404).json({ message: 'Source media not found' })
+    }
+
+    if (!sourceMedia.copyright_info) {
+      return res.status(400).json({ message: 'Source media has no copyright holder information' })
+    }
+
+    // Verify all target media are in the same project
+    const isInProject = await service.isMediaInProject(targetMediaIds, projectId)
+    if (!isInProject) {
+      return res.status(400).json({ message: 'Not all target media are in this project' })
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    try {
+      // Apply only copyright holder to all target media
+      await models.MediaFile.update(
+        { copyright_info: sourceMedia.copyright_info },
+        {
+          where: { media_id: targetMediaIds },
+          transaction,
+          individualHooks: true,
+          user: req.user,
+        }
+      )
+
+      await transaction.commit()
+
+      res.status(200).json({
+        success: true,
+        updatedCount: targetMediaIds.length,
+        copyrightHolder: sourceMedia.copyright_info,
+        message: `Copyright holder applied to ${targetMediaIds.length} media files`,
+      })
+    } catch (error) {
+      await transaction.rollback()
+      throw error
+    }
+  } catch (error) {
+    console.error('Error applying copyright holder to media:', error)
+    res.status(500).json({ message: 'Error applying copyright holder' })
+  }
+}
+
+/**
+ * Get media files that share the same specimen as the current media.
+ * Used for bulk copyright apply feature.
+ * GET /projects/:projectId/media/:mediaId/related/by-specimen
+ */
+export async function getRelatedMediaBySpecimen(req, res) {
+  const projectId = req.project.project_id
+  const mediaId = req.params.mediaId
+
+  try {
+    // Get the current media to find its specimen_id
+    const media = await models.MediaFile.findByPk(mediaId)
+    if (!media || media.project_id != projectId) {
+      return res.status(404).json({ message: 'Media not found' })
+    }
+
+    if (!media.specimen_id) {
+      return res.status(200).json({ 
+        media: [],
+        message: 'This media is not associated with a specimen'
+      })
+    }
+
+    // Get related media by specimen
+    const relatedMedia = await service.getMediaBySpecimen(
+      projectId, 
+      media.specimen_id, 
+      mediaId
+    )
+
+    res.status(200).json({
+      media: relatedMedia.map(m => ({
+        media_id: m.media_id,
+        view_name: m.view_name,
+        thumbnail: m.media?.thumbnail,
+        is_copyrighted: m.is_copyrighted,
+        copyright_permission: m.copyright_permission,
+        copyright_license: m.copyright_license,
+        copyright_info: m.copyright_info,
+      })),
+      specimenId: media.specimen_id,
+      count: relatedMedia.length
+    })
+  } catch (error) {
+    console.error('Error getting related media by specimen:', error)
+    res.status(500).json({ message: 'Error fetching related media' })
+  }
+}
+
+/**
+ * Get media files that share bibliographic references with the current media.
+ * Used for bulk copyright apply feature.
+ * GET /projects/:projectId/media/:mediaId/related/by-citations
+ */
+export async function getRelatedMediaByCitations(req, res) {
+  const projectId = req.project.project_id
+  const mediaId = req.params.mediaId
+
+  try {
+    // Get the current media
+    const media = await models.MediaFile.findByPk(mediaId)
+    if (!media || media.project_id != projectId) {
+      return res.status(404).json({ message: 'Media not found' })
+    }
+
+    // Get the citation (reference) IDs for this media
+    const citationIds = await service.getMediaCitationIds(mediaId)
+
+    if (citationIds.length === 0) {
+      return res.status(200).json({ 
+        media: [],
+        message: 'This media has no bibliographic references'
+      })
+    }
+
+    // Get related media by citations
+    const relatedMedia = await service.getMediaByCitations(
+      projectId, 
+      citationIds, 
+      mediaId
+    )
+
+    res.status(200).json({
+      media: relatedMedia.map(m => ({
+        media_id: m.media_id,
+        view_name: m.view_name,
+        thumbnail: m.media?.thumbnail,
+        is_copyrighted: m.is_copyrighted,
+        copyright_permission: m.copyright_permission,
+        copyright_license: m.copyright_license,
+        copyright_info: m.copyright_info,
+      })),
+      citationIds: citationIds,
+      count: relatedMedia.length
+    })
+  } catch (error) {
+    console.error('Error getting related media by citations:', error)
+    res.status(500).json({ message: 'Error fetching related media' })
+  }
+}
+
+/**
+ * Get document linked to a media file for copyright purposes.
+ * GET /projects/:projectId/media/:mediaId/document
+ */
+export async function getMediaDocument(req, res) {
+  const projectId = req.project.project_id
+  const mediaId = req.params.mediaId
+
+  try {
+    // Verify media exists and belongs to project
+    const media = await models.MediaFile.findByPk(mediaId)
+    if (!media || media.project_id != projectId) {
+      return res.status(404).json({ message: 'Media not found' })
+    }
+
+    // Get linked document
+    const link = await models.MediaFilesXDocument.findOne({
+      where: { media_id: mediaId }
+    })
+
+    if (!link) {
+      return res.status(200).json({ document: null })
+    }
+
+    // Get document details
+    const document = await models.ProjectDocument.findByPk(link.document_id)
+
+    res.status(200).json({
+      document: document ? {
+        document_id: document.document_id,
+        title: document.title,
+        description: document.description,
+        filename: document.filename,
+        uploaded: document.uploaded,
+      } : null,
+      link_id: link.link_id,
+    })
+  } catch (error) {
+    console.error('Error getting media document:', error)
+    res.status(500).json({ message: 'Error fetching document link' })
+  }
+}
+
+/**
+ * Link a document to a media file for copyright purposes.
+ * POST /projects/:projectId/media/:mediaId/document
+ * Body: { document_id: number }
+ */
+export async function setMediaDocument(req, res) {
+  const projectId = req.project.project_id
+  const mediaId = req.params.mediaId
+  const documentId = req.body.document_id
+
+  if (!documentId) {
+    return res.status(400).json({ message: 'document_id is required' })
+  }
+
+  try {
+    // Verify media exists and belongs to project
+    const media = await models.MediaFile.findByPk(mediaId)
+    if (!media || media.project_id != projectId) {
+      return res.status(404).json({ message: 'Media not found' })
+    }
+
+    // Verify document exists and belongs to project
+    const document = await models.ProjectDocument.findByPk(documentId)
+    if (!document || document.project_id != projectId) {
+      return res.status(404).json({ message: 'Document not found in this project' })
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    try {
+      // Remove any existing link for this media
+      await models.MediaFilesXDocument.destroy({
+        where: { media_id: mediaId },
+        transaction,
+        user: req.user,
+      })
+
+      // Create new link
+      const link = await models.MediaFilesXDocument.create({
+        media_id: mediaId,
+        document_id: documentId,
+        user_id: req.user.user_id,
+      }, {
+        transaction,
+        user: req.user,
+      })
+
+      await transaction.commit()
+
+      res.status(200).json({
+        link_id: link.link_id,
+        document: {
+          document_id: document.document_id,
+          title: document.title,
+          description: document.description,
+          filename: document.filename,
+        },
+        message: 'Document linked to media successfully',
+      })
+    } catch (error) {
+      await transaction.rollback()
+      throw error
+    }
+  } catch (error) {
+    console.error('Error linking document to media:', error)
+    res.status(500).json({ message: 'Error linking document to media' })
+  }
+}
+
+/**
+ * Remove document link from a media file.
+ * DELETE /projects/:projectId/media/:mediaId/document
+ */
+export async function removeMediaDocument(req, res) {
+  const projectId = req.project.project_id
+  const mediaId = req.params.mediaId
+
+  try {
+    // Verify media exists and belongs to project
+    const media = await models.MediaFile.findByPk(mediaId)
+    if (!media || media.project_id != projectId) {
+      return res.status(404).json({ message: 'Media not found' })
+    }
+
+    const transaction = await sequelizeConn.transaction()
+
+    try {
+      const deleted = await models.MediaFilesXDocument.destroy({
+        where: { media_id: mediaId },
+        transaction,
+        user: req.user,
+      })
+
+      await transaction.commit()
+
+      res.status(200).json({
+        removed: deleted > 0,
+        message: deleted > 0 ? 'Document link removed' : 'No document link found',
+      })
+    } catch (error) {
+      await transaction.rollback()
+      throw error
+    }
+  } catch (error) {
+    console.error('Error removing document link:', error)
+    res.status(500).json({ message: 'Error removing document link' })
+  }
+}
+
+export async function completeStacksUpload(req, res) {
+  const projectId = req.params.projectId
+  const mediaId = req.params.mediaId
+
+  // Find the pending media record
+  const media = await models.MediaFile.findByPk(mediaId)
+  if (media == null || media.project_id != projectId) {
+    res.status(404).json({ message: 'Media is not found' })
+    return
+  }
+
+  // Verify this is a pending upload
+  const mediaData = media.media || {}
+  if (mediaData.UPLOAD_STATUS !== 'pending') {
+    res.status(400).json({ message: 'This upload has already been completed or was not initiated properly' })
+    return
+  }
+
+  // Construct expected S3 key
+  const s3Key = `media_files/images/${projectId}/${mediaId}/${projectId}_${mediaId}_original.zip`
+  const bucket = config.aws.defaultBucket
+
+  // Verify the file exists in S3
+  const objectAttributes = await s3Service.getObjectAttributes(bucket, s3Key)
+  if (!objectAttributes) {
+    res.status(400).json({ 
+      message: 'Upload not found in S3. Please ensure the file was uploaded successfully.',
+    })
+    return
+  }
+
+  // Validate file size
+  const maxZipSize = 1.1 * 1536 * 1024 * 1024 // ~1.7GB (with some tolerance)
+  if (objectAttributes.contentLength > maxZipSize) {
+    // Delete the oversized file from S3
+    try {
+      await s3Service.deleteObject(bucket, s3Key)
+    } catch (deleteError) {
+      console.error('Failed to delete oversized file:', deleteError)
+    }
+    res.status(400).json({
+      message: 'Uploaded file is too large. Maximum size is 1.5GB.',
+    })
+    return
+  }
+
+  const transaction = await sequelizeConn.transaction()
+  const mediaUploader = new S3MediaUploader(transaction, req.user)
+
+  try {
+    // Update media data with the uploaded file info
+    const updatedMediaData = {
+      ORIGINAL_FILENAME: mediaData.ORIGINAL_FILENAME,
+      original: {
+        S3_KEY: s3Key,
+        S3_ETAG: objectAttributes.etag,
+        FILESIZE: objectAttributes.contentLength,
+        MIMETYPE: 'application/zip',
+        EXTENSION: 'zip',
+        PROPERTIES: {
+          mimetype: 'application/zip',
+          filesize: objectAttributes.contentLength,
+          version: 'original',
+        },
+      },
+    }
+
+    // Check if frontend provided a thumbnail image (extracted from ZIP in browser)
+    // This is much more efficient than downloading the entire ZIP on the backend
+    const thumbnailFile = req.file
+    let thumbnailSource = null
+
+    if (thumbnailFile && thumbnailFile.path) {
+      // Use the thumbnail provided by the frontend
+      console.log(`Using frontend-provided thumbnail: ${thumbnailFile.originalname}`)
+      thumbnailSource = { path: thumbnailFile.path, fromFrontend: true }
+    } else {
+      // Fallback: Download ZIP from S3 and extract first image (legacy behavior)
+      // This is slower but ensures backwards compatibility
+      console.log('No thumbnail provided, falling back to S3 download for thumbnail extraction')
+      try {
+        const tempPath = path.join('/tmp', 'mb-downloads')
+        await fs.mkdir(tempPath, { recursive: true })
+        const tempZipPath = path.join(tempPath, `process-${mediaId}-${Date.now()}.zip`)
+
+        // Download from S3
+        const s3Object = await s3Service.getObject(bucket, s3Key)
+        await fs.writeFile(tempZipPath, s3Object.data)
+
+        // Extract first image using lazy extraction
+        const { extractFirstImageFromZip } = await import('../util/zip.js')
+        const firstImageFile = await extractFirstImageFromZip(tempZipPath)
+        
+        if (firstImageFile) {
+          thumbnailSource = { 
+            path: firstImageFile.path, 
+            tempDirectory: firstImageFile.tempDirectory,
+            tempZipPath: tempZipPath,
+            fromFrontend: false 
+          }
+        } else {
+          // Cleanup temp ZIP if no image found
+          try { await fs.unlink(tempZipPath) } catch { /* ignore */ }
+        }
+      } catch (downloadError) {
+        console.warn('Failed to download ZIP for thumbnail generation:', downloadError.message)
+        // Continue without thumbnail - the file is still uploaded
+      }
+    }
+
+    // Generate thumbnails if we have an image source
+    if (thumbnailSource) {
+      try {
+        const sharp = (await import('sharp')).default
+        const image = sharp(thumbnailSource.path)
+        const metadata = await image.metadata()
+
+        if (metadata.width && metadata.height && 
+            metadata.width <= 10000 && metadata.height <= 10000) {
+
+          const sizes = {
+            large: { maxWidth: 800, maxHeight: 800 },
+            thumbnail: { width: 120, height: 120 },
+          }
+
+          for (const [sizeName, dimensions] of Object.entries(sizes)) {
+            let processedImage = image
+
+            if (sizeName === 'large') {
+              if (metadata.width > dimensions.maxWidth || metadata.height > dimensions.maxHeight) {
+                processedImage = image.resize(dimensions.maxWidth, dimensions.maxHeight, {
+                  fit: 'inside',
+                  withoutEnlargement: true,
+                })
+              }
+            } else if (sizeName === 'thumbnail') {
+              processedImage = image.resize(dimensions.width, dimensions.height, {
+                fit: 'inside',
+                withoutEnlargement: true,
+              })
+            }
+
+            const buffer = await processedImage
+              .jpeg({ quality: 85, progressive: true })
+              .toBuffer()
+
+            const processedMetadata = await processedImage.metadata()
+
+            const thumbFileName = `${projectId}_${mediaId}_${sizeName}.jpg`
+            const thumbS3Key = `media_files/images/${projectId}/${mediaId}/${thumbFileName}`
+
+            const result = await s3Service.putObject(bucket, thumbS3Key, buffer, 'image/jpeg')
+
+            updatedMediaData[sizeName] = {
+              S3_KEY: thumbS3Key,
+              S3_ETAG: result.etag,
+              WIDTH: processedMetadata.width,
+              HEIGHT: processedMetadata.height,
+              FILESIZE: buffer.length,
+              MIMETYPE: 'image/jpeg',
+              EXTENSION: 'jpg',
+              PROPERTIES: {
+                height: processedMetadata.height,
+                width: processedMetadata.width,
+                mimetype: 'image/jpeg',
+                filesize: buffer.length,
+                version: sizeName,
+              },
+            }
+
+            mediaUploader.uploadedFiles.push({
+              bucket: bucket,
+              key: thumbS3Key,
+              etag: result.etag,
+            })
+          }
+        }
+      } catch (thumbnailError) {
+        console.warn('Failed to generate thumbnails:', thumbnailError.message)
+      }
+
+      // Cleanup temp files
+      if (!thumbnailSource.fromFrontend) {
+        // Cleanup extracted image from S3 download
+        if (thumbnailSource.tempDirectory) {
+          try {
+            await cleanupTempDirectory(thumbnailSource.tempDirectory)
+          } catch (cleanupError) {
+            console.warn('Error cleaning up temp directory:', cleanupError)
+          }
+        }
+        // Cleanup temp ZIP file
+        if (thumbnailSource.tempZipPath) {
+          try { await fs.unlink(thumbnailSource.tempZipPath) } catch { /* ignore */ }
+        }
+      }
+      // Note: multer handles cleanup of frontend-provided files automatically
+    }
+
+    // If no thumbnail was generated, use archive icon
+    if (!updatedMediaData.thumbnail) {
+      updatedMediaData.thumbnail = {
+        USE_ICON: 'archive',
+        PROPERTIES: {
+          version: 'thumbnail',
+        },
+      }
+    }
+
+    // Update the media record
+    media.set('media', updatedMediaData)
+
+    await media.save({
+      transaction,
+      user: req.user,
+      shouldSkipLogChange: true,
+    })
+
+    await transaction.commit()
+    mediaUploader.commit()
+
+    res.status(200).json({
+      media: convertMediaResponse(media),
+      message: 'CT scan stack upload completed successfully.',
+    })
+
+  } catch (e) {
+    await transaction.rollback()
+    await mediaUploader.rollback()
+    console.error('Error completing stacks upload:', e)
+    res.status(500).json({
+      message: 'Failed to complete upload',
+      error: e.message,
+    })
+  }
 }

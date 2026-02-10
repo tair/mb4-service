@@ -23,7 +23,14 @@ import tntRouter from './routes/tnt-route.js'
 import schedulerService from './services/scheduler-service.js'
 import s3Router from './routes/s3-route.js'
 import { duplicationRequestRouter } from './routes/duplication-request-route.js'
+import { institutionRequestRouter } from './routes/institution-request-route.js'
+import { curatorInstitutionRouter } from './routes/curator-institution-route.js'
 import apiServiceRouter from './routes/api-service-route.js'
+import adminMaintenanceRouter from './routes/admin-maintenance-route.js'
+import adminUsersRouter from './routes/admin-users-route.js'
+import adminHomepageRouter from './routes/admin-homepage-route.js'
+import adminStatisticsRouter from './routes/admin-statistics-route.js'
+import adminTasksRouter from './routes/admin-tasks-route.js'
 import { trackSession } from './lib/session-middleware.js'
 import { gracefulShutdown } from './controllers/analytics-controller.js'
 import loggingService from './services/logging-service.js'
@@ -104,7 +111,14 @@ app.use('/scheduler', schedulerRouter)
 app.use('/s3', s3Router)
 app.use('/tnt', tntRouter)
 app.use('/duplication-requests', duplicationRequestRouter)
+app.use('/curation-requests/institutions', institutionRequestRouter)
+app.use('/curator/institutions', curatorInstitutionRouter)
 app.use('/service', apiServiceRouter)
+app.use('/admin/maintenance', adminMaintenanceRouter)
+app.use('/admin/users', adminUsersRouter)
+app.use('/admin/homepage', adminHomepageRouter)
+app.use('/admin/statistics', adminStatisticsRouter)
+app.use('/admin/tasks', adminTasksRouter)
 
 // Initialize stats cache
 initializeCache().catch((error) => {

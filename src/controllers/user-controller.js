@@ -146,14 +146,23 @@ async function updateProfile(req, res, next) {
 
 function searchInstitutions(req, res) {
   const searchTerm = req.query.searchTerm
-  models.Institution.findAll({
-    attributes: ['institution_id', 'name'],
-    where: {
-      name: {
-        [Sequelize.Op.like]: '%' + searchTerm + '%',
-      },
-      active: 1,
+  const userId = req.credential?.user_id
+  
+  // Build where clause: active institutions OR user's own pending institutions
+  const whereClause = {
+    name: {
+      [Sequelize.Op.like]: '%' + searchTerm + '%',
     },
+    [Sequelize.Op.or]: [
+      { active: 1 },
+      // Include user's own pending institutions
+      ...(userId ? [{ user_id: userId, active: 0 }] : [])
+    ]
+  }
+  
+  models.Institution.findAll({
+    attributes: ['institution_id', 'name', 'active', 'user_id'],
+    where: whereClause,
   })
     .then((institutions) => {
       return res.status(200).json(institutions)
@@ -270,6 +279,10 @@ async function createInstitution(req, res, next) {
       return res.status(400).json({ message: 'Institution name is required.' })
     }
 
+    if (name.length > 100) {
+      return res.status(400).json({ message: 'Institution name must be 100 characters or less.' })
+    }
+
     // Check if institution already exists
     const existingInstitution = await models.Institution.findOne({ 
       where: { name: name } 
@@ -282,16 +295,42 @@ async function createInstitution(req, res, next) {
       })
     }
 
-    // Create new institution
+    const user = await models.User.findByPk(req.credential.user_id)
+
+    // Create new institution (active=false, pending approval)
     const institution = await models.Institution.create({
       name: name,
       user_id: req.credential.user_id,
       active: false,
-    }, { user: await models.User.findByPk(req.credential.user_id) })
+    }, { user: user })
+
+    // Create curation request for approval
+    await models.CurationRequest.create({
+      request_type: 1,  // Institution
+      table_num: 93,    // institutions table number
+      row_id: institution.institution_id,
+      user_id: req.credential.user_id,
+      status: 0,  // New/Pending
+    }, { user: user })
+
+    // Send email notification to curators
+    try {
+      const emailManager = new EmailManager()
+      await emailManager.email('institution_added', {
+        institutionName: name,
+        userName: `${user.fname} ${user.lname}`.trim(),
+        userEmail: user.email,
+        institutionId: institution.institution_id,
+      })
+    } catch (emailError) {
+      // Log error but don't fail the request
+      console.error('Error sending institution notification email:', emailError)
+    }
 
     res.status(201).json({
-      message: 'Institution created successfully.',
-      institution: institution
+      message: 'Institution created successfully. It will be reviewed by a curator before becoming visible to all users.',
+      institution: institution,
+      pendingApproval: true
     })
   } catch (error) {
     console.error('Error creating institution:', error)

@@ -493,7 +493,7 @@ async function importIntoMatrix(
       await withBatchedTransaction(async (transaction) => {
         await models.CellNote.bulkCreate(notesInsertions, {
           transaction,
-          updateOnDuplicate: true,
+          updateOnDuplicate: ['notes', 'user_id', 'source'],
         })
       })
     }
@@ -633,7 +633,7 @@ async function importIntoMatrix(
     if (notesInsertions.length) {
       await models.CellNote.bulkCreate(notesInsertions, {
         transaction,
-        updateOnDuplicate: true,
+        updateOnDuplicate: ['notes', 'user_id', 'source'],
       })
     }
   }

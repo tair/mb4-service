@@ -67,6 +67,8 @@ export const TABLE_NUMBERS = {
   institutions_x_users: 94,
   institutions_x_projects: 95,
   curation_requests: 96,
+  composite_taxa: 97,
+  composite_taxa_sources: 98,
 }
 
 export function getTableNumber(model) {
