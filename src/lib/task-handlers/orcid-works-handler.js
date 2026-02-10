@@ -28,11 +28,8 @@ export class ORCIDWorksHandler extends Handler {
   }
 
   async process(parameters) {
-    console.log('[ORCIDWorksHandler] Starting process with parameters:', parameters)
-    
     const projectId = parseInt(parameters.project_id)
     if (!projectId) {
-      console.log('[ORCIDWorksHandler] Invalid project ID:', parameters.project_id)
       return this.createError(
         HandlerErrors.ILLEGAL_PARAMETER,
         'Project ID is not defined'
@@ -42,13 +39,8 @@ export class ORCIDWorksHandler extends Handler {
     // Check if ORCID Works feature is enabled
     const apiDomain = config.orcid?.apiDomain || 'NOT SET'
     const worksEnabled = config.orcid?.worksEnabled || false
-    console.log(`[ORCIDWorksHandler] API Domain: ${apiDomain}, Works Enabled: ${worksEnabled}`)
     
     if (!this.isWorksEnabled()) {
-      console.log(
-        '[ORCIDWorksHandler] ORCID Works feature not enabled. Skipping ORCID Works push.',
-        'To enable, set ORCID_WORKS_ENABLED=true and ORCID_API_DOMAIN to api.orcid.org (production) or api.sandbox.orcid.org (sandbox).'
-      )
       return {
         result: {
           message: 'ORCID Works feature not enabled - skipping works push',
@@ -59,7 +51,6 @@ export class ORCIDWorksHandler extends Handler {
     }
     
     if (!apiDomain || apiDomain === 'NOT SET') {
-      console.log('[ORCIDWorksHandler] ORCID_API_DOMAIN not configured. Skipping ORCID Works push.')
       return {
         result: {
           message: 'ORCID API domain not configured - skipping works push',
@@ -68,13 +59,10 @@ export class ORCIDWorksHandler extends Handler {
         },
       }
     }
-    
-    console.log('[ORCIDWorksHandler] ORCID Works feature is enabled, proceeding...')
 
     // Get the project
     const project = await models.Project.findByPk(projectId)
     if (project == null) {
-      console.log('ORCIDWorksHandler: Project not found:', projectId)
       return this.createError(
         HandlerErrors.ILLEGAL_PARAMETER,
         `Project ${projectId} does not exist`
@@ -83,10 +71,6 @@ export class ORCIDWorksHandler extends Handler {
 
     // Verify project is published
     if (project.published !== 1) {
-      console.log(
-        'ORCIDWorksHandler: Project is not published, skipping ORCID push:',
-        projectId
-      )
       return {
         result: {
           message: 'Project is not published',
@@ -97,7 +81,6 @@ export class ORCIDWorksHandler extends Handler {
 
     // Get article authors for filtering
     const articleAuthors = project.article_authors || ''
-    console.log(`[ORCIDWorksHandler] Project ${projectId} article_authors: "${articleAuthors}"`)
 
     // Query eligible project members:
     // - Have ORCID linked
@@ -117,25 +100,6 @@ export class ORCIDWorksHandler extends Handler {
         AND (LOCATE(u.fname, ?) > 0 OR LOCATE(u.lname, ?) > 0)
     `
 
-    // Also run a debug query to see all project members with ORCID (without article_authors filter)
-    const debugQuery = `
-      SELECT u.user_id, u.orcid, u.fname, u.lname
-      FROM projects_x_users AS pxu
-      INNER JOIN ca_users AS u ON u.user_id = pxu.user_id
-      WHERE pxu.project_id = ?
-        AND u.orcid IS NOT NULL
-        AND u.orcid != ''
-    `
-    
-    const [allOrcidMembers] = await sequelizeConn.query(
-      debugQuery,
-      {
-        replacements: [projectId],
-      }
-    )
-    
-    console.log(`[ORCIDWorksHandler] All project members with ORCID:`, allOrcidMembers)
-
     const [eligibleMembers] = await sequelizeConn.query(
       eligibleMembersQuery,
       {
@@ -143,14 +107,7 @@ export class ORCIDWorksHandler extends Handler {
       }
     )
 
-    console.log(`[ORCIDWorksHandler] Eligible members after filtering:`, eligibleMembers)
-
     if (!eligibleMembers || eligibleMembers.length === 0) {
-      console.log(
-        '[ORCIDWorksHandler] No eligible members found for project:',
-        projectId,
-        '- Check: Is your name in article_authors? Do you have a curator/admin role?'
-      )
       return {
         result: {
           message: 'No eligible members with ORCID found',
@@ -158,10 +115,6 @@ export class ORCIDWorksHandler extends Handler {
         },
       }
     }
-
-    console.log(
-      `ORCIDWorksHandler: Found ${eligibleMembers.length} eligible members for project ${projectId}`
-    )
 
     // Process each eligible member
     const results = {
@@ -183,9 +136,6 @@ export class ORCIDWorksHandler extends Handler {
         })
 
         if (!user) {
-          console.warn(
-            `ORCIDWorksHandler: User ${member.user_id} not found, skipping`
-          )
           results.works_failed++
           results.errors.push({
             user_id: member.user_id,
@@ -208,16 +158,10 @@ export class ORCIDWorksHandler extends Handler {
           }
         } catch (err) {
           // Table might not exist yet, continue without tracking
-          console.log(
-            'ORCIDWorksHandler: Tracking table not available, continuing without duplicate check'
-          )
         }
 
         // Skip if work already exists
         if (existingWork && existingWork.status === 'success') {
-          console.log(
-            `ORCIDWorksHandler: Work already exists for user ${member.user_id}, skipping`
-          )
           continue
         }
 
@@ -240,7 +184,7 @@ export class ORCIDWorksHandler extends Handler {
                 existingWork.put_code = addResult.putCode
                 existingWork.status = 'success'
                 existingWork.updated_on = time()
-                await existingWork.save()
+                await existingWork.save({ shouldSkipLogChange: true })
               } else {
                 // Create new record
                 await models.ProjectsXOrcidWork.create({
@@ -250,20 +194,17 @@ export class ORCIDWorksHandler extends Handler {
                   put_code: addResult.putCode,
                   status: 'success',
                   created_on: time(),
-                })
+                }, { shouldSkipLogChange: true })
               }
             }
           } catch (err) {
             // Tracking table might not exist, log but don't fail
-            console.log(
+            console.error(
               'ORCIDWorksHandler: Could not record tracking info:',
               err.message
             )
           }
 
-          console.log(
-            `ORCIDWorksHandler: Successfully added work to ORCID ${member.orcid} for project ${projectId}`
-          )
         } else {
           results.works_failed++
           results.errors.push({
@@ -279,7 +220,7 @@ export class ORCIDWorksHandler extends Handler {
                 existingWork.status = 'failed'
                 existingWork.error_message = addResult.error || 'Unknown error'
                 existingWork.updated_on = time()
-                await existingWork.save()
+                await existingWork.save({ shouldSkipLogChange: true })
               } else {
                 await models.ProjectsXOrcidWork.create({
                   project_id: projectId,
@@ -288,21 +229,16 @@ export class ORCIDWorksHandler extends Handler {
                   status: 'failed',
                   error_message: addResult.error || 'Unknown error',
                   created_on: time(),
-                })
+                }, { shouldSkipLogChange: true })
               }
             }
           } catch (err) {
             // Tracking table might not exist, log but don't fail
-            console.log(
+            console.error(
               'ORCIDWorksHandler: Could not record failure tracking info:',
               err.message
             )
           }
-
-          console.error(
-            `ORCIDWorksHandler: Failed to add work to ORCID ${member.orcid} for project ${projectId}:`,
-            addResult.error
-          )
         }
       } catch (error) {
         results.works_failed++
