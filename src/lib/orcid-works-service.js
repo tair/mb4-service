@@ -174,13 +174,6 @@ export class ORCIDWorksService {
       const workXml = this.buildWorkPayload(project)
       const url = `${this.apiDomain}/v3.0/${userOrcid}/work`
 
-      console.log('[ORCIDWorksService] Adding work to ORCID:', {
-        url,
-        orcid: userOrcid,
-        projectId: project.project_id,
-      })
-      console.log('[ORCIDWorksService] Work XML payload:', workXml)
-
       const headers = {
         'Content-Type': 'application/vnd.orcid+xml',
         Accept: 'application/json',
@@ -214,9 +207,6 @@ export class ORCIDWorksService {
         !error.config?._retried
       ) {
         try {
-          console.log(
-            `ORCID access token expired for ${userOrcid}, attempting refresh...`
-          )
           const tokens = await this.refreshAccessToken(user.orcid_refresh_token)
 
           // Update user's tokens in database
