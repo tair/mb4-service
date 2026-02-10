@@ -4269,16 +4269,44 @@ export default class MatrixEditorService {
       // Use bulkCreate with ignoreDuplicates to atomically insert only new records
       // This avoids the race condition in findOrCreate
       if (recordsToInsert.length > 0) {
-        const created = await models.CellsXMedium.bulkCreate(recordsToInsert, {
+        // Query for existing records before insert to identify which ones are new
+        const existingRecords = await models.CellsXMedium.findAll({
+          attributes: ['link_id'],
+          where: {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: taxonId,
+            character_id: characterIds,
+            media_id: mediaIds,
+          },
+          transaction: transaction,
+        })
+        const existingLinkIds = new Set(existingRecords.map((r) => r.link_id))
+
+        await models.CellsXMedium.bulkCreate(recordsToInsert, {
           transaction: transaction,
           ignoreDuplicates: true,
+          individualHooks: true,
           user: this.user,
         })
-        // bulkCreate with ignoreDuplicates returns all attempted records,
-        // but only the ones that were actually inserted will have a link_id
-        for (const cellMedia of created) {
-          if (cellMedia.link_id) {
-            insertedCellMedia.push(cellMedia)
+
+        // With MySQL + Sequelize v6, bulkCreate with ignoreDuplicates returns all
+        // attempted records with sequential IDs assigned from insertId, even for
+        // duplicates that were silently ignored. We must query the database to get
+        // the actual inserted records with their real link_id values.
+        const allRecords = await models.CellsXMedium.findAll({
+          where: {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: taxonId,
+            character_id: characterIds,
+            media_id: mediaIds,
+          },
+          transaction: transaction,
+        })
+
+        // Filter to only newly inserted records
+        for (const record of allRecords) {
+          if (!existingLinkIds.has(record.link_id)) {
+            insertedCellMedia.push(record)
           }
         }
       }
