@@ -4242,22 +4242,19 @@ export default class MatrixEditorService {
 
     const transaction = await sequelizeConn.transaction()
 
-    const insertedCellMedia = []
-    const mediaMap = new Map()
-    for (const [mediaId, media] of mediaList) {
-      mediaMap.set(mediaId, {
-        thumbnail: getMedia(media, 'thumbnail', this.project.project_id, mediaId),
-        large: getMedia(media, 'large', this.project.project_id, mediaId),
-      })
-      for (const characterId of characterIds) {
-        const [cellMedia, created] = await models.CellsXMedium.findOrCreate({
-          where: {
-            matrix_id: this.matrix.matrix_id,
-            taxon_id: taxonId,
-            character_id: characterId,
-            media_id: mediaId,
-          },
-          defaults: {
+    try {
+      const insertedCellMedia = []
+      const mediaMap = new Map()
+
+      // Build all the records we want to insert
+      const recordsToInsert = []
+      for (const [mediaId, media] of mediaList) {
+        mediaMap.set(mediaId, {
+          thumbnail: getMedia(media, 'thumbnail', this.project.project_id, mediaId),
+          large: getMedia(media, 'large', this.project.project_id, mediaId),
+        })
+        for (const characterId of characterIds) {
+          recordsToInsert.push({
             matrix_id: this.matrix.matrix_id,
             taxon_id: taxonId,
             character_id: characterId,
@@ -4265,50 +4262,92 @@ export default class MatrixEditorService {
             user_id: this.user.user_id,
             created_on: time(),
             source: 'HTML5',
-          },
-          user: this.user,
-          transaction: transaction,
-        })
-        if (created) {
-          insertedCellMedia.push(cellMedia)
+          })
         }
       }
-    }
 
-    if (this.matrix.getOption('APPLY_CHARACTERS_WHILE_SCORING') == 1) {
-      const media = await this.applyMediaRules(insertedCellMedia, transaction)
-      insertedCellMedia.push(...media)
-    }
+      // Use bulkCreate with ignoreDuplicates to atomically insert only new records
+      // This avoids the race condition in findOrCreate
+      if (recordsToInsert.length > 0) {
+        // Query for existing records before insert to identify which ones are new
+        const existingRecords = await models.CellsXMedium.findAll({
+          attributes: ['link_id'],
+          where: {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: taxonId,
+            character_id: characterIds,
+            media_id: mediaIds,
+          },
+          transaction: transaction,
+        })
+        const existingLinkIds = new Set(existingRecords.map((r) => r.link_id))
 
-    if (insertedCellMedia.length == 0) {
+        await models.CellsXMedium.bulkCreate(recordsToInsert, {
+          transaction: transaction,
+          ignoreDuplicates: true,
+          user: this.user,
+        })
+
+        // With MySQL + Sequelize v6, bulkCreate with ignoreDuplicates returns all
+        // attempted records with sequential IDs assigned from insertId, even for
+        // duplicates that were silently ignored. We must query the database to get
+        // the actual inserted records with their real link_id values.
+        const allRecords = await models.CellsXMedium.findAll({
+          where: {
+            matrix_id: this.matrix.matrix_id,
+            taxon_id: taxonId,
+            character_id: characterIds,
+            media_id: mediaIds,
+          },
+          transaction: transaction,
+        })
+
+        // Filter to only newly inserted records
+        for (const record of allRecords) {
+          if (!existingLinkIds.has(record.link_id)) {
+            insertedCellMedia.push(record)
+          }
+        }
+      }
+
+      if (this.matrix.getOption('APPLY_CHARACTERS_WHILE_SCORING') == 1) {
+        const media = await this.applyMediaRules(insertedCellMedia, transaction)
+        insertedCellMedia.push(...media)
+      }
+
+      if (insertedCellMedia.length == 0) {
+        await transaction.rollback()
+        return {}
+      }
+
+      if (batchMode) {
+        const taxon = await models.Taxon.findByPk(taxonId)
+        cellBatch.finished_on = time()
+        cellBatch.description = `${mediaIds.length} media added to ${
+          characterIds.length
+        } characters (s) in ${getTaxonName(taxon)} row`
+        await cellBatch.save({ user: this.user, transaction: transaction })
+      }
+
+      const mediaResults = []
+      for (const cellMedium of insertedCellMedia) {
+        const mediaId = parseInt(cellMedium.media_id)
+        mediaResults.push({
+          link_id: parseInt(cellMedium.link_id),
+          character_id: parseInt(cellMedium.character_id),
+          taxon_id: parseInt(cellMedium.taxon_id),
+          media_id: mediaId,
+          ...mediaMap.get(mediaId),
+        })
+      }
+
+      await transaction.commit()
+      return {
+        media: mediaResults,
+      }
+    } catch (error) {
       await transaction.rollback()
-      return {}
-    }
-
-    if (batchMode) {
-      const taxon = await models.Taxon.findByPk(taxonId)
-      cellBatch.finished_on = time()
-      cellBatch.description = `${mediaIds.length} media added to ${
-        characterIds.length
-      } characters (s) in ${getTaxonName(taxon)} row`
-      await cellBatch.save({ user: this.user, transaction: transaction })
-    }
-
-    const mediaResults = []
-    for (const cellMedium of insertedCellMedia) {
-      const mediaId = parseInt(cellMedium.media_id)
-      mediaResults.push({
-        link_id: parseInt(cellMedium.link_id),
-        character_id: parseInt(cellMedium.character_id),
-        taxon_id: parseInt(cellMedium.taxon_id),
-        media_id: mediaId,
-        ...mediaMap.get(mediaId),
-      })
-    }
-
-    await transaction.commit()
-    return {
-      media: mediaResults,
+      throw error
     }
   }
 
