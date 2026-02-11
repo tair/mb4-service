@@ -43,24 +43,63 @@ const app = express()
 // This is essential for Docker deployments behind reverse proxies
 app.set('trust proxy', true)
 
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader(
-    'Access-Control-Allow-Methods',
-    'OPTIONS, GET, POST, PUT, PATCH, DELETE'
-  )
-  res.setHeader('Access-Control-Allow-Credentials', 'true')
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, x-session-key, x-session-fingerprint'
-  )
-  next()
-})
+const curatorPdfRateLimitWindowMs = 60 * 1000
+const curatorPdfRateLimitMax = 10
+const curatorPdfRateLimitBuckets = new Map()
+
+const curatorPdfRateLimiter = (req, res, next) => {
+  const ip = req.ip || req.socket?.remoteAddress || 'unknown'
+  const now = Date.now()
+  const bucket = curatorPdfRateLimitBuckets.get(ip)
+
+  if (!bucket || now - bucket.windowStart >= curatorPdfRateLimitWindowMs) {
+    curatorPdfRateLimitBuckets.set(ip, { count: 1, windowStart: now })
+    return next()
+  }
+
+  if (bucket.count >= curatorPdfRateLimitMax) {
+    const retryAfterSeconds = Math.max(
+      1,
+      Math.ceil(
+        (curatorPdfRateLimitWindowMs - (now - bucket.windowStart)) / 1000
+      )
+    )
+    res.setHeader('Retry-After', String(retryAfterSeconds))
+    return res.status(429).json({
+      message: 'Too many requests to /curator/process-pdf. Please try again later.',
+    })
+  }
+
+  bucket.count += 1
+  return next()
+}
+
+// Prevent unbounded memory growth from old buckets.
+setInterval(() => {
+  const now = Date.now()
+  for (const [ip, bucket] of curatorPdfRateLimitBuckets.entries()) {
+    if (now - bucket.windowStart >= curatorPdfRateLimitWindowMs) {
+      curatorPdfRateLimitBuckets.delete(ip)
+    }
+  }
+}, 5 * 60 * 1000).unref()
+
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+    methods: ['OPTIONS', 'GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-session-key',
+      'x-session-fingerprint',
+    ],
+  })
+)
 
 // Session tracking middleware (applied to all routes)
 app.use(trackSession)
-
-app.use(cors())
 app.use('/email', express.json({ limit: '10mb' }))
 app.use('/email', emailRouter)
 app.use(express.json())
@@ -90,6 +129,7 @@ app.use('/media', express.static(config.media.directory))
 // Uses the same controller as the matrix route for consistency
 app.post(
   '/curator/process-pdf',
+  curatorPdfRateLimiter,
   upload.single('pdf_file'),
   matrixController.processPdf
 )
