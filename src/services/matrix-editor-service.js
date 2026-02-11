@@ -4285,7 +4285,6 @@ export default class MatrixEditorService {
         await models.CellsXMedium.bulkCreate(recordsToInsert, {
           transaction: transaction,
           ignoreDuplicates: true,
-          individualHooks: true,
           user: this.user,
         })
 
