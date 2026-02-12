@@ -233,12 +233,12 @@ export async function createMediaFiles(req, res) {
     return
   }
 
-  // Validate ZIP file size (max 1.5GB)
-  const maxZipSize = 1536 * 1024 * 1024 // 1.5GB
+  // Validate ZIP file size (max 4GB)
+  const maxZipSize = 4 * 1024 * 1024 * 1024 // 4GB
   if (req.file.size > maxZipSize) {
     res.status(400).json({
       message:
-        'ZIP file is too large. Maximum size is 1.5GB. Please split your files into smaller archives.',
+        'ZIP file is too large. Maximum size is 4GB. Please split your files into smaller archives.',
     })
     return
   }
@@ -334,7 +334,7 @@ export async function createMediaFiles(req, res) {
     }
 
     // Limit the number of files that can be processed in a single batch
-    const maxFilesPerBatch = 50
+    const maxFilesPerBatch = 100
     if (extractedFiles.length > maxFilesPerBatch) {
       res.status(400).json({
         message: `ZIP file contains too many files (${extractedFiles.length}). Maximum allowed is ${maxFilesPerBatch} files per batch. Please split your files into smaller archives.`,
@@ -2066,12 +2066,12 @@ export async function createStacksMediaFile(req, res) {
     return
   }
 
-  // Validate ZIP file size (max 1.5GB)
-  const maxZipSize = 1536 * 1024 * 1024 // 1.5GB
+  // Validate ZIP file size (max 4GB)
+  const maxZipSize = 4 * 1024 * 1024 * 1024 // 4GB
   if (req.file.size > maxZipSize) {
     res.status(400).json({
       message:
-        'ZIP file is too large. Maximum size is 1.5GB. Please split your files into smaller archives.',
+        'ZIP file is too large. Maximum size is 4GB. Please split your files into smaller archives.',
     })
     return
   }
@@ -2359,10 +2359,10 @@ export async function initiateStacksUpload(req, res) {
   }
 
   // Validate expected file size (optional but recommended)
-  const maxZipSize = 1536 * 1024 * 1024 // 1.5GB
+  const maxZipSize = 4 * 1024 * 1024 * 1024 // 4GB
   if (values.filesize && values.filesize > maxZipSize) {
     res.status(400).json({
-      message: 'ZIP file is too large. Maximum size is 1.5GB.',
+      message: 'ZIP file is too large. Maximum size is 4GB.',
     })
     return
   }
@@ -2924,7 +2924,7 @@ export async function completeStacksUpload(req, res) {
   }
 
   // Validate file size
-  const maxZipSize = 1.1 * 1536 * 1024 * 1024 // ~1.7GB (with some tolerance)
+  const maxZipSize = 1.1 * 4 * 1024 * 1024 * 1024 // ~4.4GB (with some tolerance)
   if (objectAttributes.contentLength > maxZipSize) {
     // Delete the oversized file from S3
     try {
@@ -2933,7 +2933,7 @@ export async function completeStacksUpload(req, res) {
       console.error('Failed to delete oversized file:', deleteError)
     }
     res.status(400).json({
-      message: 'Uploaded file is too large. Maximum size is 1.5GB.',
+      message: 'Uploaded file is too large. Maximum size is 4GB.',
     })
     return
   }
