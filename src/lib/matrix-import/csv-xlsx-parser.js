@@ -195,6 +195,7 @@ function buildDiscreteMatrix(rows) {
       // Map value to state symbol index for this character
       const states = characterStates[c - 1]
       const mapping = buildStateLabelToSymbolMap(states, SYMBOLS)
+      const context = `Row ${r + 1}, Column ${c + 1} (${header[c] || 'Character ' + c})`
 
       // polymorphic e.g., "0&1" or "Red&Blue"
       if (raw.includes('&')) {
@@ -203,14 +204,14 @@ function buildDiscreteMatrix(rows) {
           .map((p) => p.trim())
           .filter((p) => p.length > 0)
         const symbolCodes = parts
-          .map((p) => mapToSymbolCode(p, states, mapping))
+          .map((p) => mapToSymbolCode(p, states, mapping, warnings, context))
           .join('')
         rowCells.push({ scores: symbolCodes, uncertain: true })
         continue
       }
 
       // single value: could be numeric index or label
-      const symbolCode = mapToSymbolCode(raw, states, mapping)
+      const symbolCode = mapToSymbolCode(raw, states, mapping, warnings, context)
       rowCells.push(symbolCode)
     }
     cells.push(rowCells)
@@ -334,7 +335,7 @@ function buildStateLabelToSymbolMap(states, SYMBOLS) {
   return map
 }
 
-function mapToSymbolCode(value, states, labelToSymbolMap) {
+function mapToSymbolCode(value, states, labelToSymbolMap, warnings, context) {
   const v = value.toString().trim()
   // If numeric index provided
   if (/^\d+$/.test(v)) {
@@ -348,12 +349,22 @@ function mapToSymbolCode(value, states, labelToSymbolMap) {
         count++
       }
     }
+    // Numeric index out of range
+    const fallback = labelToSymbolMap.values().next().value
+    warnings.push(
+      `${context}: Numeric index "${v}" out of range (0-${states.length - 1}). Expected one of: ${states.join(', ')}. Defaulting to first state.`
+    )
+    return fallback
   }
 
   // Try label match (case-insensitive)
   const symbol = labelToSymbolMap.get(v.toUpperCase())
   if (symbol) return symbol
 
-  // Fallback: use first state if unknown
-  return labelToSymbolMap.values().next().value
+  // Unrecognized value - warn and use first state
+  const fallback = labelToSymbolMap.values().next().value
+  warnings.push(
+    `${context}: Unrecognized value "${v}". Expected one of: ${states.join(', ')}. Defaulting to first state.`
+  )
+  return fallback
 }
