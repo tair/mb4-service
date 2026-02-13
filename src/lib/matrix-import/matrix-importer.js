@@ -825,7 +825,7 @@ function processCellValue(cellValue, params) {
   if (typeof cellValue === 'object' && cellValue !== null) {
     isUncertain = !!cellValue.uncertain
     note = cellValue.note
-    scores = cellValue.score  // Fixed: should be 'score' (singular) not 'scores' (plural)
+    scores = cellValue.scores  // CSV parser creates polymorphic cells with 'scores' (plural)
   }
   
   const isContinuous = character.type > 0

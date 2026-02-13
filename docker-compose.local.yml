@@ -3,40 +3,48 @@ version: '3.8'
 # need to create a shared network
 # docker network create shared_network
 services:
-    # mysql image creates an anonymous volume for /var/lib/mysql to preserve data
-    # need to use docker-compose version > 2.2.3 otherwise won't stop gracefully
-    # https://github.com/docker/compose/issues/8523
-    # mb4-db-dev:
-    #     restart: always
-    #     image: mysql:8.0.30
-    #     command: --default-authentication-plugin=mysql_native_password
-    #     container_name: mb4-db-container-dev
-    #     env_file:
-    #         - ./db-dev/.env
-    #     ports:
-    #         - "3306:3306"
-    #     networks:
-    #         - shared_network
+  # mysql image creates an anonymous volume for /var/lib/mysql to preserve data
+  # need to use docker-compose version > 2.2.3 otherwise won't stop gracefully
+  # https://github.com/docker/compose/issues/8523
+  # mb4-db-dev:
+  #     restart: always
+  #     image: mysql:8.0.30
+  #     command: --default-authentication-plugin=mysql_native_password
+  #     container_name: mb4-db-container-dev
+  #     env_file:
+  #         - ./db-dev/.env
+  #     ports:
+  #         - "3306:3306"
+  #     networks:
+  #         - shared_network
 
-    mb4-service-local:
-        # depends_on:
-        #     - mb4-db-dev
-        build: 
-            context: .
-            target: dev-stage
-        image: mb4-service-local:1.0
-        container_name: mb4-service-container-local
-        volumes:
-            # bind volumes to local repository
-            - .:/app
-            - ./data:/data
-            # anonymous volume
-            - /app/node_modules
-        ports:
-            - "8080:8080"
-        networks:
-            - shared_network
+  mb4-service-local:
+    # depends_on:
+    #     - mb4-db-dev
+    build:
+      context: .
+      target: dev-stage
+    image: mb4-service-local:1.0
+    container_name: mb4-service-container-local
+    volumes:
+      # bind volumes to local repository
+      - .:/app
+      - ./data:/data
+      # anonymous volume
+      - /app/node_modules
+    ports:
+      - '8080:8080'
+    environment:
+      # Curator service URL - use container name if on same network, or host.docker.internal if on host
+      - CURATOR_SERVICE_URL=${CURATOR_SERVICE_URL:-http://mb4-curator-api-dev:8001}
+      # Enable polling for file watching on Windows
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=1000
+      # Node environment
+      - NODE_ENV=development
+    networks:
+      - shared_network
 
 networks:
-    shared_network:
-        external: true
+  shared_network:
+    external: true
