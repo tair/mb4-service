@@ -2,6 +2,7 @@ import { validationResult } from 'express-validator'
 import { models } from '../models/init-models.js'
 import { Sequelize } from 'sequelize'
 import { EmailManager } from '../lib/email-manager.js'
+import config from '../config.js'
 
 function getUsers(req, res, next) {
   models.User.findAll({ attributes: ['user_id', 'email'] })
@@ -18,7 +19,7 @@ function getUsers(req, res, next) {
 
 function getProfile(req, res, next) {
   models.User.findByPk(req.credential.user_id, {
-    attributes: ['fname', 'lname', 'email', 'orcid', 'vars'],
+    attributes: ['fname', 'lname', 'email', 'orcid', 'orcid_write_access', 'vars'],
     include: [
       {
         model: models.Institution,
@@ -28,10 +29,13 @@ function getProfile(req, res, next) {
     ],
   })
     .then((profile) => {
-      // Extract is_institution_unaffiliated from vars
       const responseData = profile.toJSON()
       responseData.is_institution_unaffiliated = profile.getVar('is_institution_unaffiliated') || false
-      // Remove vars from response as it's internal
+      // Signal to frontend that user should re-authenticate to grant write permission
+      responseData.orcid_write_access_required =
+        config.orcid.worksEnabled === true &&
+        !!responseData.orcid &&
+        !responseData.orcid_write_access
       delete responseData.vars
       return res.status(200).json(responseData)
     })
@@ -118,7 +122,7 @@ async function updateProfile(req, res, next) {
       }
     }
     const updatedUser = await models.User.findByPk(user.user_id, {
-      attributes: ['fname', 'lname', 'email', 'orcid', 'vars'],
+      attributes: ['fname', 'lname', 'email', 'orcid', 'orcid_write_access', 'vars'],
       include: [
         {
           model: models.Institution,
@@ -127,10 +131,12 @@ async function updateProfile(req, res, next) {
         },
       ],
     })
-    // Extract is_institution_unaffiliated from vars for response
     const userData = updatedUser.toJSON()
     userData.is_institution_unaffiliated = updatedUser.getVar('is_institution_unaffiliated') || false
-    // Remove vars from response as it's internal
+    userData.orcid_write_access_required =
+      config.orcid.worksEnabled === true &&
+      !!userData.orcid &&
+      !userData.orcid_write_access
     delete userData.vars
     res.status(200).json({
       message: 'User update!',
@@ -186,6 +192,7 @@ function signup(req, res, next) {
   const orcid = req.body.orcid
   const accessToken = req.body.accessToken
   const refreshToken = req.body.refreshToken
+  const orcidWriteAccess = req.body.orcidWriteAccess ? 1 : 0
 
   // Hash password and create user
   models.User.hashPassword(password)
@@ -204,7 +211,8 @@ function signup(req, res, next) {
         orcid: orcid,
         orcid_access_token: accessToken,
         orcid_refresh_token: refreshToken,
-        active: true, // Assuming a new user should be active. Change this based on your requirements.
+        orcid_write_access: orcidWriteAccess,
+        active: true,
       })
       return userModel.save({ user: userModel })
     })

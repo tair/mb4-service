@@ -9,5 +9,6 @@ projectUsersRouter.post('/add', controller.addMember)
 projectUsersRouter.post('/delete', controller.deleteUser)
 projectUsersRouter.post('/isEmailAvailable', controller.isEmailAvailable)
 projectUsersRouter.post('/:linkId/edit', controller.editUser)
+projectUsersRouter.post('/orcid-opt-out', controller.updateOrcidOptOut)
 
 export default projectUsersRouter
