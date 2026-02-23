@@ -19,7 +19,7 @@ function getUsers(req, res, next) {
 
 function getProfile(req, res, next) {
   models.User.findByPk(req.credential.user_id, {
-    attributes: ['fname', 'lname', 'email', 'orcid', 'orcid_write_access', 'vars'],
+    attributes: ['fname', 'lname', 'email', 'orcid', 'orcid_write_access', 'orcid_opt_out', 'vars'],
     include: [
       {
         model: models.Institution,
@@ -31,7 +31,6 @@ function getProfile(req, res, next) {
     .then((profile) => {
       const responseData = profile.toJSON()
       responseData.is_institution_unaffiliated = profile.getVar('is_institution_unaffiliated') || false
-      // Signal to frontend that user should re-authenticate to grant write permission
       responseData.orcid_write_access_required =
         config.orcid.worksEnabled === true &&
         !!responseData.orcid &&
@@ -76,6 +75,9 @@ async function updateProfile(req, res, next) {
     }
     if (req.body.hasOwnProperty('isInstitutionUnaffiliated')) {
       user.setVar('is_institution_unaffiliated', req.body.isInstitutionUnaffiliated)
+    }
+    if (req.body.hasOwnProperty('orcidOptOut')) {
+      user.orcid_opt_out = req.body.orcidOptOut ? 1 : 0
     }
     await user.save({ user: user })
     // save affiliated institutions
@@ -122,7 +124,7 @@ async function updateProfile(req, res, next) {
       }
     }
     const updatedUser = await models.User.findByPk(user.user_id, {
-      attributes: ['fname', 'lname', 'email', 'orcid', 'orcid_write_access', 'vars'],
+      attributes: ['fname', 'lname', 'email', 'orcid', 'orcid_write_access', 'orcid_opt_out', 'vars'],
       include: [
         {
           model: models.Institution,
