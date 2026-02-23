@@ -404,6 +404,7 @@ CREATE TABLE `ca_users` (
   `orcid_access_token` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `orcid_refresh_token` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `orcid_write_access` tinyint unsigned NOT NULL DEFAULT '0',
+  `orcid_opt_out` tinyint unsigned NOT NULL DEFAULT '0',
   PRIMARY KEY (`user_id`),
   UNIQUE KEY `u_confirmation_key` (`confirmation_key`),
   UNIQUE KEY `u_email` (`email`),
