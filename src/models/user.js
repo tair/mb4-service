@@ -112,6 +112,11 @@ export default class User extends Model {
           unique: true,
           shouldLog: false,
         },
+        orcid_write_access: {
+          type: DataTypes.TINYINT.UNSIGNED,
+          allowNull: false,
+          defaultValue: 0,
+        },
       },
       {
         sequelize,

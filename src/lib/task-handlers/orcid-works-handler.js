@@ -97,6 +97,8 @@ export class ORCIDWorksHandler extends Handler {
         AND u.orcid_access_token IS NOT NULL
         AND u.orcid != ''
         AND u.orcid_access_token != ''
+        AND u.orcid_write_access = 1
+        AND pxu.orcid_publish_opt_out = 0
         AND (LOCATE(u.fname, ?) > 0 OR LOCATE(u.lname, ?) > 0)
     `
 

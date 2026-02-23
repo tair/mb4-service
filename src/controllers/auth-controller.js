@@ -316,18 +316,20 @@ async function authenticateORCID(req, res) {
       const orcidAccessToken = response.data.access_token
       const orcidRefreshToken = response.data.refresh_token
       const grantedScope = response.data.scope
+      const hasWriteAccess = grantedScope?.includes('/activities/update') ? 1 : 0
       
       console.log(`[ORCID] Authentication successful:`)
       console.log(`  - ORCID: ${orcid}`)
       console.log(`  - Name: ${name}`)
       console.log(`  - Granted Scope: ${grantedScope}`)
-      console.log(`  - Has Write Access: ${grantedScope?.includes('/activities/update') ? 'YES' : 'NO'}`)
+      console.log(`  - Has Write Access: ${hasWriteAccess ? 'YES' : 'NO'}`)
       
       const orcidProfile = {
         orcid: orcid,
         name: name,
         access_token: orcidAccessToken,
         refresh_token: orcidRefreshToken,
+        scope: grantedScope,
       }
 
       // check if a user is already linked to the ORCID
@@ -367,6 +369,7 @@ async function authenticateORCID(req, res) {
           loggedInUser.orcid = orcid
           loggedInUser.orcid_access_token = orcidAccessToken
           loggedInUser.orcid_refresh_token = orcidRefreshToken
+          loggedInUser.orcid_write_access = hasWriteAccess
           try {
             await loggedInUser.save({ user: loggedInUser }) // need user for changelog hook
           } catch (error) {
@@ -388,6 +391,7 @@ async function authenticateORCID(req, res) {
         userWithOrcid.setVar('last_login', currentTimestamp)
         userWithOrcid.orcid_access_token = orcidAccessToken
         userWithOrcid.orcid_refresh_token = orcidRefreshToken
+        userWithOrcid.orcid_write_access = hasWriteAccess
         try {
           await userWithOrcid.save({ user: userWithOrcid })
           console.log(`[ORCID] Updated tokens for user ${userWithOrcid.user_id}`)
@@ -555,6 +559,7 @@ async function unlinkORCID(req, res) {
     user.orcid = null
     user.orcid_access_token = null
     user.orcid_refresh_token = null
+    user.orcid_write_access = 0
 
     await user.save({ user: user })
 
