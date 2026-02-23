@@ -47,6 +47,7 @@ async function login(req, res, next) {
             user.orcid = orcidProfile.orcid
             user.orcid_access_token = orcidProfile.accessToken
             user.orcid_refresh_token = orcidProfile.refreshToken
+            user.orcid_write_access = orcidProfile.scope?.includes('/activities/update') ? 1 : 0
             try {
               await user.save({ user: user }) // need user for changelog hook
             } catch (error) {
