@@ -3,7 +3,7 @@ import * as service from '../services/media-service.js'
 import * as bibliographyService from '../services/bibliography-service.js'
 import * as folioService from '../services/folios-service.js'
 import { convertMediaTypeFromMimeType } from '../util/media.js'
-import { unzip, cleanupTempDirectory, extractFirstImageFromZip } from '../util/zip.js'
+import { unzip, cleanupTempDirectory } from '../util/zip.js'
 import { models } from '../models/init-models.js'
 import { S3MediaUploader } from '../lib/s3-media-uploader.js'
 import { VideoProcessor } from '../lib/video-processor.js'
@@ -2132,158 +2132,25 @@ export async function createStacksMediaFile(req, res) {
 
   const transaction = await sequelizeConn.transaction()
   const mediaUploader = new S3MediaUploader(transaction, req.user)
-  let firstImageFile = null
 
   try {
-    // Save the media record first
     await media.save({
       transaction,
       user: req.user,
     })
 
-    // Upload the entire ZIP file as non-image media
     await mediaUploader.setNonImageMedia(media, 'media', req.file)
 
-    // Use lazy extraction to find ONLY the first image file for thumbnail generation
-    // This is much more efficient for large CT scan archives (up to 1.5GB)
-    // Instead of extracting ALL files, we stream through entries and stop at the first image
-    firstImageFile = await extractFirstImageFromZip(req.file.path)
-
-    // Generate thumbnails if we found a suitable image file
-    if (firstImageFile) {
-      try {
-        // Get existing media data
-        const existingMedia = media.media || {}
-        
-        // Process the first image file to generate thumbnails
-        const sharp = (await import('sharp')).default
-        const image = sharp(firstImageFile.path)
-        const metadata = await image.metadata()
-
-        // Validate image dimensions for security
-        if (metadata.width > 10000 || metadata.height > 10000) {
-          throw new Error('Image dimensions too large for processing')
-        }
-
-        if (!metadata.width || !metadata.height) {
-          throw new Error('Invalid image metadata - corrupted file')
-        }
-
-        // Generate large and thumbnail versions
-        const sizes = {
-          large: { maxWidth: 800, maxHeight: 800 },
-          thumbnail: { width: 120, height: 120 },
-        }
-
-        for (const [sizeName, dimensions] of Object.entries(sizes)) {
-          let processedImage = image
-
-          if (sizeName === 'large') {
-            // For large, maintain aspect ratio and compress if larger than 800px
-            if (
-              metadata.width > dimensions.maxWidth ||
-              metadata.height > dimensions.maxHeight
-            ) {
-              processedImage = image.resize(
-                dimensions.maxWidth,
-                dimensions.maxHeight,
-                {
-                  fit: 'inside',
-                  withoutEnlargement: true,
-                }
-              )
-            }
-          } else if (sizeName === 'thumbnail') {
-            // For thumbnail, resize to fit within dimensions while preserving aspect ratio
-            processedImage = image.resize(dimensions.width, dimensions.height, {
-              fit: 'inside',
-              withoutEnlargement: true,
-            })
-          }
-
-          // Convert to buffer with compression - always use JPEG for consistency
-          const buffer = await processedImage
-            .jpeg({ quality: 85, progressive: true })
-            .toBuffer()
-
-          const processedMetadata = await processedImage.metadata()
-
-          // Generate S3 key for thumbnail
-          const fileName = `${media.project_id}_${media.media_id}_${sizeName}.jpg`
-          const s3Key = `media_files/images/${media.project_id}/${media.media_id}/${fileName}`
-
-          // Upload thumbnail to S3
-          const result = await s3Service.putObject(
-            config.aws.defaultBucket,
-            s3Key,
-            buffer,
-            'image/jpeg'
-          )
-
-          // Add thumbnail data to existing media
-          existingMedia[sizeName] = {
-            S3_KEY: s3Key,
-            S3_ETAG: result.etag,
-            WIDTH: processedMetadata.width,
-            HEIGHT: processedMetadata.height,
-            FILESIZE: buffer.length,
-            MIMETYPE: 'image/jpeg',
-            EXTENSION: 'jpg',
-            PROPERTIES: {
-              height: processedMetadata.height,
-              width: processedMetadata.width,
-              mimetype: 'image/jpeg',
-              filesize: buffer.length,
-              version: sizeName,
-            },
-          }
-
-          mediaUploader.uploadedFiles.push({
-            bucket: config.aws.defaultBucket,
-            key: s3Key,
-            etag: result.etag,
-          })
-        }
-
-        // Update the media data with thumbnails
-        media.set('media', existingMedia)
-        
-      } catch (thumbnailError) {
-        // Log specific error types for better debugging
-        if (thumbnailError.message.includes('Input file contains unsupported image format')) {
-          console.warn('Unsupported image format for thumbnail generation:', firstImageFile.originalname)
-        } else if (thumbnailError.message.includes('Input file is corrupt')) {
-          console.warn('Corrupted image file for thumbnail generation:', firstImageFile.originalname)
-        } else if (thumbnailError.message.includes('dimensions too large')) {
-          console.warn('Image too large for thumbnail processing:', firstImageFile.originalname)
-        } else {
-          console.warn('Failed to generate thumbnails from first image file:', thumbnailError.message)
-        }
-        // Continue without thumbnails - the ZIP file is still uploaded
-      } finally {
-        // Clean up the extracted image file from lazy extraction
-        if (firstImageFile.tempDirectory) {
-          try {
-            await cleanupTempDirectory(firstImageFile.tempDirectory)
-          } catch (cleanupError) {
-            console.warn('Error cleaning up extracted image temp directory:', cleanupError)
-          }
-        }
-      }
-    } else {
-      console.log('No suitable image file found in ZIP for thumbnail generation')
-      // Add a generic archive icon for thumbnail
-      const existingMedia = media.media || {}
-      existingMedia.thumbnail = {
-        USE_ICON: 'archive',
-        PROPERTIES: {
-          version: 'thumbnail',
-        },
-      }
-      media.set('media', existingMedia)
+    // CT scans use a static icon in the UI — no thumbnail generation needed
+    const existingMedia = media.media || {}
+    existingMedia.thumbnail = {
+      USE_ICON: 'archive',
+      PROPERTIES: {
+        version: 'thumbnail',
+      },
     }
+    media.set('media', existingMedia)
 
-    // Save the media with thumbnail data
     await media.save({
       transaction,
       user: req.user,
@@ -2297,15 +2164,6 @@ export async function createStacksMediaFile(req, res) {
     await transaction.rollback()
     await mediaUploader.rollback()
     console.error('Error creating stack media:', e)
-
-    // Clean up temporary files on error
-    if (firstImageFile?.tempDirectory) {
-      try {
-        await cleanupTempDirectory(firstImageFile.tempDirectory)
-      } catch (cleanupError) {
-        console.error('Error cleaning up temporary files on error:', cleanupError)
-      }
-    }
 
     // Provide more specific error messages based on error type
     let errorMessage = 'Failed to create stack media with server error'
@@ -2939,10 +2797,8 @@ export async function completeStacksUpload(req, res) {
   }
 
   const transaction = await sequelizeConn.transaction()
-  const mediaUploader = new S3MediaUploader(transaction, req.user)
 
   try {
-    // Update media data with the uploaded file info
     const updatedMediaData = {
       ORIGINAL_FILENAME: mediaData.ORIGINAL_FILENAME,
       original: {
@@ -2957,151 +2813,14 @@ export async function completeStacksUpload(req, res) {
           version: 'original',
         },
       },
-    }
-
-    // Check if frontend provided a thumbnail image (extracted from ZIP in browser)
-    // This is much more efficient than downloading the entire ZIP on the backend
-    const thumbnailFile = req.file
-    let thumbnailSource = null
-
-    if (thumbnailFile && thumbnailFile.path) {
-      // Use the thumbnail provided by the frontend
-      console.log(`Using frontend-provided thumbnail: ${thumbnailFile.originalname}`)
-      thumbnailSource = { path: thumbnailFile.path, fromFrontend: true }
-    } else {
-      // Fallback: Download ZIP from S3 and extract first image (legacy behavior)
-      // This is slower but ensures backwards compatibility
-      console.log('No thumbnail provided, falling back to S3 download for thumbnail extraction')
-      try {
-        const tempPath = path.join('/tmp', 'mb-downloads')
-        await fs.mkdir(tempPath, { recursive: true })
-        const tempZipPath = path.join(tempPath, `process-${mediaId}-${Date.now()}.zip`)
-
-        // Download from S3
-        const s3Object = await s3Service.getObject(bucket, s3Key)
-        await fs.writeFile(tempZipPath, s3Object.data)
-
-        // Extract first image using lazy extraction
-        const { extractFirstImageFromZip } = await import('../util/zip.js')
-        const firstImageFile = await extractFirstImageFromZip(tempZipPath)
-        
-        if (firstImageFile) {
-          thumbnailSource = { 
-            path: firstImageFile.path, 
-            tempDirectory: firstImageFile.tempDirectory,
-            tempZipPath: tempZipPath,
-            fromFrontend: false 
-          }
-        } else {
-          // Cleanup temp ZIP if no image found
-          try { await fs.unlink(tempZipPath) } catch { /* ignore */ }
-        }
-      } catch (downloadError) {
-        console.warn('Failed to download ZIP for thumbnail generation:', downloadError.message)
-        // Continue without thumbnail - the file is still uploaded
-      }
-    }
-
-    // Generate thumbnails if we have an image source
-    if (thumbnailSource) {
-      try {
-        const sharp = (await import('sharp')).default
-        const image = sharp(thumbnailSource.path)
-        const metadata = await image.metadata()
-
-        if (metadata.width && metadata.height && 
-            metadata.width <= 10000 && metadata.height <= 10000) {
-
-          const sizes = {
-            large: { maxWidth: 800, maxHeight: 800 },
-            thumbnail: { width: 120, height: 120 },
-          }
-
-          for (const [sizeName, dimensions] of Object.entries(sizes)) {
-            let processedImage = image
-
-            if (sizeName === 'large') {
-              if (metadata.width > dimensions.maxWidth || metadata.height > dimensions.maxHeight) {
-                processedImage = image.resize(dimensions.maxWidth, dimensions.maxHeight, {
-                  fit: 'inside',
-                  withoutEnlargement: true,
-                })
-              }
-            } else if (sizeName === 'thumbnail') {
-              processedImage = image.resize(dimensions.width, dimensions.height, {
-                fit: 'inside',
-                withoutEnlargement: true,
-              })
-            }
-
-            const buffer = await processedImage
-              .jpeg({ quality: 85, progressive: true })
-              .toBuffer()
-
-            const processedMetadata = await processedImage.metadata()
-
-            const thumbFileName = `${projectId}_${mediaId}_${sizeName}.jpg`
-            const thumbS3Key = `media_files/images/${projectId}/${mediaId}/${thumbFileName}`
-
-            const result = await s3Service.putObject(bucket, thumbS3Key, buffer, 'image/jpeg')
-
-            updatedMediaData[sizeName] = {
-              S3_KEY: thumbS3Key,
-              S3_ETAG: result.etag,
-              WIDTH: processedMetadata.width,
-              HEIGHT: processedMetadata.height,
-              FILESIZE: buffer.length,
-              MIMETYPE: 'image/jpeg',
-              EXTENSION: 'jpg',
-              PROPERTIES: {
-                height: processedMetadata.height,
-                width: processedMetadata.width,
-                mimetype: 'image/jpeg',
-                filesize: buffer.length,
-                version: sizeName,
-              },
-            }
-
-            mediaUploader.uploadedFiles.push({
-              bucket: bucket,
-              key: thumbS3Key,
-              etag: result.etag,
-            })
-          }
-        }
-      } catch (thumbnailError) {
-        console.warn('Failed to generate thumbnails:', thumbnailError.message)
-      }
-
-      // Cleanup temp files
-      if (!thumbnailSource.fromFrontend) {
-        // Cleanup extracted image from S3 download
-        if (thumbnailSource.tempDirectory) {
-          try {
-            await cleanupTempDirectory(thumbnailSource.tempDirectory)
-          } catch (cleanupError) {
-            console.warn('Error cleaning up temp directory:', cleanupError)
-          }
-        }
-        // Cleanup temp ZIP file
-        if (thumbnailSource.tempZipPath) {
-          try { await fs.unlink(thumbnailSource.tempZipPath) } catch { /* ignore */ }
-        }
-      }
-      // Note: multer handles cleanup of frontend-provided files automatically
-    }
-
-    // If no thumbnail was generated, use archive icon
-    if (!updatedMediaData.thumbnail) {
-      updatedMediaData.thumbnail = {
+      thumbnail: {
         USE_ICON: 'archive',
         PROPERTIES: {
           version: 'thumbnail',
         },
-      }
+      },
     }
 
-    // Update the media record
     media.set('media', updatedMediaData)
 
     await media.save({
@@ -3111,7 +2830,6 @@ export async function completeStacksUpload(req, res) {
     })
 
     await transaction.commit()
-    mediaUploader.commit()
 
     res.status(200).json({
       media: convertMediaResponse(media),
@@ -3120,7 +2838,6 @@ export async function completeStacksUpload(req, res) {
 
   } catch (e) {
     await transaction.rollback()
-    await mediaUploader.rollback()
     console.error('Error completing stacks upload:', e)
     res.status(500).json({
       message: 'Failed to complete upload',
