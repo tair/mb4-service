@@ -24,8 +24,7 @@ mediaRouter.post('/create/stacks', upload.single('file'), controller.createStack
 
 // Direct-to-S3 upload routes for large CT scan files (bypasses proxy timeouts)
 mediaRouter.post('/stacks/initiate', controller.initiateStacksUpload)
-// Complete accepts optional thumbnail file extracted in browser (avoids backend downloading entire ZIP)
-mediaRouter.post('/stacks/:mediaId/complete', upload.single('thumbnail'), controller.completeStacksUpload)
+mediaRouter.post('/stacks/:mediaId/complete', controller.completeStacksUpload)
 
 mediaRouter.get('/:mediaId', controller.getMediaFile)
 mediaRouter.get('/:mediaId/details', controller.getMediaFileDetails)
