@@ -170,7 +170,8 @@ export class BaseModelScanner {
         parentTable
       )
       const field = relationship.field
-      clauses.push(`${parentTableName}.${field} = ${childTableName}.${field}`)
+      const parentField = relationship.referencedKey || field
+      clauses.push(`${parentTableName}.${parentField} = ${childTableName}.${field}`)
     }
 
     const mainModelName = this.mainModel.getTableName()

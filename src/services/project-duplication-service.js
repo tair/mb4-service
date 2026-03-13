@@ -240,10 +240,13 @@ export class ProjectDuplicationService {
     try {
       const request = await models.ProjectDuplicationRequest.findByPk(requestId)
       if (request) {
-        await request.update({
-          status: 3, // Failed status
-          notes: `Duplication failed: ${errorMessage}`,
-        })
+        await request.update(
+          {
+            status: 150, // Failed status
+            notes: `Duplication failed: ${errorMessage}`,
+          },
+          { shouldSkipLogChange: true }
+        )
         console.log(`[PROJECT_DUPLICATION_SERVICE] Marked request ${requestId} as failed`)
       }
     } catch (updateError) {
@@ -260,6 +263,7 @@ const DUPLICATED_TABLES = [
   models.MediaFile,
   models.Matrix,
   models.MatrixImage,
+  models.FeaturedProject,
   models.CharacterOrdering,
   models.Character,
   models.Taxon,
@@ -292,6 +296,8 @@ const DUPLICATED_TABLES = [
   models.MatrixAdditionalBlock,
   models.BibliographicAuthor,
   models.MediaLabel,
+  models.CompositeTaxon,
+  models.CompositeTaxonSource,
 ]
 
 const IGNORED_TABLES = [
