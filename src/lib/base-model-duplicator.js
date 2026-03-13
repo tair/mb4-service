@@ -154,11 +154,15 @@ export class BaseModelDuplicator extends BaseModelScanner {
         }
 
         // Update the foreign key to the duplicated record.
+        // Skip remapping for ignored tables (e.g., user_id -> ca_users) -
+        // these values are preserved as-is since the referenced rows aren't cloned.
         if (attributes.references && table != this.mainModel && row[field]) {
           const referencedTableName = attributes.references.model
           const referencedTable =
             this.datamodel.getTableByName(referencedTableName)
-          row[field] = this.getDuplicateRecordId(referencedTable, row[field])
+          if (!this.ignoredTables.includes(referencedTable)) {
+            row[field] = this.getDuplicateRecordId(referencedTable, row[field])
+          }
         }
 
         // We must update all records that have foreign keys by their table
@@ -361,6 +365,11 @@ export class BaseModelDuplicator extends BaseModelScanner {
           this.datamodel.getTableByName(referencedTableName)
 
         if (referencedTable) {
+          // Skip validation for foreign keys that reference ignored tables
+          // (e.g., user_id -> ca_users). These values are preserved as-is.
+          if (this.ignoredTables.includes(referencedTable)) {
+            continue
+          }
           // Check if the referenced record was cloned
           if (!this.clonedIds.has(referencedTable, row[field])) {
             return false
