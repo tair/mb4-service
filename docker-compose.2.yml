@@ -1,76 +1,88 @@
-version: "3.4"
+version: '3.4'
 
 services:
   # ========================
   # Dev profile
   # ========================
   mb4-service:
-    profiles: ["dev"]
+    profiles: ['dev']
     build:
       context: .
-      dockerfile: Dockerfile2  # <-- Use Dockerfile2 instead of default Dockerfile
-      target: build            # <-- build stage from Dockerfile2
+      dockerfile: Dockerfile2 # <-- Use Dockerfile2 instead of default Dockerfile
+      target: build # <-- build stage from Dockerfile2
     image: mb4-service-dev:1.0
     container_name: mb4-service-container-dev
     volumes:
-      - .:/app                 # bind mount code for hot reload
-      - /app/node_modules      # anonymous volume to keep container's node_modules
-      - ./data:/app/data       # data persistence - mount to /app/data to match code path
+      - .:/app # bind mount code for hot reload
+      - /app/node_modules # anonymous volume to keep container's node_modules
+      - ./data:/app/data # data persistence - mount to /app/data to match code path
     env_file:
-      - ./.env                 # dev env vars
+      - ./.env # dev env vars
     ports:
-      - "8080:8080"
-    command: ["npm","run","dev"]
+      - '8080:8080'
+    command: ['npm', 'run', 'dev']
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get({host:'127.0.0.1',port:8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get({host:'127.0.0.1',port:8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
       interval: 30s
-      timeout: 10s              # Increased timeout for health check
+      timeout: 10s # Increased timeout for health check
       retries: 3
-      start_period: 40s         # Give container time to start
+      start_period: 40s # Give container time to start
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
 
   # ========================
   # Prod profile
   # ========================
   mb4-service-prod:
-    profiles: ["prod"]
+    profiles: ['prod']
     build:
       context: .
-      dockerfile: Dockerfile2  # <-- Use Dockerfile2 instead of default Dockerfile
-      target: runner           # <-- production runner stage from Dockerfile2
+      dockerfile: Dockerfile2 # <-- Use Dockerfile2 instead of default Dockerfile
+      target: runner # <-- production runner stage from Dockerfile2
     image: mb4-service:1.0
     container_name: mb4-service-container-prod
     environment:
-      - MEDIA_DIRECTORY=/home/node/media  # media directory, for prod no root access
+      - MEDIA_DIRECTORY=/home/node/media # media directory, for prod no root access
     env_file:
-      - ./.env                 # prod env vars (or .env.prod)
+      - ./.env # prod env vars (or .env.prod)
     ports:
-      - "8080:8080"
-    command: ["node", "src/server.js"]  # Override to use correct entry point
+      - '8080:8080'
+    command: ['node', 'src/server.js'] # Override to use correct entry point
     volumes:
-      - ./data:/app/data          # data persistence - mount to /app/data to match code path
+      - ./data:/app/data # data persistence - mount to /app/data to match code path
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get({host:'127.0.0.1',port:8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get({host:'127.0.0.1',port:8080,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
       interval: 30s
-      timeout: 10s              # Increased timeout for health check
+      timeout: 10s # Increased timeout for health check
       retries: 3
-      start_period: 40s         # Give container time to start
+      start_period: 40s # Give container time to start
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
 
   # ========================
   # Local profile (with shared network)
   # ========================
   mb4-service-local:
-    profiles: ["local"]
+    profiles: ['local']
     build:
       context: .
       dockerfile: Dockerfile2
@@ -78,26 +90,32 @@ services:
     image: mb4-service-local:1.0
     container_name: mb4-service-container-local
     volumes:
-      - .:/app                 # bind mount code for hot reload
-      - /app/node_modules      # anonymous volume to keep container's node_modules
-      - ./data:/app/data       # data persistence - mount to /app/data to match code path
+      - .:/app # bind mount code for hot reload
+      - /app/node_modules # anonymous volume to keep container's node_modules
+      - ./data:/app/data # data persistence - mount to /app/data to match code path
     env_file:
-      - ./.env                 # local env vars
+      - ./.env # local env vars
     ports:
-      - "8083:8080"
-    command: ["npm","run","dev"]
+      - '8083:8080'
+    command: ['npm', 'run', 'dev']
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get({host:'127.0.0.1',port:8083,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get({host:'127.0.0.1',port:8083,path:'/healthz'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+        ]
       interval: 30s
-      timeout: 10s              # Increased timeout for health check
+      timeout: 10s # Increased timeout for health check
       retries: 3
-      start_period: 40s         # Give container time to start
+      start_period: 40s # Give container time to start
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
     networks:
       - shared_network
     # Add environment variables for better debugging

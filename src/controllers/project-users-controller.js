@@ -289,7 +289,32 @@ export async function isEmailAvailable(req, res) {
   }
 }
 
-//converts member data from db into its own object
+export async function updateOrcidOptOut(req, res) {
+  const projectId = req.project.project_id
+  const userId = req.credential.user_id
+  const optOut = req.body.orcid_publish_opt_out ? 1 : 0
+
+  try {
+    const membership = await models.ProjectsXUser.findOne({
+      where: { project_id: projectId, user_id: userId },
+    })
+
+    if (!membership) {
+      return res.status(404).json({ message: 'You are not a member of this project' })
+    }
+
+    membership.orcid_publish_opt_out = optOut
+    await membership.save({ user: req.user })
+
+    res.status(200).json({
+      orcid_publish_opt_out: membership.orcid_publish_opt_out,
+    })
+  } catch (err) {
+    console.error('Error updating ORCID opt-out:', err)
+    res.status(500).json({ message: 'Error updating ORCID publish opt-out.' })
+  }
+}
+
 function convertUser(row, admin, groupIds = []) {
   return {
     user_id: parseInt(row.user_id),
@@ -300,5 +325,6 @@ function convertUser(row, admin, groupIds = []) {
     membership_type: parseInt(row.membership_type),
     email: row.email,
     group_ids: groupIds != undefined ? [...groupIds] : [],
+    orcid_publish_opt_out: row.orcid_publish_opt_out ? 1 : 0,
   }
 }

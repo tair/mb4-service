@@ -87,6 +87,7 @@ export async function listUsers(req, res) {
         'approved_on',
         'vars',
         'orcid',
+        'orcid_write_access',
       ],
       order,
       limit,
@@ -110,6 +111,7 @@ export async function listUsers(req, res) {
         hasUpdatedProfile: user.hasConfirmedProfile(),
         approvedOn: user.approved_on ? new Date(user.approved_on * 1000).toISOString() : null,
         orcid: user.orcid,
+        orcidWriteAccess: !!user.orcid_write_access,
       }
     })
 
@@ -164,6 +166,7 @@ export async function getUser(req, res) {
         'advisor_user_id',
         'vars',
         'orcid',
+        'orcid_write_access',
       ],
       include: [
         {
@@ -231,6 +234,7 @@ export async function getUser(req, res) {
           ? new Date(user.confirmed_on * 1000).toISOString()
           : null,
         orcid: user.orcid,
+        orcidWriteAccess: !!user.orcid_write_access,
         lastLoginAt: lastLogin ? new Date(lastLogin * 1000).toISOString() : null,
         registrationCountry: registrationCountry || null,
         isStudent: isStudent || false,
