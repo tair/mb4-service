@@ -169,10 +169,9 @@ export class BaseModelScanner {
         childTable,
         parentTable
       )
-      const childField = relationship.field
-      // Use the referenced key for the parent table (e.g., taxon_id vs source_taxon_id)
-      const parentField = relationship.referencedKey || childField
-      clauses.push(`${parentTableName}.${parentField} = ${childTableName}.${childField}`)
+      const field = relationship.field
+      const parentField = relationship.referencedKey || field
+      clauses.push(`${parentTableName}.${parentField} = ${childTableName}.${field}`)
     }
 
     const mainModelName = this.mainModel.getTableName()
