@@ -241,7 +241,7 @@ export class ProjectDuplicationService {
       const request = await models.ProjectDuplicationRequest.findByPk(requestId)
       if (request) {
         await request.update({
-          status: 3, // Failed status
+          status: 150, // Failed status
           notes: `Duplication failed: ${errorMessage}`,
         })
         console.log(`[PROJECT_DUPLICATION_SERVICE] Marked request ${requestId} as failed`)
@@ -260,6 +260,7 @@ const DUPLICATED_TABLES = [
   models.MediaFile,
   models.Matrix,
   models.MatrixImage,
+  models.FeaturedProject,
   models.CharacterOrdering,
   models.Character,
   models.Taxon,

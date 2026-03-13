@@ -263,6 +263,7 @@ const DUPLICATED_TABLES = [
   models.MediaFile,
   models.Matrix,
   models.MatrixImage,
+  models.FeaturedProject,
   models.CharacterOrdering,
   models.Character,
   models.Taxon,
