@@ -503,7 +503,7 @@ export async function getOrcidWorkStatus(req, res) {
     const projectId = req.params.projectId
     const userId = req.user.user_id
 
-    if (!config.orcid.worksEnabled) {
+    if (!config.orcid.worksEnabled || !config.orcid.apiDomain) {
       return res.status(200).json({ orcidState: 'not_connected' })
     }
 
@@ -546,7 +546,7 @@ export async function getOrcidWorkStatus(req, res) {
     })
   } catch (error) {
     console.error('Error in getOrcidWorkStatus:', error)
-    return res.status(200).json({ orcidState: 'read_only' })
+    return res.status(500).json({ message: 'Error checking ORCID work status' })
   }
 }
 
