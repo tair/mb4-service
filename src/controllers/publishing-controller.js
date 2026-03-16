@@ -543,9 +543,9 @@ export async function getOrcidWorkStatus(req, res) {
     const project = await models.Project.findByPk(projectId, {
       attributes: ['article_authors'],
     })
-    const articleAuthors = project?.article_authors || ''
-    const fname = user.fname || ''
-    const lname = user.lname || ''
+    const articleAuthors = (project?.article_authors || '').toLowerCase()
+    const fname = (user.fname || '').toLowerCase()
+    const lname = (user.lname || '').toLowerCase()
     const nameInAuthors =
       (fname && articleAuthors.includes(fname)) ||
       (lname && articleAuthors.includes(lname))
