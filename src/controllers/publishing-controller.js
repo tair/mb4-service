@@ -495,6 +495,84 @@ export async function publishProject(req, res) {
 }
 
 /**
+ * Get ORCID work status for the current user and project.
+ * Used by the frontend to show post-publish ORCID status banners.
+ */
+export async function getOrcidWorkStatus(req, res) {
+  try {
+    const projectId = req.params.projectId
+    const userId = req.user.user_id
+
+    if (!config.orcid.worksEnabled || !config.orcid.apiDomain) {
+      return res.status(200).json({ orcidState: 'not_connected' })
+    }
+
+    const user = await models.User.findByPk(userId, {
+      attributes: [
+        'orcid', 'orcid_write_access', 'orcid_opt_out',
+        'orcid_access_token', 'fname', 'lname',
+      ],
+    })
+
+    if (!user || !user.orcid) {
+      return res.status(200).json({ orcidState: 'not_connected' })
+    }
+
+    if (!user.orcid_write_access) {
+      return res.status(200).json({ orcidState: 'read_only' })
+    }
+
+    if (user.orcid_opt_out) {
+      return res.status(200).json({ orcidState: 'opted_out' })
+    }
+
+    if (!user.orcid_access_token) {
+      return res.status(200).json({ orcidState: 'not_connected' })
+    }
+
+    const projectUser = await models.ProjectsXUser.findOne({
+      where: { project_id: projectId, user_id: userId },
+      attributes: ['orcid_publish_opt_out'],
+    })
+
+    if (projectUser?.orcid_publish_opt_out) {
+      return res.status(200).json({ orcidState: 'opted_out' })
+    }
+
+    // Check if user's name appears in article_authors (matches handler eligibility)
+    const project = await models.Project.findByPk(projectId, {
+      attributes: ['article_authors'],
+    })
+    const articleAuthors = (project?.article_authors || '').toLowerCase()
+    const fname = (user.fname || '').toLowerCase()
+    const lname = (user.lname || '').toLowerCase()
+    const nameInAuthors =
+      (fname && articleAuthors.includes(fname)) ||
+      (lname && articleAuthors.includes(lname))
+
+    if (!nameInAuthors) {
+      return res.status(200).json({ orcidState: 'not_connected' })
+    }
+
+    const workRecord = await models.ProjectsXOrcidWork.findOne({
+      where: { project_id: projectId, user_id: userId },
+    })
+
+    if (!workRecord) {
+      return res.status(200).json({ orcidState: 'pending' })
+    }
+
+    return res.status(200).json({
+      orcidState: workRecord.status === 'success' ? 'success' : 'failed',
+      errorMessage: workRecord.error_message || null,
+    })
+  } catch (error) {
+    console.error('Error in getOrcidWorkStatus:', error)
+    return res.status(500).json({ message: 'Error checking ORCID work status' })
+  }
+}
+
+/**
  * Validate citation info
  * Checks if citation info is complete and returns any warnings
  */
