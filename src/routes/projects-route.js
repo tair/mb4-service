@@ -170,6 +170,10 @@ projectRouter.get(
   publishingController.getUnpublishedItems
 )
 projectRouter.post('/publishing/publish', publishingController.publishProject)
+projectRouter.get(
+  '/publishing/orcid-status',
+  publishingController.getOrcidWorkStatus
+)
 projectRouter.post('/publishing/unpublish', publishingController.unpublishProject)
 projectRouter.post('/publishing/dump', publishingController.dumpProjectById)
 
