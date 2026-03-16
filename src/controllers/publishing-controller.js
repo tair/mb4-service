@@ -508,7 +508,10 @@ export async function getOrcidWorkStatus(req, res) {
     }
 
     const user = await models.User.findByPk(userId, {
-      attributes: ['orcid', 'orcid_write_access', 'orcid_opt_out'],
+      attributes: [
+        'orcid', 'orcid_write_access', 'orcid_opt_out',
+        'orcid_access_token', 'fname', 'lname',
+      ],
     })
 
     if (!user || !user.orcid) {
@@ -523,6 +526,10 @@ export async function getOrcidWorkStatus(req, res) {
       return res.status(200).json({ orcidState: 'opted_out' })
     }
 
+    if (!user.orcid_access_token) {
+      return res.status(200).json({ orcidState: 'not_connected' })
+    }
+
     const projectUser = await models.ProjectsXUser.findOne({
       where: { project_id: projectId, user_id: userId },
       attributes: ['orcid_publish_opt_out'],
@@ -530,6 +537,21 @@ export async function getOrcidWorkStatus(req, res) {
 
     if (projectUser?.orcid_publish_opt_out) {
       return res.status(200).json({ orcidState: 'opted_out' })
+    }
+
+    // Check if user's name appears in article_authors (matches handler eligibility)
+    const project = await models.Project.findByPk(projectId, {
+      attributes: ['article_authors'],
+    })
+    const articleAuthors = project?.article_authors || ''
+    const fname = user.fname || ''
+    const lname = user.lname || ''
+    const nameInAuthors =
+      (fname && articleAuthors.includes(fname)) ||
+      (lname && articleAuthors.includes(lname))
+
+    if (!nameInAuthors) {
+      return res.status(200).json({ orcidState: 'not_connected' })
     }
 
     const workRecord = await models.ProjectsXOrcidWork.findOne({
