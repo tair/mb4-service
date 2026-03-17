@@ -1226,10 +1226,10 @@ export async function processPdf(req, res) {
 
     // Validate file type
     const fileExt = path.extname(file.originalname).toLowerCase()
-    if (fileExt !== '.pdf') {
+    if (!['.pdf', '.docx'].includes(fileExt)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid file type. Only PDF files are supported.',
+        message: 'Invalid file type. Only PDF and Word (.docx) files are supported.',
       })
     }
 
