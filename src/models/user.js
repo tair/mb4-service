@@ -117,6 +117,11 @@ export default class User extends Model {
           allowNull: false,
           defaultValue: 0,
         },
+        orcid_opt_out: {
+          type: DataTypes.TINYINT.UNSIGNED,
+          allowNull: false,
+          defaultValue: 0,
+        },
       },
       {
         sequelize,

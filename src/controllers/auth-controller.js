@@ -51,8 +51,7 @@ async function login(req, res, next) {
             try {
               await user.save({ user: user }) // need user for changelog hook
             } catch (error) {
-              console.log('Save user orcid failed')
-              console.error(error)
+              console.error('Failed to save user ORCID:', error)
             }
           }
         }
@@ -265,11 +264,6 @@ async function getORCIDAuthUrl(req, res) {
     scope = '/authenticate%20/activities/update'
   }
   
-  console.log(`[ORCID] Generating auth URL:`)
-  console.log(`  - API Domain: ${config.orcid.apiDomain}`)
-  console.log(`  - Works Enabled: ${config.orcid.worksEnabled}`)
-  console.log(`  - Requested Scope: ${decodeURIComponent(scope)}`)
-  
   const url = `${config.orcid.domain}/oauth/authorize?client_id=${config.orcid.clientId}\
 &response_type=code&scope=${scope}&redirect_uri=${config.orcid.redirect}`
   res.status(200).json({ url: url })
@@ -284,8 +278,7 @@ async function authenticateORCID(req, res) {
       loggedInUser = await models.User.findByPk(req.credential.user_id)
     }
   } catch (error) {
-    console.log('Get logged in user failed')
-    console.error(error)
+    console.error('Failed to get logged in user:', error)
 
     const status = error?.response?.status ?? 400
     res.status(status).json(error)
@@ -318,12 +311,6 @@ async function authenticateORCID(req, res) {
       const orcidRefreshToken = response.data.refresh_token
       const grantedScope = response.data.scope
       const hasWriteAccess = grantedScope?.includes('/activities/update') ? 1 : 0
-      
-      console.log(`[ORCID] Authentication successful:`)
-      console.log(`  - ORCID: ${orcid}`)
-      console.log(`  - Name: ${name}`)
-      console.log(`  - Granted Scope: ${grantedScope}`)
-      console.log(`  - Has Write Access: ${hasWriteAccess ? 'YES' : 'NO'}`)
       
       const orcidProfile = {
         orcid: orcid,
@@ -374,8 +361,7 @@ async function authenticateORCID(req, res) {
           try {
             await loggedInUser.save({ user: loggedInUser }) // need user for changelog hook
           } catch (error) {
-            console.log('Save user orcid failed')
-            console.error(error)
+            console.error('Failed to save user ORCID:', error)
             res.status(400).json(error)
             return
           }
@@ -395,7 +381,6 @@ async function authenticateORCID(req, res) {
         userWithOrcid.orcid_write_access = hasWriteAccess
         try {
           await userWithOrcid.save({ user: userWithOrcid })
-          console.log(`[ORCID] Updated tokens for user ${userWithOrcid.user_id}`)
         } catch (saveError) {
           console.error('Failed to update ORCID tokens for user:', saveError)
           // Continue with login even if token update fails
@@ -467,8 +452,7 @@ async function authenticateORCID(req, res) {
           }
         }
       } catch (error) {
-        console.log('Get user orcid emails failed')
-        console.error(error)
+        console.error('Failed to get user ORCID emails:', error)
         let status = 400
         if (error.response && error.response.status)
           status = error.response.status
@@ -512,8 +496,7 @@ async function authenticateORCID(req, res) {
       })
     })
     .catch((error) => {
-      console.log('authenticate orcid user failed')
-      console.error(error)
+      console.error('Failed to authenticate ORCID user:', error)
 
       const status = error?.response?.status ?? 400
       res.status(status).json(error)
@@ -554,7 +537,23 @@ async function unlinkORCID(req, res) {
       return res.status(400).json({ message: 'No ORCID linked to this account' })
     }
 
-    const previousOrcid = user.orcid
+    // Revoke the access token with ORCID before clearing local fields
+    if (user.orcid_access_token) {
+      try {
+        await axios.post(
+          `${config.orcid.domain}/oauth/revoke`,
+          new URLSearchParams({
+            client_id: config.orcid.clientId,
+            client_secret: config.orcid.cliendSecret,
+            token: user.orcid_access_token,
+          }).toString(),
+          { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+        )
+      } catch (revokeError) {
+        // Best-effort: token may already be expired/revoked
+        console.error('Failed to revoke ORCID token:', revokeError.message)
+      }
+    }
 
     // Clear ORCID fields
     user.orcid = null
@@ -563,8 +562,6 @@ async function unlinkORCID(req, res) {
     user.orcid_write_access = 0
 
     await user.save({ user: user })
-
-    console.log(`ORCID ${previousOrcid} unlinked from user ${userId}`)
 
     return res.status(200).json({
       message: 'ORCID successfully unlinked from your account',
