@@ -47,11 +47,11 @@ async function login(req, res, next) {
             user.orcid = orcidProfile.orcid
             user.orcid_access_token = orcidProfile.accessToken
             user.orcid_refresh_token = orcidProfile.refreshToken
+            user.orcid_write_access = orcidProfile.scope?.includes('/activities/update') ? 1 : 0
             try {
               await user.save({ user: user }) // need user for changelog hook
             } catch (error) {
-              console.log('Save user orcid failed')
-              console.error(error)
+              console.error('Failed to save user ORCID:', error)
             }
           }
         }
@@ -254,11 +254,18 @@ async function setNewPassword(req, res) {
 }
 
 async function getORCIDAuthUrl(req, res) {
+  // Default scope for authentication only
+  let scope = '/authenticate'
+  
+  // Only request write scope if ORCID Works feature is explicitly enabled
+  // This requires ORCID Member API credentials with proper registration
+  if (config.orcid.worksEnabled) {
+    // URL-encode the space between scopes
+    scope = '/authenticate%20/activities/update'
+  }
+  
   const url = `${config.orcid.domain}/oauth/authorize?client_id=${config.orcid.clientId}\
-&response_type=code&scope=/authenticate&redirect_uri=${config.orcid.redirect}`
-  // url below is available for member API
-  // const url = `${config.orcid.domain}/oauth/authorize?client_id=${config.orcid.clientId}\
-  // &response_type=code&scope=/read-limited&redirect_uri=${config.orcid.redirect}`
+&response_type=code&scope=${scope}&redirect_uri=${config.orcid.redirect}`
   res.status(200).json({ url: url })
 }
 
@@ -271,8 +278,7 @@ async function authenticateORCID(req, res) {
       loggedInUser = await models.User.findByPk(req.credential.user_id)
     }
   } catch (error) {
-    console.log('Get logged in user failed')
-    console.error(error)
+    console.error('Failed to get logged in user:', error)
 
     const status = error?.response?.status ?? 400
     res.status(status).json(error)
@@ -303,11 +309,15 @@ async function authenticateORCID(req, res) {
       const name = response.data.name
       const orcidAccessToken = response.data.access_token
       const orcidRefreshToken = response.data.refresh_token
+      const grantedScope = response.data.scope
+      const hasWriteAccess = grantedScope?.includes('/activities/update') ? 1 : 0
+      
       const orcidProfile = {
         orcid: orcid,
         name: name,
         access_token: orcidAccessToken,
         refresh_token: orcidRefreshToken,
+        scope: grantedScope,
       }
 
       // check if a user is already linked to the ORCID
@@ -347,11 +357,11 @@ async function authenticateORCID(req, res) {
           loggedInUser.orcid = orcid
           loggedInUser.orcid_access_token = orcidAccessToken
           loggedInUser.orcid_refresh_token = orcidRefreshToken
+          loggedInUser.orcid_write_access = hasWriteAccess
           try {
             await loggedInUser.save({ user: loggedInUser }) // need user for changelog hook
           } catch (error) {
-            console.log('Save user orcid failed')
-            console.error(error)
+            console.error('Failed to save user ORCID:', error)
             res.status(400).json(error)
             return
           }
@@ -362,14 +372,18 @@ async function authenticateORCID(req, res) {
       }
 
       if (userWithOrcid) {
-        // Update last login timestamp
+        // Update last login timestamp and refresh ORCID tokens
+        // Tokens must be updated on every ORCID login to prevent them from expiring
         const currentTimestamp = Math.floor(Date.now() / 1000)
         userWithOrcid.setVar('last_login', currentTimestamp)
+        userWithOrcid.orcid_access_token = orcidAccessToken
+        userWithOrcid.orcid_refresh_token = orcidRefreshToken
+        userWithOrcid.orcid_write_access = hasWriteAccess
         try {
           await userWithOrcid.save({ user: userWithOrcid })
         } catch (saveError) {
-          console.error('Failed to update last_login timestamp for ORCID user:', saveError)
-          // Continue with login even if timestamp update fails
+          console.error('Failed to update ORCID tokens for user:', saveError)
+          // Continue with login even if token update fails
         }
 
         const access = await getRoles(userWithOrcid.user_id)
@@ -438,8 +452,7 @@ async function authenticateORCID(req, res) {
           }
         }
       } catch (error) {
-        console.log('Get user orcid emails failed')
-        console.error(error)
+        console.error('Failed to get user ORCID emails:', error)
         let status = 400
         if (error.response && error.response.status)
           status = error.response.status
@@ -483,8 +496,7 @@ async function authenticateORCID(req, res) {
       })
     })
     .catch((error) => {
-      console.log('authenticate orcid user failed')
-      console.error(error)
+      console.error('Failed to authenticate ORCID user:', error)
 
       const status = error?.response?.status ?? 400
       res.status(status).json(error)
@@ -503,11 +515,70 @@ function getTokenExpiry(token) {
   return expiry
 }
 
+/**
+ * Unlink ORCID from the current user's account
+ * Clears orcid, orcid_access_token, and orcid_refresh_token
+ */
+async function unlinkORCID(req, res) {
+  try {
+    // User must be authenticated
+    if (!req.credential || !req.credential.user_id) {
+      return res.status(401).json({ message: 'Authentication required' })
+    }
+
+    const userId = req.credential.user_id
+    const user = await models.User.findByPk(userId)
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    if (!user.orcid) {
+      return res.status(400).json({ message: 'No ORCID linked to this account' })
+    }
+
+    // Revoke the access token with ORCID before clearing local fields
+    if (user.orcid_access_token) {
+      try {
+        await axios.post(
+          `${config.orcid.domain}/oauth/revoke`,
+          new URLSearchParams({
+            client_id: config.orcid.clientId,
+            client_secret: config.orcid.cliendSecret,
+            token: user.orcid_access_token,
+          }).toString(),
+          { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+        )
+      } catch (revokeError) {
+        // Best-effort: token may already be expired/revoked
+        console.error('Failed to revoke ORCID token:', revokeError.message)
+      }
+    }
+
+    // Clear ORCID fields
+    user.orcid = null
+    user.orcid_access_token = null
+    user.orcid_refresh_token = null
+    user.orcid_write_access = 0
+
+    await user.save({ user: user })
+
+    return res.status(200).json({
+      message: 'ORCID successfully unlinked from your account',
+      success: true,
+    })
+  } catch (error) {
+    console.error('Error unlinking ORCID:', error)
+    return res.status(500).json({ message: 'Failed to unlink ORCID' })
+  }
+}
+
 export {
   login,
   logout,
   getORCIDAuthUrl,
   authenticateORCID,
+  unlinkORCID,
   resetPassword,
   validateResetKey,
   setNewPassword,

@@ -263,6 +263,7 @@ const DUPLICATED_TABLES = [
   models.MediaFile,
   models.Matrix,
   models.MatrixImage,
+  models.FeaturedProject,
   models.CharacterOrdering,
   models.Character,
   models.Taxon,
@@ -295,6 +296,8 @@ const DUPLICATED_TABLES = [
   models.MatrixAdditionalBlock,
   models.BibliographicAuthor,
   models.MediaLabel,
+  models.CompositeTaxon,
+  models.CompositeTaxonSource,
 ]
 
 const IGNORED_TABLES = [
@@ -308,6 +311,7 @@ const IGNORED_TABLES = [
   models.Institution,
   models.InstitutionsXProject,
   models.InstitutionsXUser,
+  models.ProjectsXOrcidWork,
 ]
 
 const NUMBERED_TABLES = new Map([[models.MediaLabel, 'link_id']])

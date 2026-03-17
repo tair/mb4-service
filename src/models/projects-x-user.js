@@ -67,6 +67,11 @@ export default class ProjectsXUser extends Model {
           type: DataTypes.JSON,
           allowNull: true,
         },
+        orcid_publish_opt_out: {
+          type: DataTypes.TINYINT.UNSIGNED,
+          allowNull: false,
+          defaultValue: 0,
+        },
       },
       {
         sequelize,
