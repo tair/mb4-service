@@ -537,8 +537,6 @@ async function unlinkORCID(req, res) {
       return res.status(400).json({ message: 'No ORCID linked to this account' })
     }
 
-    const previousOrcid = user.orcid
-
     // Revoke the access token with ORCID before clearing local fields
     if (user.orcid_access_token) {
       try {
