@@ -1211,7 +1211,7 @@ export async function convertCsvToMatrix(req, res) {
 }
 
 /**
- * Process PDF file to extract character data via mb4-curator API
+ * Process PDF or Word document to extract character data via mb4-curator API
  * This acts as a proxy to the curator service for better security and architecture
  */
 export async function processPdf(req, res) {
@@ -1220,7 +1220,7 @@ export async function processPdf(req, res) {
     if (!file) {
       return res.status(400).json({
         success: false,
-        message: 'PDF file is required',
+        message: 'A PDF or Word (.docx) file is required',
       })
     }
 
@@ -1288,7 +1288,7 @@ export async function processPdf(req, res) {
         },
         maxBodyLength: Infinity,
         maxContentLength: Infinity,
-        timeout: 300000, // 5 minute timeout for large PDFs
+        timeout: 300000, // 5 minute timeout for large documents
       }
     )
 
@@ -1314,7 +1314,7 @@ export async function processPdf(req, res) {
     // Log error concisely
     const curatorUrl = config.curator.url || 'http://localhost:8001'
     console.error(
-      `PDF processing failed: ${error.code || 'ERROR'} - ${error.message}`,
+      `Document processing failed: ${error.code || 'ERROR'} - ${error.message}`,
       `[Curator URL: ${curatorUrl}]`
     )
 
@@ -1347,7 +1347,7 @@ export async function processPdf(req, res) {
     } else {
       return res.status(500).json({
         success: false,
-        message: error.message || 'Failed to process PDF file',
+        message: error.message || 'Failed to process document',
       })
     }
   }
