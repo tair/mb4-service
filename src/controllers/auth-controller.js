@@ -556,6 +556,25 @@ async function unlinkORCID(req, res) {
 
     const previousOrcid = user.orcid
 
+    // Revoke the access token with ORCID before clearing local fields
+    if (user.orcid_access_token) {
+      try {
+        await axios.post(
+          `${config.orcid.domain}/oauth/revoke`,
+          new URLSearchParams({
+            client_id: config.orcid.clientId,
+            client_secret: config.orcid.cliendSecret,
+            token: user.orcid_access_token,
+          }).toString(),
+          { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+        )
+        console.log(`ORCID access token revoked for user ${userId}`)
+      } catch (revokeError) {
+        // Log but don't block unlink — token may already be expired/revoked
+        console.warn('Failed to revoke ORCID token:', revokeError.message)
+      }
+    }
+
     // Clear ORCID fields
     user.orcid = null
     user.orcid_access_token = null
