@@ -15,11 +15,13 @@ export default class Press extends Model {
         },
         author: {
           type: DataTypes.STRING,
-          allowNull: true,
+          allowNull: false,
+          defaultValue: '',
         },
         publication: {
           type: DataTypes.STRING,
-          allowNull: true,
+          allowNull: false,
+          defaultValue: '',
         },
         media: {
           type: DataTypes.STRING,
@@ -27,7 +29,8 @@ export default class Press extends Model {
         },
         link: {
           type: DataTypes.STRING,
-          allowNull: true,
+          allowNull: false,
+          defaultValue: '',
         },
         featured: {
           type: DataTypes.BOOLEAN,
