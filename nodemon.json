@@ -1,0 +1,12 @@
+{
+  "watch": ["src"],
+  "ext": "js,json",
+  "ignore": ["data/", "db-dev/", "node_modules/", "*.test.js", "*.spec.js"],
+  "exec": "node src/server.js",
+  "legacyWatch": true,
+  "polling": true,
+  "verbose": true
+}
+
+
+

@@ -26,11 +26,26 @@ matrixRouter.get(
 )
 
 matrixRouter.post('/upload', upload.single('file'), controller.uploadMatrix)
+matrixRouter.post(
+  '/upload-csv',
+  upload.single('file'),
+  controller.uploadCsvMatrix
+)
+matrixRouter.post(
+  '/parse-csv',
+  upload.single('file'),
+  controller.parseCsvMatrix
+)
 matrixRouter.post('/create', controller.createMatrix)
 matrixRouter.post(
   '/convert-csv',
   upload.single('csv_file'),
   controller.convertCsvToMatrix
+)
+matrixRouter.post(
+  '/process-pdf',
+  upload.single('pdf_file'),
+  controller.processPdf
 )
 matrixRouter.post(
   '/:matrixId/upload',
