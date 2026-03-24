@@ -168,8 +168,33 @@ export default class Matrix extends Model {
     )
   }
 
+  /**
+   * Some rows store other_options as a JSON string (driver/legacy/double-encoding).
+   * Normalize to a plain object before read/write.
+   */
+  ensureOtherOptionsObject() {
+    if (this.other_options == null) {
+      this.other_options = {}
+      return
+    }
+    if (typeof this.other_options === 'string') {
+      try {
+        const parsed = JSON.parse(this.other_options)
+        this.other_options =
+          parsed &&
+          typeof parsed === 'object' &&
+          !Array.isArray(parsed)
+            ? parsed
+            : {}
+      } catch {
+        this.other_options = {}
+      }
+    }
+  }
+
   getOption(key) {
-    if (this.other_options && this.other_options[key] !== undefined) {
+    this.ensureOtherOptionsObject()
+    if (this.other_options[key] !== undefined) {
       return this.other_options[key]
     }
     return 0 // Default value when option doesn't exist
@@ -177,9 +202,7 @@ export default class Matrix extends Model {
 
   setOption(key, value) {
     if (MATRIX_OPTIONS.includes(key)) {
-      if (!this.other_options) {
-        this.other_options = {}
-      }
+      this.ensureOtherOptionsObject()
       this.other_options[key] = value
       this.changed('other_options', true)
     }

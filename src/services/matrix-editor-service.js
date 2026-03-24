@@ -5494,7 +5494,8 @@ export default class MatrixEditorService {
 
   getOptions() {
     const options = {}
-    if (this.matrix.other_options) {
+    this.matrix.ensureOtherOptionsObject()
+    if (this.matrix.other_options && Object.keys(this.matrix.other_options).length) {
       for (const key of MATRIX_OPTIONS) {
         options[key] = parseInt(this.matrix.other_options[key])
       }
