@@ -169,8 +169,36 @@ export default class Matrix extends Model {
   }
 
   /**
-   * Some rows store other_options as a JSON string (driver/legacy/double-encoding).
-   * Normalize to a plain object before read/write.
+   * Read-only view of other_options as a plain object. Does not mutate the
+   * model (avoids marking Sequelize rows dirty on read-only paths).
+   * Some rows store JSON as a string (legacy / client JSON.stringify).
+   */
+  getOtherOptionsSnapshot() {
+    const raw = this.other_options
+    if (raw == null) {
+      return {}
+    }
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw)
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          !Array.isArray(parsed)
+        ) {
+          return parsed
+        }
+      } catch {
+        /* ignore */
+      }
+      return {}
+    }
+    return raw
+  }
+
+  /**
+   * Normalize other_options to a mutable plain object before setOption writes.
+   * Call only when persisting changes.
    */
   ensureOtherOptionsObject() {
     if (this.other_options == null) {
@@ -193,9 +221,9 @@ export default class Matrix extends Model {
   }
 
   getOption(key) {
-    this.ensureOtherOptionsObject()
-    if (this.other_options[key] !== undefined) {
-      return this.other_options[key]
+    const opts = this.getOtherOptionsSnapshot()
+    if (opts[key] !== undefined) {
+      return opts[key]
     }
     return 0 // Default value when option doesn't exist
   }

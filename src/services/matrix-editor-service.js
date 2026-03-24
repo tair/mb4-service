@@ -5494,15 +5494,16 @@ export default class MatrixEditorService {
 
   getOptions() {
     const options = {}
-    this.matrix.ensureOtherOptionsObject()
-    if (this.matrix.other_options && Object.keys(this.matrix.other_options).length) {
-      for (const key of MATRIX_OPTIONS) {
-        options[key] = parseInt(this.matrix.other_options[key])
-      }
-    } else {
-      // Set default values when other_options is null
-      for (const key of MATRIX_OPTIONS) {
-        options[key] = 0 // Default to 0 for all options
+    const opts = this.matrix.getOtherOptionsSnapshot()
+    for (const key of MATRIX_OPTIONS) {
+      const v = opts[key]
+      if (v === undefined || v === null) {
+        options[key] = 0
+      } else if (typeof v === 'boolean') {
+        options[key] = v ? 1 : 0
+      } else {
+        const n = parseInt(v, 10)
+        options[key] = Number.isNaN(n) ? 0 : n
       }
     }
     return options
