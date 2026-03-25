@@ -5494,17 +5494,8 @@ export default class MatrixEditorService {
 
   getOptions() {
     const options = {}
-    const opts = this.matrix.getOtherOptionsSnapshot()
     for (const key of MATRIX_OPTIONS) {
-      const v = opts[key]
-      if (v === undefined || v === null) {
-        options[key] = 0
-      } else if (typeof v === 'boolean') {
-        options[key] = v ? 1 : 0
-      } else {
-        const n = parseInt(v, 10)
-        options[key] = Number.isNaN(n) ? 0 : n
-      }
+      options[key] = this.matrix.getOption(key)
     }
     return options
   }

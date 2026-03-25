@@ -4,6 +4,21 @@ import { MATRIX_OPTIONS } from '../util/matrix.js'
 const { Model } = _sequelize
 
 export default class Matrix extends Model {
+  /**
+   * Normalize stored option values to integer flags (0/1) for matrix_options.
+   * Handles booleans and numeric strings; invalid values become 0.
+   */
+  static coerceMatrixOptionValue(v) {
+    if (v === undefined || v === null) {
+      return 0
+    }
+    if (typeof v === 'boolean') {
+      return v ? 1 : 0
+    }
+    const n = parseInt(v, 10)
+    return Number.isNaN(n) ? 0 : n
+  }
+
   static init(sequelize, DataTypes) {
     return super.init(
       {
@@ -222,10 +237,10 @@ export default class Matrix extends Model {
 
   getOption(key) {
     const opts = this.getOtherOptionsSnapshot()
-    if (opts[key] !== undefined) {
-      return opts[key]
+    if (opts[key] === undefined) {
+      return 0
     }
-    return 0 // Default value when option doesn't exist
+    return Matrix.coerceMatrixOptionValue(opts[key])
   }
 
   setOption(key, value) {
