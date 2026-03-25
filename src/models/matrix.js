@@ -4,6 +4,21 @@ import { MATRIX_OPTIONS } from '../util/matrix.js'
 const { Model } = _sequelize
 
 export default class Matrix extends Model {
+  /**
+   * Normalize stored option values to integer flags (0/1) for matrix_options.
+   * Handles booleans and numeric strings; invalid values become 0.
+   */
+  static coerceMatrixOptionValue(v) {
+    if (v === undefined || v === null) {
+      return 0
+    }
+    if (typeof v === 'boolean') {
+      return v ? 1 : 0
+    }
+    const n = parseInt(v, 10)
+    return Number.isNaN(n) ? 0 : n
+  }
+
   static init(sequelize, DataTypes) {
     return super.init(
       {
@@ -168,18 +183,69 @@ export default class Matrix extends Model {
     )
   }
 
-  getOption(key) {
-    if (this.other_options && this.other_options[key] !== undefined) {
-      return this.other_options[key]
+  /**
+   * Read-only view of other_options as a plain object. Does not mutate the
+   * model (avoids marking Sequelize rows dirty on read-only paths).
+   * Some rows store JSON as a string (legacy / client JSON.stringify).
+   */
+  getOtherOptionsSnapshot() {
+    const raw = this.other_options
+    if (raw == null) {
+      return {}
     }
-    return 0 // Default value when option doesn't exist
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw)
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          !Array.isArray(parsed)
+        ) {
+          return parsed
+        }
+      } catch {
+        /* ignore */
+      }
+      return {}
+    }
+    return raw
+  }
+
+  /**
+   * Normalize other_options to a mutable plain object before setOption writes.
+   * Call only when persisting changes.
+   */
+  ensureOtherOptionsObject() {
+    if (this.other_options == null) {
+      this.other_options = {}
+      return
+    }
+    if (typeof this.other_options === 'string') {
+      try {
+        const parsed = JSON.parse(this.other_options)
+        this.other_options =
+          parsed &&
+          typeof parsed === 'object' &&
+          !Array.isArray(parsed)
+            ? parsed
+            : {}
+      } catch {
+        this.other_options = {}
+      }
+    }
+  }
+
+  getOption(key) {
+    const opts = this.getOtherOptionsSnapshot()
+    if (opts[key] === undefined) {
+      return 0
+    }
+    return Matrix.coerceMatrixOptionValue(opts[key])
   }
 
   setOption(key, value) {
     if (MATRIX_OPTIONS.includes(key)) {
-      if (!this.other_options) {
-        this.other_options = {}
-      }
+      this.ensureOtherOptionsObject()
       this.other_options[key] = value
       this.changed('other_options', true)
     }
