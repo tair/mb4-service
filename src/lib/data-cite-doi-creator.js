@@ -105,7 +105,20 @@ export class DataCiteDOICreator {
     if (Array.isArray(parameter.authors) && parameter.authors.length > 0) {
       json.data.attributes.creators = []
       for (const author of parameter.authors) {
-        json.data.attributes.creators.push({ name: author })
+        // Support both plain strings and {name, orcid} objects
+        const name = typeof author === 'string' ? author : author.name
+        const orcid = typeof author === 'object' ? author.orcid : null
+        const creator = { name }
+        if (orcid) {
+          creator.nameIdentifiers = [
+            {
+              nameIdentifier: `https://orcid.org/${orcid}`,
+              nameIdentifierScheme: 'ORCID',
+              schemeUri: 'https://orcid.org',
+            },
+          ]
+        }
+        json.data.attributes.creators.push(creator)
       }
     }
 
