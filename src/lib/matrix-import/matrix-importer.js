@@ -827,7 +827,11 @@ function processCellValue(cellValue, params) {
     note = cellValue.note
     scores = cellValue.scores  // CSV parser creates polymorphic cells with 'scores' (plural)
   }
-  
+
+  if (scores == null || scores === '') {
+    return cells
+  }
+
   const isContinuous = character.type > 0
   
   if (isContinuous) {
