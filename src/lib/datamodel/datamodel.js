@@ -31,7 +31,6 @@ export class Datamodel {
           }
           const cost = attributes.cost ?? 10
           const referencedKey = attributes.references.key
-
           const edge = { field, referencedKey, cost }
 
           this.#addReferencedTables(referencedTable, table)
