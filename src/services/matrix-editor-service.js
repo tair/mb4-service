@@ -15,6 +15,7 @@ import {
 import { getTaxonName, TAXA_FIELD_NAMES } from '../util/taxa.js'
 import { getSpecimenName } from '../util/specimen.js'
 import { models } from '../models/init-models.js'
+import { MembershipType } from '../models/projects-x-user.js'
 import { UserError } from '../lib/user-errors.js'
 import { ForbiddenError } from '../lib/forbidden-error.js'
 import { TABLE_NUMBERS } from '../lib/table-number.js'
@@ -5493,15 +5494,8 @@ export default class MatrixEditorService {
 
   getOptions() {
     const options = {}
-    if (this.matrix.other_options) {
-      for (const key of MATRIX_OPTIONS) {
-        options[key] = parseInt(this.matrix.other_options[key])
-      }
-    } else {
-      // Set default values when other_options is null
-      for (const key of MATRIX_OPTIONS) {
-        options[key] = 0 // Default to 0 for all options
-      }
+    for (const key of MATRIX_OPTIONS) {
+      options[key] = this.matrix.getOption(key)
     }
     return options
   }
@@ -6024,7 +6018,7 @@ export default class MatrixEditorService {
       'You are not allowed to set matrix options'
     )
 
-    const projectUser = await models.ProjectsXUser.findOne({
+    let projectUser = await models.ProjectsXUser.findOne({
       where: {
         user_id: this.user.user_id,
         project_id: this.project.project_id,
@@ -6032,7 +6026,27 @@ export default class MatrixEditorService {
     })
 
     if (!projectUser) {
-      throw new UserError('You are not a member of this project')
+      if (!(await this.isAdminLike())) {
+        throw new UserError('You are not a member of this project')
+      }
+      const roles = await this.getRoles()
+      const isGlobalStaff =
+        roles.includes('admin') || roles.includes('curator')
+      if (isGlobalStaff) {
+        // Global MorphoBank admin/curator: persist matrix options only; do not
+        // create or use a projects_x_users row.
+        projectUser = null
+      } else {
+        ;[projectUser] = await models.ProjectsXUser.findOrCreate({
+          where: {
+            user_id: this.user.user_id,
+            project_id: this.project.project_id,
+          },
+          defaults: {
+            membership_type: MembershipType.ADMIN,
+          },
+        })
+      }
     }
 
     const adminSettings = ['DISABLE_SCORING', 'ENABLE_CELL_MEDIA_AUTOMATION']
@@ -6043,7 +6057,9 @@ export default class MatrixEditorService {
       this.matrix.setOption(key, options[key])
     }
 
-    const matricesPreferences = projectUser.getPreferences('matrix') ?? {}
+    const matricesPreferences = projectUser
+      ? projectUser.getPreferences('matrix') ?? {}
+      : {}
     const matrixPrefences = matricesPreferences[this.matrix.matrix_id] ?? {}
 
     // Old Preferences which were once supported but should no longer be written
@@ -6088,11 +6104,15 @@ export default class MatrixEditorService {
       delete matricesPreferences[this.matrix.matrix_id]
     }
 
-    projectUser.setPreferences('matrix', matricesPreferences)
+    if (projectUser) {
+      projectUser.setPreferences('matrix', matricesPreferences)
+    }
 
     const transaction = await sequelizeConn.transaction()
     await this.matrix.save({ user: this.user, transaction: transaction })
-    await projectUser.save({ user: this.user, transaction: transaction })
+    if (projectUser) {
+      await projectUser.save({ user: this.user, transaction: transaction })
+    }
     await transaction.commit()
 
     return {

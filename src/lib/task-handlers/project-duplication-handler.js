@@ -312,6 +312,7 @@ const IGNORED_TABLES = [
   models.InstitutionsXProject,
   models.InstitutionsXUser,
   models.ProjectsXOrcidWork,
+  models.FeaturedProject,
 ]
 
 const NUMBERED_TABLES = new Map([[models.MediaLabel, 'link_id']])

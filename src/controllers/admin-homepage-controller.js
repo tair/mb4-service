@@ -634,9 +634,9 @@ export async function createPress(req, res) {
     // Create press record first to get the ID
     const press = await models.Press.create({
       title,
-      author: author || null,
-      publication: publication || null,
-      link: link || null,
+      author: author ?? '',
+      publication: publication ?? '',
+      link: link ?? '',
       featured: featured || false,
       media: null, // Will be updated after image upload
     }, { user: req.user })
@@ -686,9 +686,9 @@ export async function updatePress(req, res) {
 
     // Update fields
     if (title !== undefined) press.title = title
-    if (author !== undefined) press.author = author || null
-    if (publication !== undefined) press.publication = publication || null
-    if (link !== undefined) press.link = link || null
+    if (author !== undefined) press.author = author ?? ''
+    if (publication !== undefined) press.publication = publication ?? ''
+    if (link !== undefined) press.link = link ?? ''
     if (featured !== undefined) press.featured = featured
 
     // Process and upload new image if provided
