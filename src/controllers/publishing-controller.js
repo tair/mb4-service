@@ -5,6 +5,7 @@ import { time } from '../util/util.js'
 import sequelizeConn from '../util/db.js'
 import { processTasks } from '../services/task-queue-service.js'
 import config from '../config.js'
+import { buildAuthorsWithOrcid } from '../services/doi-author-service.js'
 
 /**
  * Get publishing preferences form
@@ -369,21 +370,8 @@ export async function publishProject(req, res) {
       const publishedProject = await models.Project.findByPk(projectId)
       const user = await models.User.findByPk(userId)
 
-      // Determine authors for DOI creation
-      let authors = publishedProject.article_authors?.trim()
-      if (!authors) {
-        const projectOwner = await models.User.findByPk(
-          publishedProject.user_id
-        )
-        if (projectOwner) {
-          authors = `${projectOwner.fname || ''} ${
-            projectOwner.lname || ''
-          }`.trim()
-        }
-        if (!authors && user) {
-          authors = `${user.fname || ''} ${user.lname || ''}`.trim()
-        }
-      }
+      // Build creators from project members, enriched with ORCIDs
+      const authors = await buildAuthorsWithOrcid(publishedProject)
 
       // Schedule DOI creation
       await models.TaskQueue.create(
@@ -715,7 +703,7 @@ export async function getUnpublishedItems(req, res) {
 export async function testDOICreation(req, res) {
   try {
     const project_id = req.params.projectId
-    const { user_id, authors } = req.body
+    const { user_id } = req.body
 
     // Validate required parameters
     if (!project_id) {
@@ -750,11 +738,8 @@ export async function testDOICreation(req, res) {
       })
     }
 
-    // Use provided authors or fallback to user name
-    let finalAuthors = authors
-    if (!finalAuthors) {
-      finalAuthors = `${user.fname || ''} ${user.lname || ''}`.trim()
-    }
+    // Build creators from project members with ORCIDs
+    const finalAuthors = await buildAuthorsWithOrcid(project)
 
     // Import and directly call the DOI creation handler
     const { DOICreationHandler } = await import(

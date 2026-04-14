@@ -45,14 +45,20 @@ export class DOICreationHandler extends Handler {
       )
     }
 
-    if (!parameters.authors) {
+    if (
+      !parameters.authors ||
+      (Array.isArray(parameters.authors) && parameters.authors.length === 0)
+    ) {
       return this.createError(
         HandlerErrors.ILLEGAL_PARAMETER,
         'Authors was not defined'
       )
     }
 
-    const authors = parameters.authors.split(',')
+    // Support both legacy comma-separated string and new [{name, orcid}] format
+    const authors = Array.isArray(parameters.authors)
+      ? parameters.authors
+      : parameters.authors.split(',').map((name) => name.trim())
     const projectDoiId = `P${projectId}`
     const projectTitle = `${project.name} (project)`
 
