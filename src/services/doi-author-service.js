@@ -1,14 +1,25 @@
 import { models } from '../models/init-models.js'
+import {
+  hasArticleAuthorsFilter,
+  isUserListedInArticleAuthors,
+} from '../util/article-authors-eligibility.js'
 
 /**
  * Build a creators array from project members for DataCite DOI metadata.
  * Each member's name is included, and their ORCID is attached if they have one
  * and they haven't opted out of ORCID publishing.
  *
+ * When article_authors is set, only members whose first or last name appears
+ * in that string are included (same rule as ORCID). When article_authors is
+ * blank, all members are included (backward-compatible; DOI still needs creators).
+ *
  * @param {Object} project - Project model instance
  * @returns {Array<{name: string, orcid?: string}>} Creators with optional ORCIDs
  */
 export async function buildAuthorsWithOrcid(project) {
+  const rawArticleAuthors = project.article_authors
+  const filterByAuthorList = hasArticleAuthorsFilter(rawArticleAuthors)
+
   const memberships = await models.ProjectsXUser.findAll({
     where: { project_id: project.project_id },
     attributes: ['user_id', 'orcid_publish_opt_out'],
@@ -19,6 +30,12 @@ export async function buildAuthorsWithOrcid(project) {
     // Fallback to project owner
     const owner = await models.User.findByPk(project.user_id)
     if (owner) {
+      if (
+        filterByAuthorList &&
+        !isUserListedInArticleAuthors(owner, rawArticleAuthors)
+      ) {
+        return []
+      }
       const creator = buildCreator(owner)
       return creator.name ? [creator] : []
     }
@@ -42,6 +59,11 @@ export async function buildAuthorsWithOrcid(project) {
   return userIds
     .map((id) => userMap.get(id))
     .filter(Boolean)
+    .filter(
+      (user) =>
+        !filterByAuthorList ||
+        isUserListedInArticleAuthors(user, rawArticleAuthors)
+    )
     .map((user) => buildCreator(user, projectOptOuts.has(user.user_id)))
     .filter((c) => c.name)
 }
