@@ -1,6 +1,7 @@
 /**
  * Shared rules for "is this project member credited on the publication author line?"
- * Used by DOI metadata, ORCID works, and publishing UI — keep behavior aligned here.
+ * Used by ORCID works, DOI metadata (when `article_authors` is set), and publishing UI.
+ * When `article_authors` is empty, `doi-author-service` uses a placeholder instead.
  *
  * Matching is case-insensitive; a user qualifies if their first or last name appears
  * as a substring of article_authors (same idea as the legacy SQL LOCATE checks).
@@ -25,8 +26,8 @@ export function isUserListedInArticleAuthors(user, articleAuthorsOrSegment) {
 }
 
 /**
- * When true, the publication author line is present; DOI creators are derived from that
- * string (see `parseArticleAuthorSegments` / `doi-author-service.js`).
+ * When true, the publication `article_authors` line is non-empty; used e.g. to filter
+ * ORCID work pushes and (with {@link parseArticleAuthorSegments}) DOI creator building.
  *
  * @param {string|null|undefined} articleAuthorsRaw
  * @returns {boolean}

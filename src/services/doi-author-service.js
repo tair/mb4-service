@@ -6,29 +6,33 @@ import {
 } from '../util/article-authors-eligibility.js'
 
 /**
- * Build a creators array for DataCite DOI metadata.
+ * Placeholder DataCite `creator` when the project has no `article_authors` value.
+ */
+export const DOI_PLACEHOLDER_CREATOR_NAME = 'No authors available'
+
+/**
+ * Build the creators array for DataCite DOI metadata.
  *
- * When `article_authors` is set: one creator per parsed author in publication order
- * (including non–MorphoBank authors as name-only). Project members are only used when
- * their first or last name matches that author segment; then ORCID is added when
- * allowed (same as before).
+ * When `article_authors` is empty or missing: a single creator
+ * {@link DOI_PLACEHOLDER_CREATOR_NAME} (no project members).
  *
- * When `article_authors` is empty: all project members in membership order; if there
- * are no membership rows, the project owner.
+ * When `article_authors` is set: one creator per parsed segment in order; members
+ * match by name on each segment and get ORCIDs when allowed; non-matching segments
+ * are name-only (external authors).
  *
  * @param {Object} project - Project model instance
- * @returns {Array<{name: string, orcid?: string}>} Creators with optional ORCIDs
+ * @returns {Promise<Array<{ name: string, orcid?: string }>>}
  */
 export async function buildAuthorsWithOrcid(project) {
   const rawArticleAuthors = project.article_authors
 
   if (!hasArticleAuthorsFilter(rawArticleAuthors)) {
-    return buildFromMembersUnfiltered(project)
+    return [{ name: DOI_PLACEHOLDER_CREATOR_NAME }]
   }
 
   const segments = parseArticleAuthorSegments(rawArticleAuthors)
   if (segments.length === 0) {
-    return buildFromMembersUnfiltered(project)
+    return [{ name: DOI_PLACEHOLDER_CREATOR_NAME }]
   }
 
   return creatorsFromAuthorSegments(project, segments)
@@ -123,58 +127,6 @@ async function creatorsFromAuthorSegments(project, segments) {
   return out.filter((c) => c.name)
 }
 
-/** @param {Object} project */
-async function buildFromMembersUnfiltered(project) {
-  const memberships = await models.ProjectsXUser.findAll({
-    where: { project_id: project.project_id },
-    attributes: ['user_id', 'orcid_publish_opt_out'],
-    raw: true,
-  })
-
-  if (memberships.length === 0) {
-    const owner = await models.User.findByPk(project.user_id)
-    if (!owner) {
-      return []
-    }
-    const c = creatorForMemberAndCitationName(
-      owner,
-      displayNameForUser(owner),
-      false
-    )
-    return c.name ? [c] : []
-  }
-
-  const userIds = memberships.map((m) => m.user_id)
-  const users = await models.User.findAll({
-    where: { user_id: userIds },
-    attributes: ['user_id', 'fname', 'lname', 'orcid', 'orcid_opt_out'],
-    raw: true,
-  })
-  const projectOptOuts = new Set(
-    memberships.filter((m) => m.orcid_publish_opt_out).map((m) => m.user_id)
-  )
-  const userMap = new Map(users.map((u) => [u.user_id, u]))
-  return userIds
-    .map((id) => userMap.get(id))
-    .filter(Boolean)
-    .map((u) =>
-      creatorForMemberAndCitationName(
-        u,
-        displayNameForUser(u),
-        projectOptOuts.has(u.user_id)
-      )
-    )
-    .filter((c) => c.name)
-}
-
-/**
- * Citation / display name in DOI: use the publication segment when the author is also a member;
- * unfiltered path still uses the account "First Last" name.
- * @param {Object} user
- * @param {string} citationName
- * @param {boolean} orcidProjectOptOut
- * @returns {{ name: string, orcid?: string }}
- */
 function creatorForMemberAndCitationName(
   user,
   citationName,
@@ -184,20 +136,12 @@ function creatorForMemberAndCitationName(
   if (!name) {
     return { name: '' }
   }
-  if (
-    user?.orcid &&
-    !orcidProjectOptOut &&
-    !user.orcid_opt_out
-  ) {
+  if (user?.orcid && !orcidProjectOptOut && !user.orcid_opt_out) {
     return { name, orcid: user.orcid }
   }
   return { name }
 }
 
-/**
- * @param {Object} user
- * @returns {string}
- */
 function displayNameForUser(user) {
   return `${user.fname || ''} ${user.lname || ''}`.trim()
 }
