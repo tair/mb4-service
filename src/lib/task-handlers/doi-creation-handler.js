@@ -4,6 +4,7 @@ import { Handler, HandlerErrors } from './handler.js'
 import { QueryTypes } from 'sequelize'
 import { models } from '../../models/init-models.js'
 import { updateProjectDoiAndRedump } from '../../services/publishing-service.js'
+import { buildAuthorsWithOrcid } from '../../services/doi-author-service.js'
 
 const BASE_URL = `${process.env.FRONTEND_URL}/project`
 
@@ -45,9 +46,26 @@ export class DOICreationHandler extends Handler {
       )
     }
 
+    // Task parameters snapshot authors at publish time; if empty (old tasks,
+    // bad snapshot, or edge case), rebuild from current project data.
+    let authorsSource = parameters.authors
+    const authorsMissingOrEmpty =
+      !authorsSource ||
+      (Array.isArray(authorsSource) && authorsSource.length === 0) ||
+      (typeof authorsSource === 'string' && !authorsSource.trim())
+    if (authorsMissingOrEmpty) {
+      const rebuilt = await buildAuthorsWithOrcid(project)
+      if (rebuilt.length > 0) {
+        console.warn(
+          `DOICreationHandler: empty authors in task parameters for project ${projectId}; rebuilt ${rebuilt.length} creator(s) from DB`
+        )
+        authorsSource = rebuilt
+      }
+    }
+
     if (
-      !parameters.authors ||
-      (Array.isArray(parameters.authors) && parameters.authors.length === 0)
+      !authorsSource ||
+      (Array.isArray(authorsSource) && authorsSource.length === 0)
     ) {
       return this.createError(
         HandlerErrors.ILLEGAL_PARAMETER,
@@ -56,9 +74,9 @@ export class DOICreationHandler extends Handler {
     }
 
     // Support both legacy comma-separated string and new [{name, orcid}] format
-    const authors = Array.isArray(parameters.authors)
-      ? parameters.authors
-      : parameters.authors.split(',').map((name) => name.trim())
+    const authors = Array.isArray(authorsSource)
+      ? authorsSource
+      : authorsSource.split(',').map((name) => name.trim())
     const projectDoiId = `P${projectId}`
     const projectTitle = `${project.name} (project)`
 

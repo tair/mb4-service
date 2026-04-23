@@ -8,6 +8,7 @@ jest.unstable_mockModule('models/init-models.js', () => ({
     },
     ProjectsXUser: {
       findAll: jest.fn(),
+      findOne: jest.fn(),
     },
   },
 }))
@@ -30,6 +31,7 @@ describe('buildAuthorsWithOrcid', () => {
     models.User.findByPk.mockReset()
     models.User.findAll.mockReset()
     models.ProjectsXUser.findAll.mockReset()
+    models.ProjectsXUser.findOne.mockReset()
   }
 
   test('returns project members with their ORCIDs', async () => {
@@ -161,7 +163,7 @@ describe('buildAuthorsWithOrcid', () => {
     ])
   })
 
-  test('when article_authors is set, includes only members listed in it', async () => {
+  test('when article_authors is set, lists every parsed author; members get ORCID when they match a segment', async () => {
     resetMocks()
     const project = {
       project_id: 900,
@@ -182,10 +184,11 @@ describe('buildAuthorsWithOrcid', () => {
 
     expect(result).toEqual([
       { name: 'John Smith', orcid: '0000-0001-1111-1111' },
+      { name: 'someone else' },
     ])
   })
 
-  test('when article_authors is set and no member matches, returns empty', async () => {
+  test('when article_authors is set and no member matches, uses citation names only (no project members in metadata)', async () => {
     resetMocks()
     const project = {
       project_id: 901,
@@ -202,19 +205,22 @@ describe('buildAuthorsWithOrcid', () => {
 
     const result = await buildAuthorsWithOrcid(project)
 
-    expect(result).toEqual([])
+    expect(result).toEqual([{ name: 'Only External Author' }])
   })
 
-  test('when article_authors is set, owner fallback requires name on author list', async () => {
+  test('no memberships: author list only, no project member in citation string (name-only creators)', async () => {
     resetMocks()
+    const authors = 'Someone Else (not the owner name)'
     const project = {
       project_id: 902,
       user_id: 5,
-      article_authors: 'Someone Else',
+      article_authors: authors,
     }
 
     models.ProjectsXUser.findAll.mockResolvedValue([])
+    models.ProjectsXUser.findOne.mockResolvedValue(null)
     models.User.findByPk.mockResolvedValue({
+      user_id: 5,
       fname: 'Owner',
       lname: 'Person',
       orcid: '0000-0005-5555-5555',
@@ -222,7 +228,7 @@ describe('buildAuthorsWithOrcid', () => {
 
     const result = await buildAuthorsWithOrcid(project)
 
-    expect(result).toEqual([])
+    expect(result).toEqual([{ name: authors }])
   })
 
   test('isUserListedInArticleAuthors matches ORCID-style substring check', () => {
