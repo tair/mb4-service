@@ -38,7 +38,9 @@ export function hasArticleAuthorsFilter(articleAuthorsRaw) {
 
 /**
  * Best-effort list of individual author name strings in publication order.
- * Splits on semicolons, newlines, and " and ".
+ * Splits on: semicolons, newlines, the word " and " (e.g. "A and B"), and commas
+ * (e.g. "Y. Mao, W. I. Ausich" → two authors). A single "Surname, Given" with no
+ * other commas is still split; use a semicolon to keep one byline that contains commas.
  *
  * @param {string|null|undefined} articleAuthorsRaw
  * @returns {string[]}
@@ -51,6 +53,7 @@ export function parseArticleAuthorSegments(articleAuthorsRaw) {
   return text
     .split(/(?:\s*;\s*|\n+)/)
     .flatMap((part) => part.split(/\s+and\s+/i))
+    .flatMap((part) => part.split(/,\s+/))
     .map((s) => s.trim())
     .filter(Boolean)
 }

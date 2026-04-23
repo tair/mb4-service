@@ -122,3 +122,19 @@ describe('buildAuthorsWithOrcid', () => {
     expect(isUserListedInArticleAuthors(user, 'No match here')).toBe(false)
   })
 })
+
+describe('parseArticleAuthorSegments (comma lists)', () => {
+  test('splits typical comma + space author bylines for DOI', async () => {
+    const { parseArticleAuthorSegments } = await import(
+      'util/article-authors-eligibility.js'
+    )
+    const line = 'Y. Mao, W. I. Ausich, Y. Li, J. Lin, C. Lin'
+    expect(parseArticleAuthorSegments(line)).toEqual([
+      'Y. Mao',
+      'W. I. Ausich',
+      'Y. Li',
+      'J. Lin',
+      'C. Lin',
+    ])
+  })
+})
