@@ -1,10 +1,13 @@
 import sequelizeConn from '../../util/db.js'
 import { Handler, HandlerErrors } from './handler.js'
-import { QueryTypes } from 'sequelize'
 import { models } from '../../models/init-models.js'
 import { ORCIDWorksService } from '../orcid-works-service.js'
 import { time } from '../../util/util.js'
 import config from '../../config.js'
+import {
+  hasArticleAuthorsFilter,
+  isUserListedInArticleAuthors,
+} from '../../util/article-authors-eligibility.js'
 
 /**
  * Handler for pushing published project information to ORCID Works
@@ -82,13 +85,9 @@ export class ORCIDWorksHandler extends Handler {
     // Get article authors for filtering
     const articleAuthors = project.article_authors || ''
 
-    // Query eligible project members:
-    // - Have ORCID linked
-    // - Have access token
-    // - Are listed in article_authors (name appears in the authors string)
-    // Note: We no longer exclude admins/curators - if their name is in article_authors,
-    // they are legitimate authors and should get ORCID credit.
-    const eligibleMembersQuery = `
+    // Query project members with ORCID ready; author-list filter uses
+    // util/article-authors-eligibility.js (same as DOI creators + getOrcidWorkStatus).
+    const candidatesQuery = `
       SELECT DISTINCT u.user_id, u.orcid, u.orcid_access_token, u.fname, u.lname
       FROM projects_x_users AS pxu
       INNER JOIN ca_users AS u ON u.user_id = pxu.user_id
@@ -100,15 +99,18 @@ export class ORCIDWorksHandler extends Handler {
         AND u.orcid_write_access = 1
         AND u.orcid_opt_out = 0
         AND pxu.orcid_publish_opt_out = 0
-        AND (LOCATE(u.fname, ?) > 0 OR LOCATE(u.lname, ?) > 0)
     `
 
-    const [eligibleMembers] = await sequelizeConn.query(
-      eligibleMembersQuery,
-      {
-        replacements: [projectId, articleAuthors, articleAuthors],
-      }
-    )
+    const [candidates] = await sequelizeConn.query(candidatesQuery, {
+      replacements: [projectId],
+    })
+
+    const eligibleMembers =
+      hasArticleAuthorsFilter(articleAuthors) && candidates?.length
+        ? candidates.filter((row) =>
+            isUserListedInArticleAuthors(row, articleAuthors)
+          )
+        : []
 
     if (!eligibleMembers || eligibleMembers.length === 0) {
       return {

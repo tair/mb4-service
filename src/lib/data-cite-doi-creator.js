@@ -22,19 +22,35 @@ export class DataCiteDOICreator {
   }
 
   async create(parameter) {
-    const content = this.generateJSON(parameter)
-    const fullDoi = `${this.shoulder}/${parameter.id}`
+    const content = this.generateJSON(parameter, { isUpdate: false })
+    return this._sendDoiMutation('POST', this.urlPath, content, parameter.id)
+  }
 
+  /**
+   * Update an existing DOI in DataCite (metadata refresh). Same path pattern as
+   * {@link exists} / MDS: `/dois/{shoulder}/{suffix}`.
+   */
+  async update(parameter) {
+    const content = this.generateJSON(parameter, { isUpdate: true })
+    const path = `${this.urlPath}/${this.shoulder}/${parameter.id}`
+    return this._sendDoiMutation('PUT', path, content, parameter.id)
+  }
+
+  _sendDoiMutation(method, path, content, idSuffix) {
+    const fullDoi = `${this.shoulder}/${idSuffix}`
     const options = {
       host: this.hostname,
-      path: this.urlPath,
-      method: 'POST',
+      path,
+      method,
       headers: {
         Authorization: this.authorizationToken,
         'Content-type': 'application/vnd.api+json',
       },
     }
+    return this._doJsonRequest(options, content, fullDoi)
+  }
 
+  async _doJsonRequest(options, content, fullDoi) {
     try {
       const response = await performRequest(options, content)
       const success = response.status < 300
@@ -75,30 +91,36 @@ export class DataCiteDOICreator {
     }
   }
 
-  generateJSON(parameter) {
+  generateJSON(parameter, options) {
+    const { isUpdate = false } = options || {}
     const date = new Date()
     const doi = `${this.shoulder}/${parameter.id}`
+    // DataCite only allows event: publish | register | hide. There is no "update".
+    // For metadata refresh (PUT), omit event; for new DOIs, publish to register as findable.
+    const attributes = {
+      doi: doi,
+      created: date.toISOString(), // E.g: "2016-09-19T21:53:56.000Z";
+      publisher: 'MorphoBank',
+      publicationYear: date.getFullYear(),
+      titles: [
+        {
+          title: parameter.title,
+        },
+      ],
+      types: {
+        resourceTypeGeneral: 'Dataset',
+      },
+      url: parameter.resource,
+      schemaVersion: 'http://datacite.org/schema/kernel-4',
+    }
+    if (!isUpdate) {
+      attributes.event = 'publish'
+    }
     const json = {
       data: {
         id: doi,
         type: 'dois',
-        attributes: {
-          event: 'publish',
-          doi: doi,
-          created: date.toISOString(), // E.g: "2016-09-19T21:53:56.000Z";
-          publisher: 'MorphoBank',
-          publicationYear: date.getFullYear(),
-          titles: [
-            {
-              title: parameter.title,
-            },
-          ],
-          types: {
-            resourceTypeGeneral: 'Dataset',
-          },
-          url: parameter.resource,
-          schemaVersion: 'http://datacite.org/schema/kernel-4',
-        },
+        attributes,
       },
     }
 

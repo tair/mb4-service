@@ -4,6 +4,7 @@ import { Handler, HandlerErrors } from './handler.js'
 import { QueryTypes } from 'sequelize'
 import { models } from '../../models/init-models.js'
 import { updateProjectDoiAndRedump } from '../../services/publishing-service.js'
+import { buildAuthorsWithOrcid } from '../../services/doi-author-service.js'
 
 const BASE_URL = `${process.env.FRONTEND_URL}/project`
 
@@ -45,9 +46,26 @@ export class DOICreationHandler extends Handler {
       )
     }
 
+    // Task parameters snapshot authors at publish time; if empty (old tasks,
+    // bad snapshot, or edge case), rebuild from current project data.
+    let authorsSource = parameters.authors
+    const authorsMissingOrEmpty =
+      !authorsSource ||
+      (Array.isArray(authorsSource) && authorsSource.length === 0) ||
+      (typeof authorsSource === 'string' && !authorsSource.trim())
+    if (authorsMissingOrEmpty) {
+      const rebuilt = await buildAuthorsWithOrcid(project)
+      if (rebuilt.length > 0) {
+        console.warn(
+          `DOICreationHandler: empty authors in task parameters for project ${projectId}; rebuilt ${rebuilt.length} creator(s) from DB`
+        )
+        authorsSource = rebuilt
+      }
+    }
+
     if (
-      !parameters.authors ||
-      (Array.isArray(parameters.authors) && parameters.authors.length === 0)
+      !authorsSource ||
+      (Array.isArray(authorsSource) && authorsSource.length === 0)
     ) {
       return this.createError(
         HandlerErrors.ILLEGAL_PARAMETER,
@@ -56,40 +74,65 @@ export class DOICreationHandler extends Handler {
     }
 
     // Support both legacy comma-separated string and new [{name, orcid}] format
-    const authors = Array.isArray(parameters.authors)
-      ? parameters.authors
-      : parameters.authors.split(',').map((name) => name.trim())
+    const authors = Array.isArray(authorsSource)
+      ? authorsSource
+      : authorsSource.split(',').map((name) => name.trim())
     const projectDoiId = `P${projectId}`
     const projectTitle = `${project.name} (project)`
+    const projectResource = `${BASE_URL}/${projectId}/overview`
+    const projectPayload = {
+      id: projectDoiId,
+      user_id: userId,
+      authors: authors,
+      title: projectTitle,
+      resource: projectResource,
+    }
 
     const projectDoiExist = await this.doiCreator.exists(projectDoiId)
     let projectDoiToUpdate = null
 
     if (project.project_doi == null) {
       if (!projectDoiExist) {
-        // DOI doesn't exist, create it
-        const projectResource = `${BASE_URL}/${projectId}/overview`
-
-        const result = await this.doiCreator.create({
-          id: projectDoiId,
-          user_id: userId,
-          authors: authors,
-          title: projectTitle,
-          resource: projectResource,
-        })
+        const result = await this.doiCreator.create(projectPayload)
         if (!result.success) {
           return this.createError(
             HandlerErrors.HTTP_CLIENT_ERROR,
             `Error creating DOI: ${projectDoiId}`
           )
-        } else {
-          projectDoiToUpdate = result.doi
         }
+        projectDoiToUpdate = result.doi
       } else {
-        // DOI exists but database is null, construct full DOI for update
-        projectDoiToUpdate = `${this.doiCreator.shoulder}/${projectDoiId}`
+        const result = await this.doiCreator.update(projectPayload)
+        if (!result.success) {
+          return this.createError(
+            HandlerErrors.HTTP_CLIENT_ERROR,
+            `Error updating DOI: ${projectDoiId}`
+          )
+        }
+        projectDoiToUpdate = result.doi
       }
     } else {
+      if (projectDoiExist) {
+        const result = await this.doiCreator.update(projectPayload)
+        if (!result.success) {
+          return this.createError(
+            HandlerErrors.HTTP_CLIENT_ERROR,
+            `Error updating DOI: ${projectDoiId}`
+          )
+        }
+      } else {
+        const result = await this.doiCreator.create(projectPayload)
+        if (!result.success) {
+          return this.createError(
+            HandlerErrors.HTTP_CLIENT_ERROR,
+            `Error creating DOI: ${projectDoiId}`
+          )
+        }
+        projectDoiToUpdate = result.doi
+      }
+      if (projectDoiToUpdate == null) {
+        projectDoiToUpdate = project.project_doi
+      }
     }
 
     const matrixDois = new Map()
@@ -110,29 +153,34 @@ export class DOICreationHandler extends Handler {
       }
 
       const matrixDoiId = `X${matrixId}`
+      const matrixTitle = matrix.title ?? '(matrix)'
+      const matrixPayload = {
+        id: matrixDoiId,
+        user_id: userId,
+        authors: authors,
+        title: `${projectTitle} [X${matrixId}] ${matrixTitle}`,
+        resource: `${BASE_URL}/${projectId}/matrices/${matrixId}/view`,
+      }
+
       const doiExist = await this.doiCreator.exists(matrixDoiId)
       if (!doiExist) {
-        // DOI doesn't exist, create it
-        const matrixTitle = matrix.title ?? '(matrix)'
-        const result = await this.doiCreator.create({
-          id: matrixDoiId,
-          user_id: userId,
-          authors: authors,
-          title: `${projectTitle} [X${matrixId}] ${matrixTitle}`,
-          resource: `${BASE_URL}/${projectId}/matrices/${matrixId}/view`,
-        })
+        const result = await this.doiCreator.create(matrixPayload)
         if (!result.success) {
           return this.createError(
             HandlerErrors.HTTP_CLIENT_ERROR,
             `Error creating DOI: ${matrixDoiId}`
           )
-        } else {
-          matrixDois.set(matrixId, result.doi)
         }
+        matrixDois.set(matrixId, result.doi)
       } else {
-        // DOI exists but database is null, construct full DOI for update
-        const fullDoi = `${this.doiCreator.shoulder}/${matrixDoiId}`
-        matrixDois.set(matrixId, fullDoi)
+        const result = await this.doiCreator.update(matrixPayload)
+        if (!result.success) {
+          return this.createError(
+            HandlerErrors.HTTP_CLIENT_ERROR,
+            `Error updating DOI: ${matrixDoiId}`
+          )
+        }
+        matrixDois.set(matrixId, result.doi)
       }
     }
 

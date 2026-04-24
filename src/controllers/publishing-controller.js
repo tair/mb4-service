@@ -6,6 +6,7 @@ import sequelizeConn from '../util/db.js'
 import { processTasks } from '../services/task-queue-service.js'
 import config from '../config.js'
 import { buildAuthorsWithOrcid } from '../services/doi-author-service.js'
+import { isUserListedInArticleAuthors } from '../util/article-authors-eligibility.js'
 
 /**
  * Get publishing preferences form
@@ -527,18 +528,10 @@ export async function getOrcidWorkStatus(req, res) {
       return res.status(200).json({ orcidState: 'opted_out' })
     }
 
-    // Check if user's name appears in article_authors (matches handler eligibility)
     const project = await models.Project.findByPk(projectId, {
       attributes: ['article_authors'],
     })
-    const articleAuthors = (project?.article_authors || '').toLowerCase()
-    const fname = (user.fname || '').toLowerCase()
-    const lname = (user.lname || '').toLowerCase()
-    const nameInAuthors =
-      (fname && articleAuthors.includes(fname)) ||
-      (lname && articleAuthors.includes(lname))
-
-    if (!nameInAuthors) {
+    if (!isUserListedInArticleAuthors(user, project?.article_authors)) {
       return res.status(200).json({ orcidState: 'not_connected' })
     }
 
