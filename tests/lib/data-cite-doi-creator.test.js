@@ -149,7 +149,7 @@ describe('DataCiteDOICreator.generateJSON', () => {
     )
   })
 
-  test('generateJSON uses event "publish" by default, "update" when requested', () => {
+  test('generateJSON uses event "publish" for create; omits event on update (DataCite has no "update" event)', () => {
     const instance = createTestInstance()
     const created = JSON.parse(
       instance.generateJSON(
@@ -164,6 +164,6 @@ describe('DataCiteDOICreator.generateJSON', () => {
       )
     )
     expect(created.data.attributes.event).toBe('publish')
-    expect(updated.data.attributes.event).toBe('update')
+    expect(updated.data.attributes.event).toBeUndefined()
   })
 })

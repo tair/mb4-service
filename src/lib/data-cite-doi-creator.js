@@ -95,27 +95,32 @@ export class DataCiteDOICreator {
     const { isUpdate = false } = options || {}
     const date = new Date()
     const doi = `${this.shoulder}/${parameter.id}`
+    // DataCite only allows event: publish | register | hide. There is no "update".
+    // For metadata refresh (PUT), omit event; for new DOIs, publish to register as findable.
+    const attributes = {
+      doi: doi,
+      created: date.toISOString(), // E.g: "2016-09-19T21:53:56.000Z";
+      publisher: 'MorphoBank',
+      publicationYear: date.getFullYear(),
+      titles: [
+        {
+          title: parameter.title,
+        },
+      ],
+      types: {
+        resourceTypeGeneral: 'Dataset',
+      },
+      url: parameter.resource,
+      schemaVersion: 'http://datacite.org/schema/kernel-4',
+    }
+    if (!isUpdate) {
+      attributes.event = 'publish'
+    }
     const json = {
       data: {
         id: doi,
         type: 'dois',
-        attributes: {
-          event: isUpdate ? 'update' : 'publish',
-          doi: doi,
-          created: date.toISOString(), // E.g: "2016-09-19T21:53:56.000Z";
-          publisher: 'MorphoBank',
-          publicationYear: date.getFullYear(),
-          titles: [
-            {
-              title: parameter.title,
-            },
-          ],
-          types: {
-            resourceTypeGeneral: 'Dataset',
-          },
-          url: parameter.resource,
-          schemaVersion: 'http://datacite.org/schema/kernel-4',
-        },
+        attributes,
       },
     }
 
