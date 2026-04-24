@@ -148,4 +148,22 @@ describe('DataCiteDOICreator.generateJSON', () => {
       'http://datacite.org/schema/kernel-4'
     )
   })
+
+  test('generateJSON uses event "publish" by default, "update" when requested', () => {
+    const instance = createTestInstance()
+    const created = JSON.parse(
+      instance.generateJSON(
+        { id: 'P1', title: 'T', resource: 'u', authors: [] },
+        { isUpdate: false }
+      )
+    )
+    const updated = JSON.parse(
+      instance.generateJSON(
+        { id: 'P1', title: 'T2', resource: 'u2', authors: [] },
+        { isUpdate: true }
+      )
+    )
+    expect(created.data.attributes.event).toBe('publish')
+    expect(updated.data.attributes.event).toBe('update')
+  })
 })

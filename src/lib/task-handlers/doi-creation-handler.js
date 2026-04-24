@@ -79,35 +79,60 @@ export class DOICreationHandler extends Handler {
       : authorsSource.split(',').map((name) => name.trim())
     const projectDoiId = `P${projectId}`
     const projectTitle = `${project.name} (project)`
+    const projectResource = `${BASE_URL}/${projectId}/overview`
+    const projectPayload = {
+      id: projectDoiId,
+      user_id: userId,
+      authors: authors,
+      title: projectTitle,
+      resource: projectResource,
+    }
 
     const projectDoiExist = await this.doiCreator.exists(projectDoiId)
     let projectDoiToUpdate = null
 
     if (project.project_doi == null) {
       if (!projectDoiExist) {
-        // DOI doesn't exist, create it
-        const projectResource = `${BASE_URL}/${projectId}/overview`
-
-        const result = await this.doiCreator.create({
-          id: projectDoiId,
-          user_id: userId,
-          authors: authors,
-          title: projectTitle,
-          resource: projectResource,
-        })
+        const result = await this.doiCreator.create(projectPayload)
         if (!result.success) {
           return this.createError(
             HandlerErrors.HTTP_CLIENT_ERROR,
             `Error creating DOI: ${projectDoiId}`
           )
-        } else {
-          projectDoiToUpdate = result.doi
         }
+        projectDoiToUpdate = result.doi
       } else {
-        // DOI exists but database is null, construct full DOI for update
-        projectDoiToUpdate = `${this.doiCreator.shoulder}/${projectDoiId}`
+        const result = await this.doiCreator.update(projectPayload)
+        if (!result.success) {
+          return this.createError(
+            HandlerErrors.HTTP_CLIENT_ERROR,
+            `Error updating DOI: ${projectDoiId}`
+          )
+        }
+        projectDoiToUpdate = result.doi
       }
     } else {
+      if (projectDoiExist) {
+        const result = await this.doiCreator.update(projectPayload)
+        if (!result.success) {
+          return this.createError(
+            HandlerErrors.HTTP_CLIENT_ERROR,
+            `Error updating DOI: ${projectDoiId}`
+          )
+        }
+      } else {
+        const result = await this.doiCreator.create(projectPayload)
+        if (!result.success) {
+          return this.createError(
+            HandlerErrors.HTTP_CLIENT_ERROR,
+            `Error creating DOI: ${projectDoiId}`
+          )
+        }
+        projectDoiToUpdate = result.doi
+      }
+      if (projectDoiToUpdate == null) {
+        projectDoiToUpdate = project.project_doi
+      }
     }
 
     const matrixDois = new Map()
@@ -128,29 +153,34 @@ export class DOICreationHandler extends Handler {
       }
 
       const matrixDoiId = `X${matrixId}`
+      const matrixTitle = matrix.title ?? '(matrix)'
+      const matrixPayload = {
+        id: matrixDoiId,
+        user_id: userId,
+        authors: authors,
+        title: `${projectTitle} [X${matrixId}] ${matrixTitle}`,
+        resource: `${BASE_URL}/${projectId}/matrices/${matrixId}/view`,
+      }
+
       const doiExist = await this.doiCreator.exists(matrixDoiId)
       if (!doiExist) {
-        // DOI doesn't exist, create it
-        const matrixTitle = matrix.title ?? '(matrix)'
-        const result = await this.doiCreator.create({
-          id: matrixDoiId,
-          user_id: userId,
-          authors: authors,
-          title: `${projectTitle} [X${matrixId}] ${matrixTitle}`,
-          resource: `${BASE_URL}/${projectId}/matrices/${matrixId}/view`,
-        })
+        const result = await this.doiCreator.create(matrixPayload)
         if (!result.success) {
           return this.createError(
             HandlerErrors.HTTP_CLIENT_ERROR,
             `Error creating DOI: ${matrixDoiId}`
           )
-        } else {
-          matrixDois.set(matrixId, result.doi)
         }
+        matrixDois.set(matrixId, result.doi)
       } else {
-        // DOI exists but database is null, construct full DOI for update
-        const fullDoi = `${this.doiCreator.shoulder}/${matrixDoiId}`
-        matrixDois.set(matrixId, fullDoi)
+        const result = await this.doiCreator.update(matrixPayload)
+        if (!result.success) {
+          return this.createError(
+            HandlerErrors.HTTP_CLIENT_ERROR,
+            `Error updating DOI: ${matrixDoiId}`
+          )
+        }
+        matrixDois.set(matrixId, result.doi)
       }
     }
 
