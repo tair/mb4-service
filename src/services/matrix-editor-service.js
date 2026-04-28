@@ -406,7 +406,7 @@ export default class MatrixEditorService {
   }
 
   async getCellMedia() {
-    const clause = this.shouldLimitToPublishedData()
+    const clause = (await this.shouldLimitToPublishedData())
       ? ' AND mf.published = 0'
       : ''
 
@@ -886,7 +886,7 @@ export default class MatrixEditorService {
       })
     }
 
-    const shouldLimitToPublishedData = this.shouldLimitToPublishedData()
+    const shouldLimitToPublishedData = await this.shouldLimitToPublishedData()
 
     const states = new Map()
     if (foundCharacterIds.length > 0) {
@@ -1044,7 +1044,7 @@ export default class MatrixEditorService {
       replacements.push(characterIds)
     }
 
-    if (this.shouldLimitToPublishedData()) {
+    if (await this.shouldLimitToPublishedData()) {
       clause += ' AND mf.published = 0'
     }
 
@@ -6168,7 +6168,7 @@ export default class MatrixEditorService {
       FROM matrix_character_order AS mco
       INNER JOIN annotations AS a ON mco.character_id = a.row_id and a.table_num = 3
       LEFT JOIN annotation_events AS ae ON a.annotation_id = ae.annotation_id AND ae.user_id = ?
-      WHERE mco. matrix_id = ? AND ae.event_id IS NULL
+      WHERE mco.matrix_id = ? AND ae.event_id IS NULL
       GROUP BY mco.character_id`,
       { replacements: [this.user.user_id, this.matrix.matrix_id] }
     )
@@ -6183,9 +6183,9 @@ export default class MatrixEditorService {
       SELECT mco.character_id, count(*) comment_count
       FROM matrix_character_order AS mco
       INNER JOIN character_states AS cs ON mco.character_id = cs.character_id
-      INNER JOIN annotations AS cs ON cs.state_id = a.row_id
+q      INNER JOIN annotations AS a ON cs.state_id = a.row_id AND a.table_num = 4
       LEFT JOIN annotation_events AS ae ON a.annotation_id = ae.annotation_id AND ae.user_id = ?
-      WHERE mco. matrix_id = ? AND ae.event_id IS NULL
+      WHERE mco.matrix_id = ? AND ae.event_id IS NULL
       GROUP BY mco.character_id`,
       { replacements: [this.user.user_id, this.matrix.matrix_id] }
     )
@@ -6276,7 +6276,7 @@ export default class MatrixEditorService {
       replacements.push(taxaIds)
     }
 
-    if (this.shouldLimitToPublishedData()) {
+    if (await this.shouldLimitToPublishedData()) {
       clause += ' AND mf.published = 0'
     }
 
