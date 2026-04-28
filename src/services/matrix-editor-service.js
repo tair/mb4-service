@@ -6183,7 +6183,7 @@ export default class MatrixEditorService {
       SELECT mco.character_id, count(*) comment_count
       FROM matrix_character_order AS mco
       INNER JOIN character_states AS cs ON mco.character_id = cs.character_id
-q      INNER JOIN annotations AS a ON cs.state_id = a.row_id AND a.table_num = 4
+      INNER JOIN annotations AS a ON cs.state_id = a.row_id AND a.table_num = 4
       LEFT JOIN annotation_events AS ae ON a.annotation_id = ae.annotation_id AND ae.user_id = ?
       WHERE mco.matrix_id = ? AND ae.event_id IS NULL
       GROUP BY mco.character_id`,
