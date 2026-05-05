@@ -974,17 +974,10 @@ function processCellValue(cellValue, params) {
         continue
       }
       
-      // Map score to state num (not array index!)
-      let stateNum
-      if (symbols && Object.keys(symbols).length > 0) {
-        stateNum = symbols[score]
-      } else if (score >= '0' && score <= '9') {
-        stateNum = parseInt(score)
-      } else {
-        stateNum = score.toUpperCase().charCodeAt(0) - 65 // A = 0, B = 1, etc.
-      }
-      
-      if (stateNum == undefined || stateNum < 0) {
+      // Map score to state num (not array index!) — shared with the
+      // padCharacterStatesToMatchScores pre-pass so both stay in sync.
+      const stateNum = resolveStateNum(score, symbols)
+      if (stateNum == null || stateNum < 0) {
         continue
       }
       
