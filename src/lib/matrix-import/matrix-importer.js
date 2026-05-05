@@ -413,6 +413,22 @@ async function importIntoMatrix(
   const gapSymbol = matrixObj.parameters?.GAP || '?'
   const symbols = parseSymbols(matrixObj.parameters?.SYMBOLS)
 
+  // MB4-448: AI extraction can return fewer state names than the MATRIX block
+  // actually uses (e.g. AI gives 2 names but cells use codes 0..3). The
+  // per-cell loop below maps `state.num === parseInt(digit)` and silently
+  // drops digits that don't match — turning real scores into `?`. Walk every
+  // cell once, find the highest state code per character, and pre-create
+  // placeholder states so every digit in the file has a target.
+  await padCharacterStatesToMatchScores({
+    matrixObj,
+    projectCharactersMap,
+    missingSymbol,
+    gapSymbol,
+    symbols,
+    transaction,
+    user,
+  })
+
   // Check if we should use batched processing for large matrices
   const taxaCount = matrixObj.taxa?.length || 0
   const charCount = matrixObj.characters?.length || 0
@@ -789,6 +805,76 @@ function parseSymbols(symbols) {
   return map
 }
 
+// Resolve a single character's score code to a numeric state index using the
+// same rules as processCellValue (SYMBOLS map → digit → letter offset).
+function resolveStateNum(score, symbols) {
+  if (symbols && Object.keys(symbols).length > 0) {
+    const n = symbols[score]
+    return n == null ? null : n
+  }
+  if (score >= '0' && score <= '9') return parseInt(score)
+  return score.toUpperCase().charCodeAt(0) - 65
+}
+
+async function padCharacterStatesToMatchScores({
+  matrixObj,
+  projectCharactersMap,
+  missingSymbol,
+  gapSymbol,
+  symbols,
+  transaction,
+  user,
+}) {
+  if (!matrixObj?.cells || !matrixObj?.characters) return
+
+  const maxNumByCharacter = new Map()
+  for (let x = 0; x < matrixObj.cells.length; ++x) {
+    const cellRow = matrixObj.cells[x]
+    if (!cellRow) continue
+    for (let y = 0; y < cellRow.length; ++y) {
+      const characterId = matrixObj.characters[y]?.characterId
+      if (!characterId) continue
+      const character = projectCharactersMap.get(characterId)
+      if (!character || character.type > 0) continue // skip continuous
+
+      const cellValue = cellRow[y]
+      let scores = cellValue
+      if (typeof cellValue === 'object' && cellValue !== null) {
+        scores = cellValue.scores
+      }
+      if (scores == null || scores === '') continue
+
+      for (const ch of String(scores).toUpperCase()) {
+        if (ch === missingSymbol || ch === gapSymbol || ch === '-' || ch === '–') continue
+        const stateNum = resolveStateNum(ch, symbols)
+        if (stateNum == null || stateNum < 0) continue
+        const cur = maxNumByCharacter.get(characterId) ?? -1
+        if (stateNum > cur) maxNumByCharacter.set(characterId, stateNum)
+      }
+    }
+  }
+
+  for (const [characterId, maxNum] of maxNumByCharacter) {
+    const character = projectCharactersMap.get(characterId)
+    if (!character) continue
+    const existingNums = new Set((character.states || []).map((s) => s.num))
+    for (let n = 0; n <= maxNum; ++n) {
+      if (existingNums.has(n)) continue
+      const placeholder = await models.CharacterState.create(
+        {
+          name: `State ${n}`,
+          num: n,
+          character_id: characterId,
+          user_id: user.user_id,
+        },
+        { transaction, user }
+      )
+      character.states.push(placeholder)
+    }
+    character.states.sort((a, b) => a.num - b.num)
+  }
+}
+
 /**
  * Process a single cell value and return cell insertion objects
  * @param {*} cellValue - The cell value (string, object, or array)
@@ -888,17 +974,10 @@ function processCellValue(cellValue, params) {
         continue
       }
       
-      // Map score to state num (not array index!)
-      let stateNum
-      if (symbols && Object.keys(symbols).length > 0) {
-        stateNum = symbols[score]
-      } else if (score >= '0' && score <= '9') {
-        stateNum = parseInt(score)
-      } else {
-        stateNum = score.toUpperCase().charCodeAt(0) - 65 // A = 0, B = 1, etc.
-      }
-      
-      if (stateNum == undefined || stateNum < 0) {
+      // Map score to state num (not array index!) — shared with the
+      // padCharacterStatesToMatchScores pre-pass so both stay in sync.
+      const stateNum = resolveStateNum(score, symbols)
+      if (stateNum == null || stateNum < 0) {
         continue
       }
       
