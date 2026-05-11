@@ -8,12 +8,13 @@ import { getMaxCharacterPositionForMatrix } from '../../services/matrix-characte
 import { getMaxTaxonPositionForMatrix } from '../../services/matrix-taxa-order-service.js'
 import Sequelize from 'sequelize'
 import sequelizeConn from '../../util/db.js'
-import { 
-  bulkInsertCellsOptimized, 
+import {
+  bulkInsertCellsOptimized,
   withBatchedTransaction,
   shouldUseBatchedProcessing,
-  getOptimalBatchSize 
+  getOptimalBatchSize
 } from './matrix-import-patch.js'
+import { planStateActions } from './state-planner.js'
 
 /**
  * This creates a blank matrix in the database based on the parameters.
@@ -358,34 +359,25 @@ async function importIntoMatrix(
         }
       }
       projectCharacter = projectCharactersMap.get(characterId)
-      for (const stateObj of characterObj.states) {
-        if (stateNameMap.has(stateObj.name)) {
-          if (stateObj.notes) {
-            const existingState = stateNameMap.get(stateObj.name)
-
-            // Update state description if provided in imported data
-            // This allows updating descriptions for existing states when re-importing
-            await models.CharacterState.update(
-              { description: stateObj.notes },
-              {
-                where: { state_id: existingState.state_id },
-                transaction: transaction,
-                individualHooks: true,
-                user: user,
-              }
-            )
-          }
+      for (const action of planStateActions(
+        characterObj.states,
+        stateNameMap
+      )) {
+        if (action.kind === 'update') {
+          await models.CharacterState.update(
+            { description: action.notes },
+            {
+              where: { state_id: action.state.state_id },
+              transaction: transaction,
+              individualHooks: true,
+              user: user,
+            }
+          )
         } else {
-          // Find the maximum existing num value to ensure new states get sequential numbers
-          const existingNums = projectCharacter.states.map((s) => s.num || 0)
-          const maxNum =
-            existingNums.length > 0 ? Math.max(...existingNums) : -1
-          const newNum = maxNum + 1
-
           const state = await models.CharacterState.create(
             {
-              name: stateObj.name,
-              num: newNum,
+              name: action.name,
+              num: action.num,
               character_id: characterId,
               user_id: user.user_id,
             },
