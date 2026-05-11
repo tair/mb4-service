@@ -1,0 +1,143 @@
+#NEXUS
+[MacClade 4.08 registered to Peter Wagner, Field Museum of Natural History]
+BEGIN MacCladeStart;
+	Extended;
+END;
+BEGIN DATA;
+	DIMENSIONS  NTAX=26 NCHAR=27;
+[!Monks, N. 1999. Cladistic analysis of Albian heteromorph ammonites. Palaeontology 42:907 - 925.]
+	FORMAT SYMBOLS= " 0 1 2 3 4 5 6 7 8 9 A B C D" MISSING=? GAP=- ;
+MATRIX
+[                                                         10        20        30]
+[                                                         .         .         . ]
+Ptychoceras_minimum                              023330000100000010000000000
+Hamitella_annulata                               022330020110100000010000000
+Hamites_attenuatus                               022330220110100000010000000
+Hamites_hybridus                                 022320100100000000010000000
+Stomohamites_nokonsis                            022230000010000000010000000
+Stomohamites_parkinsoni                          022230110010110000010000000
+Stomohamites_virgulatus                          022230110010000000010000000
+Lytohamites_similis                              022230000010000000010000000
+Metahamites_sablieri                             022230010010000000010000000
+Scaphamites_passendorferi                        022330100100101000010010000
+Hamitoides_studerianus                           0??????????0000000010011000
+Lechites_gaudini                                 022230000010000001110000000
+Sciponoceras_skipperae                           022230000010000101100000000
+Anisoceras_saussureanum                          022230110010100000011100110
+Prohelicoceras_moutonianum                       022330010110100000011000110
+'Protanisoceras (Protanisoceras) raulinianum'    022330100110000000011000100
+'Protanisoceras (Heteroclinus) nodosum'          022330000110100000011000100
+'Protanisoceras (Torquistylus) anglicum'         022220000110000000010000100
+Pseudhelicoceras_robertianum                     022230110010200000011100110
+Proturrilitoides_astierianus                     022231111010210000010000000
+Turrilitoides_hugardianus                        122231111010210000010000000
+Paraturrilites_gresslyi                          122231111010200000010000001
+Eoscaphites_circularis                           02223011010000?000010010000
+Eoscaphites_subcircularis                        022230110101001000010011000
+Scaphites_hugardianus                            022230110100001000010011000
+Worthoceras_worthense                            023330000100000010010000000
+;
+END;
+BEGIN ASSUMPTIONS;
+	OPTIONS  DEFTYPE=unord PolyTcount=MINSTEPS ;
+	TYPESET * UNTITLED  = unord: 1-27;
+	WTSET * UNTITLED  = 1: 1-27;
+END;
+BEGIN TREES;
+	TRANSLATE
+		1	Ptychoceras_minimum,
+		2	Hamitella_annulata,
+		3	Hamites_attenuatus,
+		4	Hamites_hybridus,
+		5	Stomohamites_nokonsis,
+		6	Stomohamites_parkinsoni,
+		7	Stomohamites_virgulatus,
+		8	Lytohamites_similis,
+		9	Metahamites_sablieri,
+		10	Scaphamites_passendorferi,
+		11	Hamitoides_studerianus,
+		12	Lechites_gaudini,
+		13	Sciponoceras_skipperae,
+		14	Anisoceras_saussureanum,
+		15	Prohelicoceras_moutonianum,
+		16	'Protanisoceras (Protanisoceras) raulinianum',
+		17	'Protanisoceras (Heteroclinus) nodosum',
+		18	'Protanisoceras (Torquistylus) anglicum',
+		19	Pseudhelicoceras_robertianum,
+		20	Proturrilitoides_astierianus,
+		21	Turrilitoides_hugardianus,
+		22	Paraturrilites_gresslyi,
+		23	Eoscaphites_circularis,
+		24	Eoscaphites_subcircularis,
+		25	Scaphites_hugardianus,
+		26	Worthoceras_worthense
+	;
+	TREE Parsimony =  [&R] (1,(26,((((((25,24),23),10),11),4),((3,2),((((5,8),(9,(7,(6,(20,(22,21)))))),(13,12)),(18,(16,(17,(15,(19,14))))))))));
+	TREE  * Parsimony? =  [&R] (1,(26,((4,(11,(10,(23,(25,24))))),(((3,2),(15,(17,16))),(18,((12,13),(5,(8,(9,(7,((19,14),(6,(20,(22,21))))))))))))));
+END;
+BEGIN NOTES;
+	TEXT  TAXON=5 TEXT= 'Hamites_nokonsis_in_figure;_=_Stomohamites_subvirgulatus_Spath,_Hamites_parkinsoni_Fleming,_H._charpenteri_Spath,_H._duplicatus_Pictet_and_Campiche,_Stomohamites_ibex_Spath]';
+	TEXT  TAXON=2 TEXT= '=_Hamites_subrotundus_Spath';
+END;
+BEGIN MacClade;
+	Version 4.0  87;
+	LastModified -851707958;
+	FileSettings editor  '1' '30' '1' '4';
+	Singles 100;
+	Editor 00011001111111100100010010 '0' '24' Gadget '12' '282' '1' all;
+	EditorPosition  '134' '745' '529' '1027';
+	TreeWindowPosition  '46' '6' '981' '1630';
+	ListWindow Characters closed Gadget '12' '50' '10' '253' '374' 000;
+	ListWindow Taxa closed Geneva '9' '50' '10' '241' '314' 100000000;
+	ListWindow Trees closed Gadget '12' '50' '10' '134' '387' ;
+	ListWindow TypeSets closed Gadget '12' '50' '10' '276' '490' ;
+	ListWindow WtSets closed Gadget '12' '50' '10' '276' '490' ;
+	ListWindow ExSets closed Gadget '12' '50' '10' '276' '490' ;
+	ListWindow CharSets closed Gadget '12' '50' '10' '276' '490' ;
+	ListWindow TaxSets closed Gadget '12' '50' '10' '276' '490' ;
+	ListWindow CharPartitions closed Gadget '12' '50' '10' '276' '490' ;
+	ListWindow CharPartNames closed Gadget '12' '50' '10' '276' '490' ;
+	ListWindow WtSets closed Gadget '12' '50' '10' '276' '490' ;
+	TextWindow AboutFile  '719' '36' '280' '445' Gadget '12' (normal) 1 ;
+	ChartWindowPosition  '50' '30' '688' '964';
+	StateNamesSymbols closed Gadget '12' '10' '739' '183' '203' '304';
+	WindowOrder  Data Text AboutFile;
+	OtherSymbols &/ 00 ?-;
+	Correlation  '0' '0' '1000' '0' '0' 10011010;
+	Salmo 00000001;
+	EditorFile  '2';
+	ExportHTML _ MOSS  '100' 110000;
+	PrettyPrint 10;
+	EditorToolsPosition  '546' '72' '115' '165';
+	TreeToolsPosition  '863' '5' '126' '138';
+	TreeWindowProgram 10;
+	TreeWindow 0000;
+	Continuous  '0' '3' 1;
+	Calculations 1100111;
+	SummaryMode  '0' '0' 0;
+	Charts  Arial '12' (normal) 0010;
+	NexusOptions  '0' '0' '50' 001011001;
+	TipLabel  '1';
+	TreeFont  Gadget '12' (normal);
+	TreeShape  1.0 1.0 0100;
+	TraceLabels 0101;
+	ChartColors  '0' '0' '65535' '9' '0' 1;
+	ChartBiggestSpot 1;
+	ChartPercent 10;
+	ChartBarWidth  '10' 1;
+	ChartVerticalAxis 10101;
+	ChartMinMax  '0';
+	TraceAllChangesDisplay  '1' 1;
+	BarsOnBranchesDisplay  '0' '0' '60000' '10000' '10000' '10000' '10000' '60000' '65000' '65000' '65000' '6' '1' 0000101;
+	ContinuousBranchLabels 0;
+	AllStatesBranchLabels 1;
+	IndexNotation  '3' 0;
+	PrintTree  10.00 '2' '2' '2' '2' '2' '2' '2' '2' '2' '2' '2' Gadget '9' (normal) Gadget '10' (normal) Gadget '9' (normal) Gadget '9' (normal) Gadget '9' (bold ) Gadget '9' (normal) Gadget '9' (normal) '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '0' '1' '1' '1' '1' '0' '0' '-39' '4' '-40' '0' '1' '2' '1' '8' '0' '0' '0' '2' 1000111000000000000100000111000;
+	MatchChar 00 .;
+	EntryInterpretation 01;
+	ColorOptions 00;
+	TreeTools  '0' '5' '4' '0' '10' '4' '0' 00100111111101110;
+	EditorTools  '0' '0' '0' '1000' '0' '0' '6' '3' '0' 100000101110001;
+	PairAlign  '2' '2' '3' '2' '1' '1' '2' '1' '3' 1010;
+	BothTools  '1';
+END;
