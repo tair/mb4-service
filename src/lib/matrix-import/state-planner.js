@@ -12,13 +12,23 @@
 // Empty / whitespace-only names are skipped entirely;
 // padCharacterStatesToMatchScores fills any slot referenced by cell scores
 // with a "State N" placeholder.
+//
+// Within-call dedup: the prior inline loop mutated stateNameMap after each
+// create so a repeat of the same non-empty name later in the same array hit
+// the "already exists" branch. The plan is computed up front now, so track
+// names planned-for-create here and skip subsequent occurrences — preserving
+// the prior behavior that one duplicate-name input never produces two rows.
 export function planStateActions(stateObjs, existingStatesByName) {
   const actions = []
+  const plannedNames = new Set()
   for (let i = 0; i < stateObjs.length; i++) {
     const stateObj = stateObjs[i]
     const stateName = stateObj?.name
-    if (stateName != null && existingStatesByName.has(stateName)) {
-      if (stateObj.notes) {
+    if (
+      stateName != null &&
+      (existingStatesByName.has(stateName) || plannedNames.has(stateName))
+    ) {
+      if (stateObj.notes && existingStatesByName.has(stateName)) {
         actions.push({
           kind: 'update',
           state: existingStatesByName.get(stateName),
@@ -31,6 +41,7 @@ export function planStateActions(stateObjs, existingStatesByName) {
       continue
     }
     actions.push({ kind: 'create', num: i, name: stateName })
+    plannedNames.add(stateName)
   }
   return actions
 }

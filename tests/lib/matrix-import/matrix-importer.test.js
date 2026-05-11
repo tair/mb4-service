@@ -73,6 +73,21 @@ describe('planStateActions (MB4-448)', () => {
     expect(planStateActions([], new Map())).toEqual([])
   })
 
+  test('duplicate non-empty names within one input produce only one create (matches prior inline-loop behavior)', () => {
+    // The prior inline loop mutated stateNameMap after each create, so a
+    // repeat of the same non-empty name later in the same input was treated
+    // as already-existing and skipped (no-op when no notes). Preserved here
+    // via the within-call plannedNames set.
+    const actions = planStateActions(
+      [{ name: 'foo' }, { name: 'foo' }, { name: 'bar' }],
+      new Map()
+    )
+    expect(actions).toEqual([
+      { kind: 'create', num: 0, name: 'foo' },
+      { kind: 'create', num: 2, name: 'bar' },
+    ])
+  })
+
   test('all-empty padding (cells will reference these slots, pad pass fills them) yields no creates', () => {
     // Edge case: a character whose states the AI couldn't name at all.
     // Returning no creates here is correct — padCharacterStatesToMatchScores
