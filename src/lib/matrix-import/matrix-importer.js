@@ -359,9 +359,13 @@ async function importIntoMatrix(
         }
       }
       projectCharacter = projectCharactersMap.get(characterId)
+      const existingNums = projectCharacter.states
+        .map((s) => s.num)
+        .filter((n) => n != null)
       for (const action of planStateActions(
         characterObj.states,
-        stateNameMap
+        stateNameMap,
+        existingNums
       )) {
         if (action.kind === 'update') {
           await models.CharacterState.update(

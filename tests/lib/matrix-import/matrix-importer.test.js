@@ -73,6 +73,51 @@ describe('planStateActions (MB4-448)', () => {
     expect(planStateActions([], new Map())).toEqual([])
   })
 
+  test('merge into existing character: new name at colliding index falls back to next-available num (no duplicate-num row)', () => {
+    // Project character already has states {num:0,"Absent"}, {num:1,"Present"},
+    // {num:2,"Variable"}. Re-import sends a state at array index 2 with a
+    // different name ("bifid"). Naive num=i would create a second row with
+    // num=2, conflicting with the existing one. Fall back to maxUsed+1 = 3.
+    const existing = new Map([
+      ['Absent', { state_id: 1, num: 0 }],
+      ['Present', { state_id: 2, num: 1 }],
+      ['Variable', { state_id: 3, num: 2 }],
+    ])
+    const existingNums = [0, 1, 2]
+    const actions = planStateActions(
+      [{ name: 'Absent' }, { name: 'Present' }, { name: 'bifid' }],
+      existing,
+      existingNums
+    )
+    expect(actions).toEqual([{ kind: 'create', num: 3, name: 'bifid' }])
+  })
+
+  test('merge into existing: name match returns no create even when index would collide', () => {
+    // Reassuring the no-op path still wins over the collision path when
+    // the name already exists in the project's states.
+    const existing = new Map([['Foo', { state_id: 10, num: 5 }]])
+    const actions = planStateActions(
+      [{ name: 'Foo' }, { name: 'NewBar' }],
+      existing,
+      [5]
+    )
+    // "Foo" matches existing → no-op. "NewBar" at index 1 — 1 is free.
+    expect(actions).toEqual([{ kind: 'create', num: 1, name: 'NewBar' }])
+  })
+
+  test('AI extractor (no existing nums passed) still uses array index — MB4-448 unchanged', () => {
+    // Sanity: omitting existingNums must not regress the MB4-448 fix.
+    expect(
+      planStateActions(
+        [{ name: '' }, { name: '' }, { name: 'bifid' }, { name: 'Trifid' }],
+        new Map()
+      )
+    ).toEqual([
+      { kind: 'create', num: 2, name: 'bifid' },
+      { kind: 'create', num: 3, name: 'Trifid' },
+    ])
+  })
+
   test('duplicate non-empty names within one input produce only one create (matches prior inline-loop behavior)', () => {
     // The prior inline loop mutated stateNameMap after each create, so a
     // repeat of the same non-empty name later in the same input was treated

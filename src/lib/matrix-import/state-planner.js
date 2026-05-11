@@ -18,9 +18,22 @@
 // the "already exists" branch. The plan is computed up front now, so track
 // names planned-for-create here and skip subsequent occurrences — preserving
 // the prior behavior that one duplicate-name input never produces two rows.
-export function planStateActions(stateObjs, existingStatesByName) {
+//
+// num collision handling: for AI-extracted new characters the project row's
+// states[] is empty, so every array index is free and `num = i` matches the
+// state's declared position (the MB4-448 fix). For re-import / merge paths
+// where the project character already has states at certain `num`s, falling
+// back to (maxUsedNum + 1) when index `i` collides preserves the prior
+// behavior and avoids duplicate `num` rows under one character (the DB
+// has no unique constraint on (character_id, num)).
+export function planStateActions(
+  stateObjs,
+  existingStatesByName,
+  existingNums = []
+) {
   const actions = []
   const plannedNames = new Set()
+  const usedNums = new Set(existingNums)
   for (let i = 0; i < stateObjs.length; i++) {
     const stateObj = stateObjs[i]
     const stateName = stateObj?.name
@@ -40,8 +53,13 @@ export function planStateActions(stateObjs, existingStatesByName) {
     if (stateName == null || String(stateName).trim() === '') {
       continue
     }
-    actions.push({ kind: 'create', num: i, name: stateName })
+    let num = i
+    if (usedNums.has(num)) {
+      num = (usedNums.size ? Math.max(...usedNums) : -1) + 1
+    }
+    actions.push({ kind: 'create', num, name: stateName })
     plannedNames.add(stateName)
+    usedNums.add(num)
   }
   return actions
 }
