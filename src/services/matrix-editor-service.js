@@ -5789,7 +5789,9 @@ export default class MatrixEditorService {
       : []
 
     // The first query gets the changed taxon, the second gets reodered taxa,
-    // the third gets taxa whose media was updated.
+    // the third gets taxa whose media was updated. Taxon edits are not
+    // filtered by user because they can be made outside the matrix editor
+    // (e.g. the project taxa list) by the same user who has the matrix open.
     const [taxaRows] = await sequelizeConn.query(
       `
       SELECT DISTINCT mto.taxon_id
@@ -5798,7 +5800,6 @@ export default class MatrixEditorService {
         ccl.logged_row_id = mto.taxon_id
       WHERE
         mto.matrix_id = ? AND
-        ccl.user_id != ? AND
         ccl.log_datetime > ? AND
         ccl.logged_table_num = 10
       UNION
@@ -5836,7 +5837,6 @@ export default class MatrixEditorService {
       {
         replacements: [
           this.matrix.matrix_id,
-          this.user.user_id,
           changedTime,
           this.matrix.matrix_id,
           this.user.user_id,
