@@ -747,6 +747,21 @@ export async function dumpSingleProject(projectId) {
     // Extract S3 paths from successful uploads
     const s3Paths = s3Results.filter((r) => r.success).map((r) => r.key)
 
+    if (s3FailureCount > 0) {
+      const failures = s3Results
+        .filter((r) => !r.success)
+        .map((r) => `${r.type}: ${r.error || 'upload skipped'}`)
+        .join('; ')
+      return {
+        success: false,
+        message: `S3 upload failed for project ${projectId} (${failures})`,
+        s3Paths: s3Paths,
+        s3SuccessCount: s3SuccessCount,
+        s3FailureCount: s3FailureCount,
+        s3Results: s3Results,
+      }
+    }
+
     return {
       success: true,
       message: `Project ${projectId} dumped successfully`,
