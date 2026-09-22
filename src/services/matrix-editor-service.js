@@ -621,7 +621,8 @@ export default class MatrixEditorService {
         OR br.description LIKE :searchTerm
         OR br.keywords LIKE :searchTerm
         OR JSON_EXTRACT(br.authors, '$') LIKE :searchTerm
-        OR JSON_EXTRACT(br.editors, '$') LIKE :searchTerm)
+        OR JSON_EXTRACT(br.editors, '$') LIKE :searchTerm
+        OR CAST(br.pubyear AS CHAR) LIKE :searchTerm)
       ORDER BY br.pubyear DESC, br.article_title ASC
       LIMIT 50`
 
