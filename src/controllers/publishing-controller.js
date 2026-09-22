@@ -374,6 +374,22 @@ export async function publishProject(req, res) {
       // Build creators from project members, enriched with ORCIDs
       const authors = await buildAuthorsWithOrcid(publishedProject)
 
+      // Schedule the public data dump so a slow dump cannot time out the
+      // publish request. Failures are recorded on the task for retry.
+      await models.TaskQueue.create(
+        {
+          user_id: userId,
+          priority: 100,
+          handler: 'ProjectDump',
+          parameters: {
+            project_id: projectId,
+          },
+        },
+        {
+          user: user,
+        }
+      )
+
       // Schedule DOI creation
       await models.TaskQueue.create(
         {
@@ -475,7 +491,6 @@ export async function publishProject(req, res) {
       message: 'Project published successfully',
       projectId: projectId,
       publishedOn: time(),
-      dumpResult: publishResult.dumpResult,
     })
   } catch (error) {
     console.error('Error in publishProject:', error)

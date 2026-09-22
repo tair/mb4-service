@@ -3,6 +3,7 @@ import { EmailHandler } from './email-handler.js'
 import { FileDeletionHandler } from './file-deletion-handler.js'
 import { S3FileDeletionHandler } from './s3-file-deletion-handler.js'
 import { PartitionPublishHandler } from './partition-publish-handler.js'
+import { ProjectDumpHandler } from './project-dump-handler.js'
 import { ProjectDuplicationHandler } from './project-duplication-handler.js'
 import { ProjectOverviewGenerationHandler } from './project-overview-generation-handler.js'
 import { SDDExportHandler } from './sdd-export-handler.js'
@@ -22,6 +23,7 @@ registerTaskHandler(new EmailHandler())
 registerTaskHandler(new FileDeletionHandler())
 registerTaskHandler(new S3FileDeletionHandler())
 registerTaskHandler(new PartitionPublishHandler())
+registerTaskHandler(new ProjectDumpHandler())
 registerTaskHandler(new ProjectDuplicationHandler())
 registerTaskHandler(new ProjectOverviewGenerationHandler())
 registerTaskHandler(new SDDExportHandler())

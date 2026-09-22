@@ -859,18 +859,7 @@ export async function publishProject(projectId, userId, isCurator = false) {
 
     await transaction.commit()
 
-    // Dump project data after successful publication
-    const dumpResult = await dumpSingleProject(projectId)
-    if (!dumpResult.success) {
-      console.warn(
-        `Warning: Failed to dump project ${projectId} data:`,
-        dumpResult.message
-      )
-    } else {
-      // console.log(`Project ${projectId} data dumped successfully`)
-    }
-
-    return { success: true, dumpResult }
+    return { success: true }
   } catch (error) {
     await transaction.rollback()
     throw error
