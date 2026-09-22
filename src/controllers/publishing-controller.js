@@ -371,22 +371,6 @@ export async function publishProject(req, res) {
       const publishedProject = await models.Project.findByPk(projectId)
       const user = await models.User.findByPk(userId)
 
-      // Schedule the public data dump so a slow dump cannot time out the
-      // publish request. Failures are recorded on the task for retry.
-      await models.TaskQueue.create(
-        {
-          user_id: userId,
-          priority: 100,
-          handler: 'ProjectDump',
-          parameters: {
-            project_id: projectId,
-          },
-        },
-        {
-          user: user,
-        }
-      )
-
       // Build creators from project members, enriched with ORCIDs
       const authors = await buildAuthorsWithOrcid(publishedProject)
 

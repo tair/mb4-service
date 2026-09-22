@@ -857,6 +857,20 @@ export async function publishProject(projectId, userId, isCurator = false) {
       { transaction, user }
     )
 
+    // Queue the public data dump in the same transaction so it cannot be
+    // lost once the project is published. Failures are recorded on the task.
+    await models.TaskQueue.create(
+      {
+        user_id: userId,
+        priority: 100,
+        handler: 'ProjectDump',
+        parameters: {
+          project_id: projectId,
+        },
+      },
+      { transaction, user }
+    )
+
     await transaction.commit()
 
     return { success: true }
