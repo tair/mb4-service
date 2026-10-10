@@ -8,6 +8,18 @@ import { MEDIA_TYPES } from '../util/media-constants.js'
 // 2 gigapixels: comfortably above any scan we have seen while still
 // rejecting pathological decompression bombs.
 const MAX_INPUT_PIXELS = 2_000_000_000
+const UPLOAD_ATTEMPTS = 3
+
+async function retry(fn) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      if (attempt >= UPLOAD_ATTEMPTS) throw error
+      console.warn(`S3 upload attempt ${attempt} failed, retrying:`, error.message)
+    }
+  }
+}
 
 export class S3MediaUploader {
   constructor(transaction, user) {
@@ -67,7 +79,7 @@ export class S3MediaUploader {
         if (sizeName === 'original') {
           // Stream the raw file as-is to S3 instead of buffering it in memory
           outputSize = file.size ?? (await fs.promises.stat(file.path)).size
-          outputBody = fs.createReadStream(file.path)
+          outputBody = () => fs.createReadStream(file.path)
           outputMimeType = originalMimeType
           outputExtension = extension // Preserve original extension (.jpeg or .jpg)
           outputWidth = metadata.width
@@ -119,13 +131,16 @@ export class S3MediaUploader {
         const fileName = `${model.project_id}_${rowId}_${sizeName}.${outputExtension}`
         const s3Key = `media_files/images/${model.project_id}/${rowId}/${fileName}`
 
-        // Upload to S3 with correct MIME type
-        const result = await s3Service.putObject(
-          config.aws.defaultBucket,
-          s3Key,
-          outputBody,
-          outputMimeType,
-          outputSize
+        // Upload to S3 with correct MIME type. A stream cannot be replayed by
+        // the SDK's own retries, so retry the streamed original here.
+        const result = await retry(() =>
+          s3Service.putObject(
+            config.aws.defaultBucket,
+            s3Key,
+            typeof outputBody === 'function' ? outputBody() : outputBody,
+            outputMimeType,
+            outputSize
+          )
         )
 
         // Store clean S3-based metadata

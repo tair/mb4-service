@@ -201,13 +201,36 @@ export async function createMediaFile(req, res) {
     await transaction.rollback()
     await mediaUploader.rollback()
     console.error(`Error creating media for project ${projectId}:`, e)
-    res.status(500).json({
-      message: `Failed to create media: ${e.message || 'server error'}`,
-    })
+    res.status(500).json({ message: describeMediaCreateError(e) })
     return
+  } finally {
+    removeUploadedTempFile(req.file)
   }
 
   res.status(200).json({ media: convertMediaResponse(media) })
+}
+
+// Tell the user why their image could not be processed without echoing
+// internal S3 or database error text.
+function describeMediaCreateError(e) {
+  const message = e?.message || ''
+  if (/pixel limit/i.test(message)) {
+    return 'Failed to create media: the image has too many pixels to process (limit is 2 gigapixels).'
+  }
+  if (/unsupported image format|Input file contains unsupported/i.test(message)) {
+    return 'Failed to create media: the file is not a supported image format.'
+  }
+  if (/^Failed to process/.test(message)) {
+    return 'Failed to create media: the image could not be processed or stored.'
+  }
+  return 'Failed to create media with server error'
+}
+
+// Multer stores uploads on disk and never removes them.
+function removeUploadedTempFile(file) {
+  if (file?.path) {
+    fs.unlink(file.path).catch(() => {})
+  }
 }
 
 export async function createMediaFiles(req, res) {
