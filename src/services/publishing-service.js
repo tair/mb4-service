@@ -747,6 +747,23 @@ export async function dumpSingleProject(projectId) {
     // Extract S3 paths from successful uploads
     const s3Paths = s3Results.filter((r) => r.success).map((r) => r.key)
 
+    // Only attempted uploads count as failures; environments without S3
+    // credentials skip the upload and keep the previous behavior.
+    const failedUploads = s3Results.filter((r) => !r.success && r.error)
+    if (failedUploads.length > 0) {
+      const failures = failedUploads
+        .map((r) => `${r.type}: ${r.error}`)
+        .join('; ')
+      return {
+        success: false,
+        message: `S3 upload failed for project ${projectId} (${failures})`,
+        s3Paths: s3Paths,
+        s3SuccessCount: s3SuccessCount,
+        s3FailureCount: s3FailureCount,
+        s3Results: s3Results,
+      }
+    }
+
     return {
       success: true,
       message: `Project ${projectId} dumped successfully`,
@@ -857,20 +874,23 @@ export async function publishProject(projectId, userId, isCurator = false) {
       { transaction, user }
     )
 
+    // Queue the public data dump in the same transaction so it cannot be
+    // lost once the project is published. Failures are recorded on the task.
+    await models.TaskQueue.create(
+      {
+        user_id: userId,
+        priority: 100,
+        handler: 'ProjectDump',
+        parameters: {
+          project_id: projectId,
+        },
+      },
+      { transaction, user }
+    )
+
     await transaction.commit()
 
-    // Dump project data after successful publication
-    const dumpResult = await dumpSingleProject(projectId)
-    if (!dumpResult.success) {
-      console.warn(
-        `Warning: Failed to dump project ${projectId} data:`,
-        dumpResult.message
-      )
-    } else {
-      // console.log(`Project ${projectId} data dumped successfully`)
-    }
-
-    return { success: true, dumpResult }
+    return { success: true }
   } catch (error) {
     await transaction.rollback()
     throw error

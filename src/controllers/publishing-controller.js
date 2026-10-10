@@ -266,7 +266,7 @@ export async function dumpProjectById(req, res) {
   try {
     const projectId = req.params.projectId
     const result = await publishingService.dumpSingleProject(projectId)
-    return res.status(200).json(result)
+    return res.status(result.success ? 200 : 500).json(result)
   } catch (error) {
     console.error('Error in dumpProjectById:', error)
     res.status(500).json({ message: 'Error dumping project' })
@@ -465,17 +465,21 @@ export async function publishProject(req, res) {
         )
       }
 
-      processTasks()
     } catch (taskError) {
       // Log task scheduling errors but don't fail the publication
       console.error('Error scheduling post-publication tasks:', taskError)
     }
 
+    // Always kick off the queue so the ProjectDump task runs even when
+    // scheduling the other post-publication tasks failed.
+    processTasks().catch((e) => {
+      console.error('Error processing task queue after publication:', e)
+    })
+
     return res.status(200).json({
       message: 'Project published successfully',
       projectId: projectId,
       publishedOn: time(),
-      dumpResult: publishResult.dumpResult,
     })
   } catch (error) {
     console.error('Error in publishProject:', error)
