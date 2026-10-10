@@ -188,23 +188,13 @@ export async function search(req, res) {
       LOWER(description) LIKE LOWER(?) OR
       LOWER(keywords) LIKE LOWER(?) OR
       LOWER(authors) LIKE LOWER(?) OR
-      LOWER(secondary_authors) LIKE LOWER(?)
+      LOWER(secondary_authors) LIKE LOWER(?) OR
+      CAST(pubyear AS CHAR) LIKE ?
     )
     LIMIT 15
     `,
     {
-      replacements: [
-        projectId,
-        `%${searchText}%`,
-        `%${searchText}%`,
-        `%${searchText}%`,
-        `%${searchText}%`,
-        `%${searchText}%`,
-        `%${searchText}%`,
-        `%${searchText}%`,
-        `%${searchText}%`,
-        `%${searchText}%`,
-      ],
+      replacements: [projectId, ...Array(10).fill(`%${searchText}%`)],
     }
   )
 
