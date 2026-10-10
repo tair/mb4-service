@@ -1,8 +1,13 @@
+import fs from 'fs'
 import sharp from 'sharp'
 import s3Service from '../services/s3-service.js'
 import config from '../config.js'
 import { Datamodel } from './datamodel/datamodel.js'
 import { MEDIA_TYPES } from '../util/media-constants.js'
+
+// 2 gigapixels: comfortably above any scan we have seen while still
+// rejecting pathological decompression bombs.
+const MAX_INPUT_PIXELS = 2_000_000_000
 
 export class S3MediaUploader {
   constructor(transaction, user) {
@@ -30,8 +35,12 @@ export class S3MediaUploader {
     const extension = file.originalname.split('.').pop().toLowerCase()
     const originalMimeType = file.mimetype || 'image/jpeg'
 
-    // Process image with Sharp
-    const image = sharp(file.path)
+    // Process image with Sharp. Large scans (e.g. ~1 GB TIFFs) exceed sharp's
+    // default ~268 MP limit, so raise it and read sequentially to bound memory.
+    const image = sharp(file.path, {
+      limitInputPixels: MAX_INPUT_PIXELS,
+      sequentialRead: true,
+    })
     const metadata = await image.metadata()
 
     // Define image sizes - preserve original format for 'original', compress thumbnails
@@ -48,16 +57,17 @@ export class S3MediaUploader {
     // Upload each size variant to S3
     for (const [sizeName, dimensions] of Object.entries(sizes)) {
       try {
-        let outputBuffer
+        let outputBody
+        let outputSize
         let outputMimeType
         let outputExtension
         let outputWidth
         let outputHeight
 
         if (sizeName === 'original') {
-          // For original version, upload the raw file without any processing to preserve exact quality and size
-          const fs = await import('fs')
-          outputBuffer = await fs.promises.readFile(file.path)
+          // Stream the raw file as-is to S3 instead of buffering it in memory
+          outputSize = file.size ?? (await fs.promises.stat(file.path)).size
+          outputBody = fs.createReadStream(file.path)
           outputMimeType = originalMimeType
           outputExtension = extension // Preserve original extension (.jpeg or .jpg)
           outputWidth = metadata.width
@@ -93,9 +103,10 @@ export class S3MediaUploader {
           }
 
           // For thumbnails and large versions, use JPEG compression for consistency and smaller file sizes
-          outputBuffer = await processedImage
+          outputBody = await processedImage
             .jpeg({ quality: 85, progressive: true })
             .toBuffer()
+          outputSize = outputBody.length
           outputMimeType = 'image/jpeg'
           outputExtension = 'jpg'
 
@@ -112,8 +123,9 @@ export class S3MediaUploader {
         const result = await s3Service.putObject(
           config.aws.defaultBucket,
           s3Key,
-          outputBuffer,
-          outputMimeType
+          outputBody,
+          outputMimeType,
+          outputSize
         )
 
         // Store clean S3-based metadata
@@ -122,14 +134,14 @@ export class S3MediaUploader {
           S3_ETAG: result.etag,
           WIDTH: outputWidth,
           HEIGHT: outputHeight,
-          FILESIZE: outputBuffer.length,
+          FILESIZE: outputSize,
           MIMETYPE: outputMimeType,
           EXTENSION: outputExtension,
           PROPERTIES: {
             height: outputHeight,
             width: outputWidth,
             mimetype: outputMimeType,
-            filesize: outputBuffer.length,
+            filesize: outputSize,
             version: sizeName,
           },
         }
@@ -179,7 +191,6 @@ export class S3MediaUploader {
     if (file.buffer) {
       fileBuffer = file.buffer
     } else if (file.path) {
-      const fs = await import('fs')
       fileBuffer = await fs.promises.readFile(file.path)
     } else {
       throw new Error('No file buffer or path provided')

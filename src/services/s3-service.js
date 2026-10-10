@@ -104,17 +104,20 @@ class S3Service {
    * Upload object to S3 bucket
    * @param {string} bucketName - The S3 bucket name
    * @param {string} key - The object key/path
-   * @param {Buffer} body - The object data
+   * @param {Buffer|import('stream').Readable} body - The object data
    * @param {string} contentType - The content type of the object
+   * @param {number} [contentLength] - Byte length, required for stream bodies
    * @returns {Promise<{key: string, etag: string}>}
    */
-  async putObject(bucketName, key, body, contentType) {
+  async putObject(bucketName, key, body, contentType, contentLength) {
     try {
       const command = new PutObjectCommand({
         Bucket: bucketName,
         Key: key,
         Body: body,
         ContentType: contentType,
+        // Required when the body is a stream rather than a buffer
+        ...(contentLength != null && { ContentLength: contentLength }),
       })
 
       const response = await this.s3Client.send(command)

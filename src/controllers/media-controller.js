@@ -110,6 +110,10 @@ export async function getMediaFiles(req, res) {
 export async function createMediaFile(req, res) {
   const projectId = req.params.projectId
 
+  // Large originals (e.g. ~1 GB TIFF scans) take minutes to process and upload
+  req.setTimeout(1800000) // 30 minutes
+  res.setTimeout(1800000)
+
   const media = models.MediaFile.build(req.body)
 
   // Ensure that the specimen_id is within the same project.
@@ -196,9 +200,10 @@ export async function createMediaFile(req, res) {
   } catch (e) {
     await transaction.rollback()
     await mediaUploader.rollback()
-    res
-      .status(500)
-      .json({ message: 'Failed to create media with server error' })
+    console.error(`Error creating media for project ${projectId}:`, e)
+    res.status(500).json({
+      message: `Failed to create media: ${e.message || 'server error'}`,
+    })
     return
   }
 
