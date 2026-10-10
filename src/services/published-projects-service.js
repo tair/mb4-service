@@ -22,9 +22,10 @@ export async function getProjects() {
   const start = new Date().getTime()
   const [rows] = await sequelizeConn.query(`
     SELECT
-      p.project_id, TRIM(journal_title) as journal_title, journal_cover,
-      journal_year, journal_in_press, article_authors, article_title,
-      published_on, created_on, project_doi, 0 as has_continuous_char
+      p.project_id, p.exemplar_media_id, TRIM(journal_title) as journal_title,
+      journal_cover, journal_year, journal_in_press, article_authors,
+      article_title, published_on, created_on, project_doi,
+      0 as has_continuous_char
     FROM projects p
     WHERE p.published = 1 AND p.deleted = 0
     ORDER BY p.published_on DESC`)
@@ -37,7 +38,11 @@ export async function getProjects() {
     }
 
     row.project_stats = await getProjectStats(projectId)
-    row.image_props = await mediaService.getImageProps(projectId, 'thumbnail')
+    row.image_props = await mediaService.getImageProps(
+      projectId,
+      'thumbnail',
+      row.exemplar_media_id
+    )
     await setJournalCoverUrl(row)
   }
 
