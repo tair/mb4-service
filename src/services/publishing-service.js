@@ -747,10 +747,12 @@ export async function dumpSingleProject(projectId) {
     // Extract S3 paths from successful uploads
     const s3Paths = s3Results.filter((r) => r.success).map((r) => r.key)
 
-    if (s3FailureCount > 0) {
-      const failures = s3Results
-        .filter((r) => !r.success)
-        .map((r) => `${r.type}: ${r.error || 'upload skipped'}`)
+    // Only attempted uploads count as failures; environments without S3
+    // credentials skip the upload and keep the previous behavior.
+    const failedUploads = s3Results.filter((r) => !r.success && r.error)
+    if (failedUploads.length > 0) {
+      const failures = failedUploads
+        .map((r) => `${r.type}: ${r.error}`)
         .join('; ')
       return {
         success: false,
