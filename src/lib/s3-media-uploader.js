@@ -10,12 +10,20 @@ import { MEDIA_TYPES } from '../util/media-constants.js'
 const MAX_INPUT_PIXELS = 2_000_000_000
 const UPLOAD_ATTEMPTS = 3
 
+// Only transient failures (network errors, S3 5xx, throttling) are worth
+// another attempt; a 4xx such as AccessDenied will fail the same way again.
+function isTransientS3Error(error) {
+  const status = error?.cause?.$metadata?.httpStatusCode
+  if (status == null) return true
+  return status >= 500 || status === 429
+}
+
 async function retry(fn) {
   for (let attempt = 1; ; attempt++) {
     try {
       return await fn()
     } catch (error) {
-      if (attempt >= UPLOAD_ATTEMPTS) throw error
+      if (attempt >= UPLOAD_ATTEMPTS || !isTransientS3Error(error)) throw error
       console.warn(`S3 upload attempt ${attempt} failed, retrying:`, error.message)
     }
   }

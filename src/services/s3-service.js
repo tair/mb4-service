@@ -128,7 +128,9 @@ class S3Service {
         versionId: response.VersionId,
       }
     } catch (error) {
-      throw new Error(`Failed to upload object to S3: ${error.message}`)
+      throw new Error(`Failed to upload object to S3: ${error.message}`, {
+        cause: error,
+      })
     }
   }
 
