@@ -18,13 +18,27 @@ function isTransientS3Error(error) {
   return status >= 500 || status === 429
 }
 
+// Exponential backoff with jitter, as AWS recommends for S3 503 Slow Down
+const RETRY_BASE_DELAY_MS = 1000
+const RETRY_MAX_DELAY_MS = 10000
+
+function retryDelay(attempt) {
+  const exponential = RETRY_BASE_DELAY_MS * 2 ** (attempt - 1)
+  return Math.random() * Math.min(exponential, RETRY_MAX_DELAY_MS)
+}
+
 async function retry(fn) {
   for (let attempt = 1; ; attempt++) {
     try {
       return await fn()
     } catch (error) {
       if (attempt >= UPLOAD_ATTEMPTS || !isTransientS3Error(error)) throw error
-      console.warn(`S3 upload attempt ${attempt} failed, retrying:`, error.message)
+      const delay = Math.round(retryDelay(attempt))
+      console.warn(
+        `S3 upload attempt ${attempt} failed, retrying in ${delay}ms:`,
+        error.message
+      )
+      await new Promise((resolve) => setTimeout(resolve, delay))
     }
   }
 }
