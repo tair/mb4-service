@@ -72,7 +72,8 @@ export class S3MediaUploader {
 
     const extension = file.originalname.split('.').pop().toLowerCase()
     const originalMimeType = file.mimetype || 'image/jpeg'
-    const logPrefix = `[MEDIA_UPLOAD] ${tableName}#${rowId} ${file.originalname}`
+    // Filename is client-controlled; encode it so it cannot forge log lines
+    const logPrefix = `[MEDIA_UPLOAD] ${tableName}#${rowId} ${JSON.stringify(file.originalname)}`
     const startedAt = Date.now()
     console.log(
       `${logPrefix}: received ${file.size ?? '?'} bytes (${originalMimeType}) at ${file.path}, rss=${rssMb()}MB`

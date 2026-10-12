@@ -112,7 +112,7 @@ export async function createMediaFile(req, res) {
   console.log(
     `[MEDIA_UPLOAD] create request for project ${req.params.projectId} by user ${req.user?.user_id}: ` +
       (req.file
-        ? `${req.file.originalname} (${req.file.size} bytes, ${req.file.mimetype})`
+        ? `${JSON.stringify(req.file.originalname)} (${req.file.size} bytes, ${req.file.mimetype})`
         : 'no file')
   )
   try {
