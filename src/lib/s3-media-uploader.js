@@ -10,6 +10,10 @@ import { MEDIA_TYPES } from '../util/media-constants.js'
 const MAX_INPUT_PIXELS = 2_000_000_000
 const UPLOAD_ATTEMPTS = 3
 
+function rssMb() {
+  return Math.round(process.memoryUsage().rss / 1024 / 1024)
+}
+
 // Only transient failures (network errors, S3 5xx, throttling) are worth
 // another attempt; a 4xx such as AccessDenied will fail the same way again.
 function isTransientS3Error(error) {
@@ -68,6 +72,11 @@ export class S3MediaUploader {
 
     const extension = file.originalname.split('.').pop().toLowerCase()
     const originalMimeType = file.mimetype || 'image/jpeg'
+    const logPrefix = `[MEDIA_UPLOAD] ${tableName}#${rowId} ${file.originalname}`
+    const startedAt = Date.now()
+    console.log(
+      `${logPrefix}: received ${file.size ?? '?'} bytes (${originalMimeType}) at ${file.path}, rss=${rssMb()}MB`
+    )
 
     // Process image with Sharp. Large scans (e.g. ~1 GB TIFFs) exceed sharp's
     // default ~268 MP limit, so raise it and read sequentially to bound memory.
@@ -75,7 +84,16 @@ export class S3MediaUploader {
       limitInputPixels: MAX_INPUT_PIXELS,
       sequentialRead: true,
     })
-    const metadata = await image.metadata()
+    let metadata
+    try {
+      metadata = await image.metadata()
+    } catch (error) {
+      console.error(`${logPrefix}: reading image metadata failed:`, error)
+      throw new Error(`Failed to read image metadata: ${error.message}`)
+    }
+    console.log(
+      `${logPrefix}: ${metadata.format} ${metadata.width}x${metadata.height} (${Math.round(((metadata.width || 0) * (metadata.height || 0)) / 1e6)} MP), ${metadata.channels} channels, ${metadata.compression || 'no'} compression`
+    )
 
     // Define image sizes - preserve original format for 'original', compress thumbnails
     const sizes = {
@@ -90,6 +108,7 @@ export class S3MediaUploader {
 
     // Upload each size variant to S3
     for (const [sizeName, dimensions] of Object.entries(sizes)) {
+      const variantStartedAt = Date.now()
       try {
         let outputBody
         let outputSize
@@ -188,13 +207,21 @@ export class S3MediaUploader {
           key: s3Key,
           etag: result.etag,
         })
+        console.log(
+          `${logPrefix}: ${sizeName} ${outputWidth}x${outputHeight} ${outputSize} bytes uploaded to ${s3Key} in ${Date.now() - variantStartedAt}ms, rss=${rssMb()}MB`
+        )
       } catch (error) {
-        console.error(`Error processing ${sizeName} variant:`, error)
+        console.error(
+          `${logPrefix}: ${sizeName} variant failed after ${Date.now() - variantStartedAt}ms, rss=${rssMb()}MB:`,
+          error
+        )
         throw new Error(
           `Failed to process ${sizeName} variant: ${error.message}`
         )
       }
     }
+
+    console.log(`${logPrefix}: done in ${Date.now() - startedAt}ms`)
 
     // Set the media data
     model.set(fieldName, json)

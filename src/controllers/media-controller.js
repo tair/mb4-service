@@ -108,9 +108,19 @@ export async function getMediaFiles(req, res) {
 }
 
 export async function createMediaFile(req, res) {
+  const startedAt = Date.now()
+  console.log(
+    `[MEDIA_UPLOAD] create request for project ${req.params.projectId} by user ${req.user?.user_id}: ` +
+      (req.file
+        ? `${req.file.originalname} (${req.file.size} bytes, ${req.file.mimetype})`
+        : 'no file')
+  )
   try {
     await createMediaFileFromRequest(req, res)
   } finally {
+    console.log(
+      `[MEDIA_UPLOAD] create request for project ${req.params.projectId} finished with ${res.statusCode} in ${Date.now() - startedAt}ms`
+    )
     // Every exit, including validation failures, must drop the temp upload
     removeUploadedTempFile(req.file)
   }
