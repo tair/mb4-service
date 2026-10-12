@@ -235,27 +235,46 @@ export async function resetAllFailedTasks() {
  * This handles deadlocks and zombie processes
  */
 // A task is only considered stuck once it has been Processing for longer than
-// any legitimate run (large project dumps and bulk exports take well over the
-// old 10-minute window). Measured from started_on, not created_on, so time
-// spent waiting in the queue does not count.
-export const STUCK_TASK_MINUTES = 120
+// a legitimate run of its handler, measured from started_on (not created_on)
+// so time spent waiting in the queue does not count. Short handlers keep a
+// tight window so a crashed worker is retried quickly; handlers that process
+// whole projects get a long one.
+const DEFAULT_STUCK_TASK_MINUTES = 10
+const LONG_RUNNING_STUCK_TASK_MINUTES = 120
+const LONG_RUNNING_HANDLERS = new Set([
+  'ProjectDump',
+  'ProjectDuplication',
+  'PartitionPublish',
+  'SDDExport',
+  'MatrixImport',
+])
+
+export function getStuckTaskMinutes(handler) {
+  return LONG_RUNNING_HANDLERS.has(handler)
+    ? LONG_RUNNING_STUCK_TASK_MINUTES
+    : DEFAULT_STUCK_TASK_MINUTES
+}
+
+export function isTaskStuck(task, now = time()) {
+  const startedOn = task.started_on ?? task.created_on
+  return now - startedOn > getStuckTaskMinutes(task.handler) * 60
+}
 
 export async function resetStuckTasks() {
-  const cutoff = time() - STUCK_TASK_MINUTES * 60
-
-  const stuckTasks = await sequelizeConn.query(
-    `SELECT task_id, handler, started_on
+  const processingTasks = await sequelizeConn.query(
+    `SELECT task_id, handler, created_on, started_on
      FROM ca_task_queue
-     WHERE status = 1 AND COALESCE(started_on, created_on) < ?`,
-    { replacements: [cutoff], type: QueryTypes.SELECT }
+     WHERE status = 1`,
+    { type: QueryTypes.SELECT }
   )
+  const stuckTasks = processingTasks.filter((task) => isTaskStuck(task))
   if (stuckTasks.length === 0) {
     return 0
   }
 
   for (const task of stuckTasks) {
     console.warn(
-      `[TASK_QUEUE] Resetting task ${task.task_id} (${task.handler}) stuck in Processing since ${task.started_on}`
+      `[TASK_QUEUE] Resetting task ${task.task_id} (${task.handler}) stuck in Processing since ${task.started_on ?? task.created_on}`
     )
   }
 
@@ -263,8 +282,11 @@ export async function resetStuckTasks() {
     `UPDATE ca_task_queue
      SET status = 0, started_on = NULL, error_code = 0,
          notes = CONCAT('Reset from stuck Processing status at ', NOW())
-     WHERE status = 1 AND COALESCE(started_on, created_on) < ?`,
-    { replacements: [cutoff], type: QueryTypes.UPDATE }
+     WHERE status = 1 AND task_id IN (?)`,
+    {
+      replacements: [stuckTasks.map((task) => task.task_id)],
+      type: QueryTypes.UPDATE,
+    }
   )
   return updated
 }
