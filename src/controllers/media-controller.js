@@ -108,6 +108,15 @@ export async function getMediaFiles(req, res) {
 }
 
 export async function createMediaFile(req, res) {
+  try {
+    await createMediaFileFromRequest(req, res)
+  } finally {
+    // Every exit, including validation failures, must drop the temp upload
+    removeUploadedTempFile(req.file)
+  }
+}
+
+async function createMediaFileFromRequest(req, res) {
   const projectId = req.params.projectId
 
   // Large originals (e.g. ~1 GB TIFF scans) take minutes to process and upload
@@ -203,8 +212,6 @@ export async function createMediaFile(req, res) {
     console.error(`Error creating media for project ${projectId}:`, e)
     res.status(500).json({ message: describeMediaCreateError(e) })
     return
-  } finally {
-    removeUploadedTempFile(req.file)
   }
 
   res.status(200).json({ media: convertMediaResponse(media) })
@@ -228,9 +235,12 @@ function describeMediaCreateError(e) {
 
 // Multer stores uploads on disk and never removes them.
 function removeUploadedTempFile(file) {
-  if (file?.path) {
-    fs.unlink(file.path).catch(() => {})
-  }
+  if (!file?.path) return
+  fs.unlink(file.path).catch((error) => {
+    if (error.code !== 'ENOENT') {
+      console.error(`Failed to remove uploaded temp file ${file.path}:`, error)
+    }
+  })
 }
 
 export async function createMediaFiles(req, res) {
