@@ -413,7 +413,7 @@ export async function createMediaFiles(req, res) {
         console.error(`Failed to process file ${file.originalname}:`, fileError)
         failedFiles.push({
           filename: file.originalname,
-          error: fileError.message,
+          error: describeMediaCreateError(fileError),
         })
         // Continue processing other files instead of failing completely
       }
@@ -422,8 +422,11 @@ export async function createMediaFiles(req, res) {
     if (mediaFiles.length === 0) {
       await transaction.rollback()
       await mediaUploader.rollback()
+      const firstError = failedFiles[0]?.error
       res.status(500).json({
-        message: 'Failed to process any files from the ZIP archive',
+        message: firstError
+          ? `Failed to process any files from the ZIP archive. ${firstError}`
+          : 'Failed to process any files from the ZIP archive',
         failedFiles: failedFiles,
       })
       return
@@ -453,8 +456,7 @@ export async function createMediaFiles(req, res) {
     }
 
     res.status(500).json({
-      message: 'Failed to create media with server error',
-      error: e.message,
+      message: describeMediaCreateError(e),
       failedFiles: failedFiles,
     })
     return
