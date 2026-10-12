@@ -278,16 +278,22 @@ export async function resetStuckTasks() {
     )
   }
 
-  const [, updated] = await sequelizeConn.query(
-    `UPDATE ca_task_queue
-     SET status = 0, started_on = NULL, error_code = 0,
-         notes = CONCAT('Reset from stuck Processing status at ', NOW())
-     WHERE status = 1 AND task_id IN (?)`,
-    {
-      replacements: [stuckTasks.map((task) => task.task_id)],
-      type: QueryTypes.UPDATE,
-    }
-  )
+  // Match the attempt we observed (NULL-safe for legacy rows) so a task that
+  // another worker has since re-claimed is not requeued underneath it.
+  let updated = 0
+  for (const task of stuckTasks) {
+    const [, count] = await sequelizeConn.query(
+      `UPDATE ca_task_queue
+       SET status = 0, started_on = NULL, error_code = 0,
+           notes = CONCAT('Reset from stuck Processing status at ', NOW())
+       WHERE status = 1 AND task_id = ? AND started_on <=> ?`,
+      {
+        replacements: [task.task_id, task.started_on],
+        type: QueryTypes.UPDATE,
+      }
+    )
+    updated += count
+  }
   return updated
 }
 
