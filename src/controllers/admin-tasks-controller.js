@@ -2,6 +2,7 @@ import sequelizeConn from '../util/db.js'
 import { QueryTypes } from 'sequelize'
 import { models } from '../models/init-models.js'
 import schedulerService from '../services/scheduler-service.js'
+import { STUCK_TASK_MINUTES } from '../services/task-queue-service.js'
 import { time } from '../util/util.js'
 
 // Status constants matching TaskQueue model
@@ -85,14 +86,15 @@ export async function getTaskSummary(req, res) {
       }
     )
 
-    // Get stuck tasks (processing for more than 10 minutes)
+    // Get stuck tasks, measured from when processing started
     const stuckTasks = await sequelizeConn.query(
-      `SELECT task_id, handler, created_on, user_id,
-       UNIX_TIMESTAMP(NOW()) - created_on as seconds_stuck
-       FROM ca_task_queue 
-       WHERE status = 1 AND created_on < UNIX_TIMESTAMP(NOW() - INTERVAL 10 MINUTE)
-       ORDER BY created_on ASC`,
-      { type: QueryTypes.SELECT }
+      `SELECT task_id, handler, created_on, started_on, user_id,
+       UNIX_TIMESTAMP(NOW()) - COALESCE(started_on, created_on) as seconds_stuck
+       FROM ca_task_queue
+       WHERE status = 1
+         AND COALESCE(started_on, created_on) < UNIX_TIMESTAMP(NOW() - INTERVAL ? MINUTE)
+       ORDER BY COALESCE(started_on, created_on) ASC`,
+      { replacements: [STUCK_TASK_MINUTES], type: QueryTypes.SELECT }
     )
 
     // Transform status counts into an object

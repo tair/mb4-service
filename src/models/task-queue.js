@@ -45,6 +45,11 @@ export default class TaskQueue extends Model {
           allowNull: false,
           defaultValue: time,
         },
+        // When a worker last moved the task into Processing
+        started_on: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          allowNull: true,
+        },
         completed_on: {
           type: DataTypes.INTEGER.UNSIGNED,
           allowNull: true,

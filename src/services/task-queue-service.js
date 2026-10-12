@@ -39,7 +39,7 @@ export async function processTasks() {
   
   // Check for stuck Processing tasks
   const stuckTasks = await sequelizeConn.query(
-    'SELECT task_id, handler, status, created_on FROM ca_task_queue WHERE status = 1 AND created_on < UNIX_TIMESTAMP(NOW() - INTERVAL 5 MINUTE)',
+    'SELECT task_id, handler, status, created_on FROM ca_task_queue WHERE status = 1 AND COALESCE(started_on, created_on) < UNIX_TIMESTAMP(NOW() - INTERVAL 5 MINUTE)',
     { type: QueryTypes.SELECT }
   )
   
@@ -100,8 +100,8 @@ export async function processTasks() {
       // Update the status to PROCESSING from CREATED in an atomic way so that
       // other tasks will not process it while it's being processed.
       const [, updated] = await sequelizeConn.query(
-        'UPDATE ca_task_queue SET status = 1 WHERE status = 0 AND task_id = ?',
-        { replacements: [taskId], type: QueryTypes.UPDATE }
+        'UPDATE ca_task_queue SET status = 1, started_on = ? WHERE status = 0 AND task_id = ?',
+        { replacements: [time(), taskId], type: QueryTypes.UPDATE }
       )
 
       if (updated != 1) {
@@ -234,40 +234,39 @@ export async function resetAllFailedTasks() {
  * Reset tasks that are stuck in Processing status for too long
  * This handles deadlocks and zombie processes
  */
+// A task is only considered stuck once it has been Processing for longer than
+// any legitimate run (large project dumps and bulk exports take well over the
+// old 10-minute window). Measured from started_on, not created_on, so time
+// spent waiting in the queue does not count.
+export const STUCK_TASK_MINUTES = 120
+
 export async function resetStuckTasks() {
+  const cutoff = time() - STUCK_TASK_MINUTES * 60
 
-  
-  // Find tasks stuck in Processing for more than 10 minutes
   const stuckTasks = await sequelizeConn.query(
-    `SELECT task_id, handler, created_on, 
-     UNIX_TIMESTAMP(NOW()) - created_on as seconds_stuck 
-     FROM ca_task_queue 
-     WHERE status = 1 AND created_on < UNIX_TIMESTAMP(NOW() - INTERVAL 10 MINUTE)`,
-    { type: QueryTypes.SELECT }
+    `SELECT task_id, handler, started_on
+     FROM ca_task_queue
+     WHERE status = 1 AND COALESCE(started_on, created_on) < ?`,
+    { replacements: [cutoff], type: QueryTypes.SELECT }
   )
-  
-  if (stuckTasks.length > 0) {
-
-    
-    for (const task of stuckTasks) {
-      const minutesStuck = Math.round(task.seconds_stuck / 60)
-
-    }
-    
-    // Reset stuck tasks back to Created status
-    const [, updated] = await sequelizeConn.query(
-      `UPDATE ca_task_queue 
-       SET status = 0, notes = CONCAT('Reset from stuck Processing status at ', NOW()), error_code = 0
-       WHERE status = 1 AND created_on < UNIX_TIMESTAMP(NOW() - INTERVAL 10 MINUTE)`,
-      { type: QueryTypes.UPDATE }
-    )
-    
-
-    return updated
-  } else {
-
+  if (stuckTasks.length === 0) {
     return 0
   }
+
+  for (const task of stuckTasks) {
+    console.warn(
+      `[TASK_QUEUE] Resetting task ${task.task_id} (${task.handler}) stuck in Processing since ${task.started_on}`
+    )
+  }
+
+  const [, updated] = await sequelizeConn.query(
+    `UPDATE ca_task_queue
+     SET status = 0, started_on = NULL, error_code = 0,
+         notes = CONCAT('Reset from stuck Processing status at ', NOW())
+     WHERE status = 1 AND COALESCE(started_on, created_on) < ?`,
+    { replacements: [cutoff], type: QueryTypes.UPDATE }
+  )
+  return updated
 }
 
 /**
