@@ -343,6 +343,7 @@ CREATE TABLE `ca_task_queue` (
   `entity_key` char(32) DEFAULT NULL,
   `status` tinyint unsigned NOT NULL DEFAULT '0',
   `created_on` int unsigned NOT NULL,
+  `started_on` int unsigned DEFAULT NULL,
   `completed_on` int unsigned DEFAULT NULL,
   `priority` smallint unsigned NOT NULL,
   `handler` varchar(20) NOT NULL,

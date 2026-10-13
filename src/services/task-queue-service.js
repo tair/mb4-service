@@ -39,7 +39,7 @@ export async function processTasks() {
   
   // Check for stuck Processing tasks
   const stuckTasks = await sequelizeConn.query(
-    'SELECT task_id, handler, status, created_on FROM ca_task_queue WHERE status = 1 AND created_on < UNIX_TIMESTAMP(NOW() - INTERVAL 5 MINUTE)',
+    'SELECT task_id, handler, status, created_on FROM ca_task_queue WHERE status = 1 AND COALESCE(started_on, created_on) < UNIX_TIMESTAMP(NOW() - INTERVAL 5 MINUTE)',
     { type: QueryTypes.SELECT }
   )
   
@@ -100,8 +100,8 @@ export async function processTasks() {
       // Update the status to PROCESSING from CREATED in an atomic way so that
       // other tasks will not process it while it's being processed.
       const [, updated] = await sequelizeConn.query(
-        'UPDATE ca_task_queue SET status = 1 WHERE status = 0 AND task_id = ?',
-        { replacements: [taskId], type: QueryTypes.UPDATE }
+        'UPDATE ca_task_queue SET status = 1, started_on = ? WHERE status = 0 AND task_id = ?',
+        { replacements: [time(), taskId], type: QueryTypes.UPDATE }
       )
 
       if (updated != 1) {
@@ -234,40 +234,67 @@ export async function resetAllFailedTasks() {
  * Reset tasks that are stuck in Processing status for too long
  * This handles deadlocks and zombie processes
  */
-export async function resetStuckTasks() {
+// A task is only considered stuck once it has been Processing for longer than
+// a legitimate run of its handler, measured from started_on (not created_on)
+// so time spent waiting in the queue does not count. Short handlers keep a
+// tight window so a crashed worker is retried quickly; handlers that process
+// whole projects get a long one.
+const DEFAULT_STUCK_TASK_MINUTES = 10
+const LONG_RUNNING_STUCK_TASK_MINUTES = 120
+const LONG_RUNNING_HANDLERS = new Set([
+  'ProjectDump',
+  'ProjectDuplication',
+  'PartitionPublish',
+  'SDDExport',
+  'MatrixImport',
+])
 
-  
-  // Find tasks stuck in Processing for more than 10 minutes
-  const stuckTasks = await sequelizeConn.query(
-    `SELECT task_id, handler, created_on, 
-     UNIX_TIMESTAMP(NOW()) - created_on as seconds_stuck 
-     FROM ca_task_queue 
-     WHERE status = 1 AND created_on < UNIX_TIMESTAMP(NOW() - INTERVAL 10 MINUTE)`,
+export function getStuckTaskMinutes(handler) {
+  return LONG_RUNNING_HANDLERS.has(handler)
+    ? LONG_RUNNING_STUCK_TASK_MINUTES
+    : DEFAULT_STUCK_TASK_MINUTES
+}
+
+export function isTaskStuck(task, now = time()) {
+  const startedOn = task.started_on ?? task.created_on
+  return now - startedOn > getStuckTaskMinutes(task.handler) * 60
+}
+
+export async function resetStuckTasks() {
+  const processingTasks = await sequelizeConn.query(
+    `SELECT task_id, handler, created_on, started_on
+     FROM ca_task_queue
+     WHERE status = 1`,
     { type: QueryTypes.SELECT }
   )
-  
-  if (stuckTasks.length > 0) {
-
-    
-    for (const task of stuckTasks) {
-      const minutesStuck = Math.round(task.seconds_stuck / 60)
-
-    }
-    
-    // Reset stuck tasks back to Created status
-    const [, updated] = await sequelizeConn.query(
-      `UPDATE ca_task_queue 
-       SET status = 0, notes = CONCAT('Reset from stuck Processing status at ', NOW()), error_code = 0
-       WHERE status = 1 AND created_on < UNIX_TIMESTAMP(NOW() - INTERVAL 10 MINUTE)`,
-      { type: QueryTypes.UPDATE }
-    )
-    
-
-    return updated
-  } else {
-
+  const stuckTasks = processingTasks.filter((task) => isTaskStuck(task))
+  if (stuckTasks.length === 0) {
     return 0
   }
+
+  for (const task of stuckTasks) {
+    console.warn(
+      `[TASK_QUEUE] Resetting task ${task.task_id} (${task.handler}) stuck in Processing since ${task.started_on ?? task.created_on}`
+    )
+  }
+
+  // Match the attempt we observed (NULL-safe for legacy rows) so a task that
+  // another worker has since re-claimed is not requeued underneath it.
+  let updated = 0
+  for (const task of stuckTasks) {
+    const [, count] = await sequelizeConn.query(
+      `UPDATE ca_task_queue
+       SET status = 0, started_on = NULL, error_code = 0,
+           notes = CONCAT('Reset from stuck Processing status at ', NOW())
+       WHERE status = 1 AND task_id = ? AND started_on <=> ?`,
+      {
+        replacements: [task.task_id, task.started_on],
+        type: QueryTypes.UPDATE,
+      }
+    )
+    updated += count
+  }
+  return updated
 }
 
 /**
