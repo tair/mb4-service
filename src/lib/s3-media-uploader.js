@@ -8,43 +8,9 @@ import { MEDIA_TYPES } from '../util/media-constants.js'
 // 2 gigapixels: comfortably above any scan we have seen while still
 // rejecting pathological decompression bombs.
 const MAX_INPUT_PIXELS = 2_000_000_000
-const UPLOAD_ATTEMPTS = 3
 
 function rssMb() {
   return Math.round(process.memoryUsage().rss / 1024 / 1024)
-}
-
-// Only transient failures (network errors, S3 5xx, throttling) are worth
-// another attempt; a 4xx such as AccessDenied will fail the same way again.
-function isTransientS3Error(error) {
-  const status = error?.cause?.$metadata?.httpStatusCode
-  if (status == null) return true
-  return status >= 500 || status === 429
-}
-
-// Exponential backoff with jitter, as AWS recommends for S3 503 Slow Down
-const RETRY_BASE_DELAY_MS = 1000
-const RETRY_MAX_DELAY_MS = 10000
-
-function retryDelay(attempt) {
-  const exponential = RETRY_BASE_DELAY_MS * 2 ** (attempt - 1)
-  return Math.random() * Math.min(exponential, RETRY_MAX_DELAY_MS)
-}
-
-async function retry(fn) {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await fn()
-    } catch (error) {
-      if (attempt >= UPLOAD_ATTEMPTS || !isTransientS3Error(error)) throw error
-      const delay = Math.round(retryDelay(attempt))
-      console.warn(
-        `S3 upload attempt ${attempt} failed, retrying in ${delay}ms:`,
-        error.message
-      )
-      await new Promise((resolve) => setTimeout(resolve, delay))
-    }
-  }
 }
 
 export class S3MediaUploader {
@@ -119,9 +85,9 @@ export class S3MediaUploader {
         let outputHeight
 
         if (sizeName === 'original') {
-          // Stream the raw file as-is to S3 instead of buffering it in memory
+          // The raw file is sent as-is, as a multipart upload from disk
           outputSize = file.size ?? (await fs.promises.stat(file.path)).size
-          outputBody = () => fs.createReadStream(file.path)
+          outputBody = null
           outputMimeType = originalMimeType
           outputExtension = extension // Preserve original extension (.jpeg or .jpg)
           outputWidth = metadata.width
@@ -156,34 +122,37 @@ export class S3MediaUploader {
             }
           }
 
-          // For thumbnails and large versions, use JPEG compression for consistency and smaller file sizes
-          outputBody = await processedImage
+          // For thumbnails and large versions, use JPEG compression for consistency and smaller file sizes.
+          // Take the dimensions from the encoded output; metadata() describes the input.
+          const { data, info } = await processedImage
             .jpeg({ quality: 85, progressive: true })
-            .toBuffer()
-          outputSize = outputBody.length
+            .toBuffer({ resolveWithObject: true })
+          outputBody = data
+          outputSize = data.length
           outputMimeType = 'image/jpeg'
           outputExtension = 'jpg'
-
-          const processedMetadata = await processedImage.metadata()
-          outputWidth = processedMetadata.width
-          outputHeight = processedMetadata.height
+          outputWidth = info.width
+          outputHeight = info.height
         }
 
         // Generate S3 key with appropriate extension
         const fileName = `${model.project_id}_${rowId}_${sizeName}.${outputExtension}`
         const s3Key = `media_files/images/${model.project_id}/${rowId}/${fileName}`
 
-        // Upload to S3 with correct MIME type. A stream cannot be replayed by
-        // the SDK's own retries, so retry the streamed original here.
-        const result = await retry(() =>
-          s3Service.putObject(
-            config.aws.defaultBucket,
-            s3Key,
-            typeof outputBody === 'function' ? outputBody() : outputBody,
-            outputMimeType,
-            outputSize
-          )
-        )
+        // Upload to S3 with correct MIME type
+        const result = outputBody
+          ? await s3Service.putObject(
+              config.aws.defaultBucket,
+              s3Key,
+              outputBody,
+              outputMimeType
+            )
+          : await s3Service.uploadStream(
+              config.aws.defaultBucket,
+              s3Key,
+              fs.createReadStream(file.path),
+              outputMimeType
+            )
 
         // Store clean S3-based metadata
         json[sizeName] = {

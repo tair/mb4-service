@@ -8,6 +8,7 @@ import {
   ListObjectsV2Command,
   GetObjectAttributesCommand,
 } from '@aws-sdk/client-s3'
+import { Upload } from '@aws-sdk/lib-storage'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import config from '../config.js'
 
@@ -122,6 +123,41 @@ class S3Service {
 
       const response = await this.s3Client.send(command)
 
+      return {
+        key,
+        etag: response.ETag,
+        versionId: response.VersionId,
+      }
+    } catch (error) {
+      throw new Error(`Failed to upload object to S3: ${error.message}`, {
+        cause: error,
+      })
+    }
+  }
+
+  /**
+   * Upload a large object as a multipart upload from a stream, so memory is
+   * bounded by partSize * queueSize and each part is retried by the SDK.
+   * @param {string} bucketName - The S3 bucket name
+   * @param {string} key - The object key/path
+   * @param {import('stream').Readable} stream - The object data
+   * @param {string} contentType - The content type of the object
+   * @returns {Promise<{key: string, etag: string}>}
+   */
+  async uploadStream(bucketName, key, stream, contentType) {
+    try {
+      const upload = new Upload({
+        client: this.s3Client,
+        params: {
+          Bucket: bucketName,
+          Key: key,
+          Body: stream,
+          ContentType: contentType,
+        },
+        partSize: 16 * 1024 * 1024,
+        queueSize: 2,
+      })
+      const response = await upload.done()
       return {
         key,
         etag: response.ETag,
