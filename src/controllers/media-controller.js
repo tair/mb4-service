@@ -108,7 +108,30 @@ export async function getMediaFiles(req, res) {
 }
 
 export async function createMediaFile(req, res) {
+  const startedAt = Date.now()
+  console.log(
+    `[MEDIA_UPLOAD] create request for project ${req.params.projectId} by user ${req.user?.user_id}: ` +
+      (req.file
+        ? `${JSON.stringify(req.file.originalname)} (${req.file.size} bytes, ${req.file.mimetype})`
+        : 'no file')
+  )
+  try {
+    await createMediaFileFromRequest(req, res)
+  } finally {
+    console.log(
+      `[MEDIA_UPLOAD] create request for project ${req.params.projectId} finished with ${res.statusCode} in ${Date.now() - startedAt}ms`
+    )
+    // Every exit, including validation failures, must drop the temp upload
+    removeUploadedTempFile(req.file)
+  }
+}
+
+async function createMediaFileFromRequest(req, res) {
   const projectId = req.params.projectId
+
+  // Large originals (e.g. ~1 GB TIFF scans) take minutes to process and upload
+  req.setTimeout(1800000) // 30 minutes
+  res.setTimeout(1800000)
 
   const media = models.MediaFile.build(req.body)
 
@@ -196,13 +219,38 @@ export async function createMediaFile(req, res) {
   } catch (e) {
     await transaction.rollback()
     await mediaUploader.rollback()
-    res
-      .status(500)
-      .json({ message: 'Failed to create media with server error' })
+    console.error(`Error creating media for project ${projectId}:`, e)
+    res.status(500).json({ message: describeMediaCreateError(e) })
     return
   }
 
   res.status(200).json({ media: convertMediaResponse(media) })
+}
+
+// Tell the user why their image could not be processed without echoing
+// internal S3 or database error text.
+function describeMediaCreateError(e) {
+  const message = e?.message || ''
+  if (/pixel limit/i.test(message)) {
+    return 'Failed to create media: the image has too many pixels to process (limit is 2 gigapixels).'
+  }
+  if (/unsupported image format|Input file contains unsupported/i.test(message)) {
+    return 'Failed to create media: the file is not a supported image format.'
+  }
+  if (/^Failed to process/.test(message)) {
+    return 'Failed to create media: the image could not be processed or stored.'
+  }
+  return 'Failed to create media with server error'
+}
+
+// Multer stores uploads on disk and never removes them.
+function removeUploadedTempFile(file) {
+  if (!file?.path) return
+  fs.unlink(file.path).catch((error) => {
+    if (error.code !== 'ENOENT') {
+      console.error(`Failed to remove uploaded temp file ${file.path}:`, error)
+    }
+  })
 }
 
 export async function createMediaFiles(req, res) {
@@ -375,7 +423,7 @@ export async function createMediaFiles(req, res) {
         console.error(`Failed to process file ${file.originalname}:`, fileError)
         failedFiles.push({
           filename: file.originalname,
-          error: fileError.message,
+          error: describeMediaCreateError(fileError),
         })
         // Continue processing other files instead of failing completely
       }
@@ -384,8 +432,11 @@ export async function createMediaFiles(req, res) {
     if (mediaFiles.length === 0) {
       await transaction.rollback()
       await mediaUploader.rollback()
+      const firstError = failedFiles[0]?.error
       res.status(500).json({
-        message: 'Failed to process any files from the ZIP archive',
+        message: firstError
+          ? `Failed to process any files from the ZIP archive. ${firstError}`
+          : 'Failed to process any files from the ZIP archive',
         failedFiles: failedFiles,
       })
       return
@@ -415,8 +466,7 @@ export async function createMediaFiles(req, res) {
     }
 
     res.status(500).json({
-      message: 'Failed to create media with server error',
-      error: e.message,
+      message: describeMediaCreateError(e),
       failedFiles: failedFiles,
     })
     return

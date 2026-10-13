@@ -51,6 +51,9 @@ const port = normalizePort(process.env.PORT || '8000')
 app.set('port', port)
 
 const server = http.createServer(app)
+// Allow large media uploads (up to the 4 GB multer limit) to finish arriving
+// instead of Node's default 5-minute request timeout cutting them off.
+server.requestTimeout = 1800000 // 30 minutes
 server.on('error', onError)
 server.on('listening', onListening)
 

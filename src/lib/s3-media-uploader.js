@@ -1,8 +1,17 @@
+import fs from 'fs'
 import sharp from 'sharp'
 import s3Service from '../services/s3-service.js'
 import config from '../config.js'
 import { Datamodel } from './datamodel/datamodel.js'
 import { MEDIA_TYPES } from '../util/media-constants.js'
+
+// 2 gigapixels: comfortably above any scan we have seen while still
+// rejecting pathological decompression bombs.
+const MAX_INPUT_PIXELS = 2_000_000_000
+
+function rssMb() {
+  return Math.round(process.memoryUsage().rss / 1024 / 1024)
+}
 
 export class S3MediaUploader {
   constructor(transaction, user) {
@@ -29,10 +38,29 @@ export class S3MediaUploader {
 
     const extension = file.originalname.split('.').pop().toLowerCase()
     const originalMimeType = file.mimetype || 'image/jpeg'
+    // Filename is client-controlled; encode it so it cannot forge log lines
+    const logPrefix = `[MEDIA_UPLOAD] ${tableName}#${rowId} ${JSON.stringify(file.originalname)}`
+    const startedAt = Date.now()
+    console.log(
+      `${logPrefix}: received ${file.size ?? '?'} bytes (${originalMimeType}) at ${file.path}, rss=${rssMb()}MB`
+    )
 
-    // Process image with Sharp
-    const image = sharp(file.path)
-    const metadata = await image.metadata()
+    // Process image with Sharp. Large scans (e.g. ~1 GB TIFFs) exceed sharp's
+    // default ~268 MP limit, so raise it and read sequentially to bound memory.
+    const image = sharp(file.path, {
+      limitInputPixels: MAX_INPUT_PIXELS,
+      sequentialRead: true,
+    })
+    let metadata
+    try {
+      metadata = await image.metadata()
+    } catch (error) {
+      console.error(`${logPrefix}: reading image metadata failed:`, error)
+      throw new Error(`Failed to read image metadata: ${error.message}`)
+    }
+    console.log(
+      `${logPrefix}: ${metadata.format} ${metadata.width}x${metadata.height} (${Math.round(((metadata.width || 0) * (metadata.height || 0)) / 1e6)} MP), ${metadata.channels} channels, ${metadata.compression || 'no'} compression`
+    )
 
     // Define image sizes - preserve original format for 'original', compress thumbnails
     const sizes = {
@@ -47,17 +75,19 @@ export class S3MediaUploader {
 
     // Upload each size variant to S3
     for (const [sizeName, dimensions] of Object.entries(sizes)) {
+      const variantStartedAt = Date.now()
       try {
-        let outputBuffer
+        let outputBody
+        let outputSize
         let outputMimeType
         let outputExtension
         let outputWidth
         let outputHeight
 
         if (sizeName === 'original') {
-          // For original version, upload the raw file without any processing to preserve exact quality and size
-          const fs = await import('fs')
-          outputBuffer = await fs.promises.readFile(file.path)
+          // The raw file is sent as-is, as a multipart upload from disk
+          outputSize = file.size ?? (await fs.promises.stat(file.path)).size
+          outputBody = null
           outputMimeType = originalMimeType
           outputExtension = extension // Preserve original extension (.jpeg or .jpg)
           outputWidth = metadata.width
@@ -92,16 +122,17 @@ export class S3MediaUploader {
             }
           }
 
-          // For thumbnails and large versions, use JPEG compression for consistency and smaller file sizes
-          outputBuffer = await processedImage
+          // For thumbnails and large versions, use JPEG compression for consistency and smaller file sizes.
+          // Take the dimensions from the encoded output; metadata() describes the input.
+          const { data, info } = await processedImage
             .jpeg({ quality: 85, progressive: true })
-            .toBuffer()
+            .toBuffer({ resolveWithObject: true })
+          outputBody = data
+          outputSize = data.length
           outputMimeType = 'image/jpeg'
           outputExtension = 'jpg'
-
-          const processedMetadata = await processedImage.metadata()
-          outputWidth = processedMetadata.width
-          outputHeight = processedMetadata.height
+          outputWidth = info.width
+          outputHeight = info.height
         }
 
         // Generate S3 key with appropriate extension
@@ -109,12 +140,19 @@ export class S3MediaUploader {
         const s3Key = `media_files/images/${model.project_id}/${rowId}/${fileName}`
 
         // Upload to S3 with correct MIME type
-        const result = await s3Service.putObject(
-          config.aws.defaultBucket,
-          s3Key,
-          outputBuffer,
-          outputMimeType
-        )
+        const result = outputBody
+          ? await s3Service.putObject(
+              config.aws.defaultBucket,
+              s3Key,
+              outputBody,
+              outputMimeType
+            )
+          : await s3Service.uploadStream(
+              config.aws.defaultBucket,
+              s3Key,
+              fs.createReadStream(file.path),
+              outputMimeType
+            )
 
         // Store clean S3-based metadata
         json[sizeName] = {
@@ -122,14 +160,14 @@ export class S3MediaUploader {
           S3_ETAG: result.etag,
           WIDTH: outputWidth,
           HEIGHT: outputHeight,
-          FILESIZE: outputBuffer.length,
+          FILESIZE: outputSize,
           MIMETYPE: outputMimeType,
           EXTENSION: outputExtension,
           PROPERTIES: {
             height: outputHeight,
             width: outputWidth,
             mimetype: outputMimeType,
-            filesize: outputBuffer.length,
+            filesize: outputSize,
             version: sizeName,
           },
         }
@@ -139,13 +177,21 @@ export class S3MediaUploader {
           key: s3Key,
           etag: result.etag,
         })
+        console.log(
+          `${logPrefix}: ${sizeName} ${outputWidth}x${outputHeight} ${outputSize} bytes uploaded to ${s3Key} in ${Date.now() - variantStartedAt}ms, rss=${rssMb()}MB`
+        )
       } catch (error) {
-        console.error(`Error processing ${sizeName} variant:`, error)
+        console.error(
+          `${logPrefix}: ${sizeName} variant failed after ${Date.now() - variantStartedAt}ms, rss=${rssMb()}MB:`,
+          error
+        )
         throw new Error(
           `Failed to process ${sizeName} variant: ${error.message}`
         )
       }
     }
+
+    console.log(`${logPrefix}: done in ${Date.now() - startedAt}ms`)
 
     // Set the media data
     model.set(fieldName, json)
@@ -179,7 +225,6 @@ export class S3MediaUploader {
     if (file.buffer) {
       fileBuffer = file.buffer
     } else if (file.path) {
-      const fs = await import('fs')
       fileBuffer = await fs.promises.readFile(file.path)
     } else {
       throw new Error('No file buffer or path provided')
