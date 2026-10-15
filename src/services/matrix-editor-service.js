@@ -5786,7 +5786,7 @@ export default class MatrixEditorService {
     }
 
     const characters = changedCharacterIds.size
-      ? this.getCharacters(Array.from(changedCharacterIds))
+      ? await this.getCharacters(Array.from(changedCharacterIds))
       : []
 
     // The first query gets the changed taxon, the second gets reodered taxa,
@@ -5857,7 +5857,7 @@ export default class MatrixEditorService {
     }
 
     const taxa = changedTaxaIds.size
-      ? this.getTaxa(Array.from(changedTaxaIds))
+      ? await this.getTaxa(Array.from(changedTaxaIds))
       : []
 
     const [changedRows] = await sequelizeConn.query(
