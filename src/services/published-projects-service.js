@@ -65,43 +65,35 @@ async function getContinuousCharDict() {
 }
 
 async function setJournalCoverUrl(project) {
-  // console.log('setting journal cover url for project', project.project_id)
   project.journal_cover_path = ''
-  const pathByTitle = getCoverPathByJournalTitle(project.journal_title)
+  const candidates = [
+    getCoverPathByJournalTitle(project.journal_title),
+    getCoverUrlPathJournalCover(project.journal_cover),
+  ].filter(Boolean)
   delete project.journal_title
-  const pathByCover = getCoverUrlPathJournalCover(project.journal_cover)
   delete project.journal_cover
 
-  if (pathByTitle) {
+  let unverifiedKey = null
+  for (const key of candidates) {
     try {
-      const exists = await s3Service.objectExists(
-        config.aws.defaultBucket,
-        pathByTitle
-      )
-      if (exists) {
-        project.journal_cover_path = `/s3/${pathByTitle}`
+      if (await s3Service.objectExists(config.aws.defaultBucket, key)) {
+        project.journal_cover_path = `/s3/${key}`
         return
       }
     } catch (e) {
-      console.log('error checking S3 object existence for urlByTitle', e)
-      // do nothing
+      // A permission or network problem is not "no cover": remember the key
+      // so one bad dump run cannot strip every journal logo from Browse, but
+      // keep looking for a candidate that can be confirmed.
+      console.warn(
+        `Could not verify journal cover ${key} for project ${project.project_id}: ${e.message}`
+      )
+      unverifiedKey = unverifiedKey ?? key
     }
   }
-
-  if (pathByCover) {
-    try {
-      const exists = await s3Service.objectExists(
-        config.aws.defaultBucket,
-        pathByCover
-      )
-      if (exists) {
-        project.journal_cover_path = `/s3/${pathByCover}`
-        return
-      }
-    } catch (e) {
-      console.log('error checking S3 object existence for urlByCover', e)
-      // do nothing
-    }
+  // Nothing confirmed: fall back to the first unverifiable key; the card
+  // hides the image if it turns out not to load.
+  if (unverifiedKey) {
+    project.journal_cover_path = `/s3/${unverifiedKey}`
   }
 }
 
