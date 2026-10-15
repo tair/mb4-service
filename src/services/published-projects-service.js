@@ -73,6 +73,7 @@ async function setJournalCoverUrl(project) {
   delete project.journal_title
   delete project.journal_cover
 
+  let unverifiedKey = null
   for (const key of candidates) {
     try {
       if (await s3Service.objectExists(config.aws.defaultBucket, key)) {
@@ -80,15 +81,19 @@ async function setJournalCoverUrl(project) {
         return
       }
     } catch (e) {
-      // A permission or network problem is not "no cover": keep the path so
-      // one bad dump run cannot strip every journal logo from Browse. The
-      // card hides the image if it turns out not to load.
+      // A permission or network problem is not "no cover": remember the key
+      // so one bad dump run cannot strip every journal logo from Browse, but
+      // keep looking for a candidate that can be confirmed.
       console.warn(
         `Could not verify journal cover ${key} for project ${project.project_id}: ${e.message}`
       )
-      project.journal_cover_path = `/s3/${key}`
-      return
+      unverifiedKey = unverifiedKey ?? key
     }
+  }
+  // Nothing confirmed: fall back to the first unverifiable key; the card
+  // hides the image if it turns out not to load.
+  if (unverifiedKey) {
+    project.journal_cover_path = `/s3/${unverifiedKey}`
   }
 }
 
