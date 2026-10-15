@@ -31,6 +31,19 @@ export class MatrixClients {
     return clients ? Array.from(clients.values()) : []
   }
 
+  /**
+   * Tells every editor that has this matrix open to fetch changes. Pass
+   * excludeUserId to skip the user whose own editor already applied the
+   * change (the matrix editor's own actions); omit it for changes made
+   * outside the editor, which that user's editor has not seen either.
+   */
+  sendSync(matrixId, { userId = 0, excludeUserId = null } = {}) {
+    const response = `event: sync\ndata: ${JSON.stringify({ user_id: userId })}\n\n`
+    this.getClients(parseInt(matrixId))
+      .filter((client) => excludeUserId == null || client.userId != excludeUserId)
+      .forEach((client) => client.response.write(response))
+  }
+
   remove(matrixId, clientId) {
     const clients = this.matrices.get(matrixId)
     if (clients == null) {
@@ -66,3 +79,7 @@ function generateClientId(client) {
     client.userId.toString(36)
   )
 }
+
+// Shared registry: the matrix-editor controller registers connections here and
+// other controllers (e.g. taxa) use it to notify open editors.
+export const matrixClients = new MatrixClients()

@@ -12,6 +12,10 @@ import {
 } from '../lib/datamodel/model-referencial-mapper.js'
 import { array_difference, set_intersect } from '../util/util.js'
 import { Multimap } from '../lib/multimap.js'
+import {
+  notifyMatrices,
+  notifyMatricesForTaxa,
+} from '../lib/matrix-sync-notifier.js'
 
 export async function getTaxa(req, res) {
   const projectId = req.params.projectId
@@ -249,7 +253,8 @@ export async function editTaxon(req, res) {
       user: req.user,
     })
     await transaction.commit()
-    
+    notifyMatricesForTaxa([taxonId], req.user)
+
     res.status(200).json({
       taxon: taxon,
     })
@@ -311,6 +316,7 @@ export async function editTaxa(req, res) {
       transaction: transaction,
     })
     await transaction.commit()
+    notifyMatricesForTaxa(taxaIds, req.user)
     res.status(200).json({
       taxa,
     })
@@ -414,6 +420,17 @@ export async function deleteTaxa(req, res) {
     }
   }
 
+  // Look up the affected matrices before the rows are gone. This only feeds
+  // the editor notification, so a failure must not block the delete.
+  let affectedMatrixIds = []
+  try {
+    affectedMatrixIds = (await taxaService.getMatrixIds(allTaxonIds)).map(
+      (row) => row.matrix_id
+    )
+  } catch (e) {
+    console.error('Failed to look up matrices for deleted taxa:', e)
+  }
+
   const transaction = await sequelizeConn.transaction()
 
   const referenceMapper = new ModelRefencialMapper(
@@ -435,6 +452,7 @@ export async function deleteTaxa(req, res) {
     user: req.user,
   })
   await transaction.commit()
+  notifyMatrices(affectedMatrixIds, req.user)
   res.status(200).json({ taxon_ids: taxonIds })
 }
 
@@ -653,7 +671,8 @@ export async function updateExtinctStatusBatch(req, res) {
     )
 
     await transaction.commit()
-    
+    notifyMatricesForTaxa(taxonIds, req.user)
+
     res.status(200).json({
       status: 'ok',
       message: `Successfully updated ${taxonIds.length} taxa`,

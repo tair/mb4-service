@@ -1,5 +1,5 @@
 import MatrixEditorService from '../services/matrix-editor-service.js'
-import { MatrixClients } from '../lib/matrix-clients.js'
+import { matrixClients } from '../lib/matrix-clients.js'
 import { UserError } from '../lib/user-errors.js'
 import {
   parseIntArray,
@@ -8,7 +8,7 @@ import {
   time,
 } from '../util/util.js'
 
-const clients = new MatrixClients()
+const clients = matrixClients
 
 export async function getMatrixData(req, res) {
   await applyMatrix(req, res, (service) => service.getMatrixData())
@@ -848,12 +848,7 @@ export async function fetchChanges(req, res) {
 
 function sentSyncEventToClients(matrixId, user) {
   const userId = user ? user.user_id : 0
-  const data = { user_id: userId }
-  const response = `event: sync\ndata: ${JSON.stringify(data)}\n\n`
-  clients
-    .getClients(parseInt(matrixId))
-    .filter((client) => client.userId != userId)
-    .forEach((client) => client.response.write(response))
+  clients.sendSync(matrixId, { userId, excludeUserId: userId })
 }
 
 // Composite Taxa endpoints
