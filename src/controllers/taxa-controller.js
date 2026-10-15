@@ -420,10 +420,16 @@ export async function deleteTaxa(req, res) {
     }
   }
 
-  // Look up the affected matrices before the rows are gone
-  const affectedMatrixIds = (await taxaService.getMatrixIds(allTaxonIds)).map(
-    (row) => row.matrix_id
-  )
+  // Look up the affected matrices before the rows are gone. This only feeds
+  // the editor notification, so a failure must not block the delete.
+  let affectedMatrixIds = []
+  try {
+    affectedMatrixIds = (await taxaService.getMatrixIds(allTaxonIds)).map(
+      (row) => row.matrix_id
+    )
+  } catch (e) {
+    console.error('Failed to look up matrices for deleted taxa:', e)
+  }
 
   const transaction = await sequelizeConn.transaction()
 
