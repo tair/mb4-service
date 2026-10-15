@@ -65,42 +65,29 @@ async function getContinuousCharDict() {
 }
 
 async function setJournalCoverUrl(project) {
-  // console.log('setting journal cover url for project', project.project_id)
   project.journal_cover_path = ''
-  const pathByTitle = getCoverPathByJournalTitle(project.journal_title)
+  const candidates = [
+    getCoverPathByJournalTitle(project.journal_title),
+    getCoverUrlPathJournalCover(project.journal_cover),
+  ].filter(Boolean)
   delete project.journal_title
-  const pathByCover = getCoverUrlPathJournalCover(project.journal_cover)
   delete project.journal_cover
 
-  if (pathByTitle) {
+  for (const key of candidates) {
     try {
-      const exists = await s3Service.objectExists(
-        config.aws.defaultBucket,
-        pathByTitle
-      )
-      if (exists) {
-        project.journal_cover_path = `/s3/${pathByTitle}`
+      if (await s3Service.objectExists(config.aws.defaultBucket, key)) {
+        project.journal_cover_path = `/s3/${key}`
         return
       }
     } catch (e) {
-      console.log('error checking S3 object existence for urlByTitle', e)
-      // do nothing
-    }
-  }
-
-  if (pathByCover) {
-    try {
-      const exists = await s3Service.objectExists(
-        config.aws.defaultBucket,
-        pathByCover
+      // A permission or network problem is not "no cover": keep the path so
+      // one bad dump run cannot strip every journal logo from Browse. The
+      // card hides the image if it turns out not to load.
+      console.warn(
+        `Could not verify journal cover ${key} for project ${project.project_id}: ${e.message}`
       )
-      if (exists) {
-        project.journal_cover_path = `/s3/${pathByCover}`
-        return
-      }
-    } catch (e) {
-      console.log('error checking S3 object existence for urlByCover', e)
-      // do nothing
+      project.journal_cover_path = `/s3/${key}`
+      return
     }
   }
 }
