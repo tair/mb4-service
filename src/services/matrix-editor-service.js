@@ -5942,16 +5942,18 @@ export default class MatrixEditorService {
         ccl.user_id != ? AND
         ccl.logged_table_num = 61`,
       {
+        // Order must match the placeholders in each subquery above:
+        // matrix_id, log_datetime, user_id.
         replacements: [
           this.matrix.matrix_id,
-          this.user.user_id,
           changedTime,
+          this.user.user_id,
           this.matrix.matrix_id,
-          this.user.user_id,
           changedTime,
+          this.user.user_id,
           this.matrix.matrix_id,
-          this.user.user_id,
           changedTime,
+          this.user.user_id,
         ],
       }
     )
