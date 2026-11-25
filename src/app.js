@@ -134,6 +134,16 @@ app.post(
   upload.single('pdf_file'),
   matrixController.processPdf
 )
+// The same extraction as a background job: the POST returns a job id at once and
+// the client polls the GET. Extraction takes longer than the proxies in front of
+// the service keep a request open. Only starting a job counts against the limit.
+app.post(
+  '/curator/process-pdf/jobs',
+  curatorPdfRateLimiter,
+  upload.single('pdf_file'),
+  matrixController.startPdfJob
+)
+app.get('/curator/process-pdf/jobs/:jobId', matrixController.getPdfJob)
 
 app.use('/auth', authRouter)
 app.use('/projects', projectsRouter)
