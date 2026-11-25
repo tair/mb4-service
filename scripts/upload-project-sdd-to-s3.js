@@ -10,19 +10,14 @@
 //
 // RUN ON LOCAL: docker exec -it mb4-service-container-local npm run upload:sdd -- --all
 
-import { PassThrough } from 'stream'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
+import { Transform } from 'stream'
 
-// Get the project root directory
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-const projectRoot = join(__dirname, '..')
-
-// Import the service function and dependencies
-import { generateProjectSDDFallback } from '../src/services/projects-service.js'
 import { getProject } from '../src/services/projects-service.js'
+import { SDDExporter } from '../src/lib/project-export/sdd-exporter.js'
+import s3Service from '../src/services/s3-service.js'
 import sequelizeConn from '../src/util/db.js'
+
+const MB = 1024 * 1024
 
 const ARGS = Object.fromEntries(
   process.argv.slice(2).map((a) => {
@@ -91,94 +86,62 @@ async function main() {
       (PARTITION_ID ? ` (partition ${PARTITION_ID})` : '')
   )
 
+  // Streams the ZIP straight into an S3 multipart upload, so memory stays at a
+  // few parts no matter how large the project is. (The old version collected
+  // the whole ZIP in memory, twice, which can't work past a few GB.)
   async function uploadSingleProject(projectId) {
-    return new Promise(async (resolve) => {
-      try {
-        // First, get the project details to validate it exists and get the name
-        const project = await getProject(projectId)
-
-        if (!project || !project.project_id) {
-          console.error(`❌ Project ${projectId} not found`)
-          resolve({ success: false, error: 'Project not found' })
-          return
-        }
-
-        // Get project size from disk_usage field
-        const projectSizeMB = project.disk_usage
-          ? Math.round(project.disk_usage / 1024 / 1024)
-          : 0
-        console.log(
-          `📤 Uploading project ${projectId} of size ${projectSizeMB}MB`
-        )
-
-        // Sanitize project name for filename
-        const projectName = project.name.replace(/[^a-zA-Z0-9]/g, '_')
-
-        // Create a PassThrough stream to capture the ZIP data
-        const captureStream = new PassThrough()
-        const chunks = []
-
-        // Capture data as it flows through
-        captureStream.on('data', (chunk) => {
-          chunks.push(chunk)
-        })
-
-        // Handle completion
-        captureStream.on('end', async () => {
-          try {
-            const zipBuffer = Buffer.concat(chunks)
-            const s3Key = `sdd_exports/${projectId}_morphobank.zip`
-            const bucketName = process.env.AWS_S3_DEFAULT_BUCKET || 'mb4-data'
-
-            // Import S3 service
-            const s3Service = (await import('../src/services/s3-service.js'))
-              .default
-
-            const uploadResult = await s3Service.putObject(
-              bucketName,
-              s3Key,
-              zipBuffer,
-              'application/zip'
-            )
-
-            const sizeMB = Math.round(zipBuffer.length / 1024 / 1024)
-            console.log(`✅ Project ${projectId} completed (${sizeMB}MB)`)
-            resolve({ success: true })
-          } catch (s3UploadError) {
-            console.error(
-              `❌ Project ${projectId}: Upload failed - ${s3UploadError.message}`
-            )
-            resolve({ success: false, error: s3UploadError.message })
-          }
-        })
-
-        // Handle errors in the stream
-        captureStream.on('error', (error) => {
-          console.error(
-            `❌ Project ${projectId}: Stream error - ${error.message}`
-          )
-          resolve({ success: false, error: error.message })
-        })
-
-        // Call the service function to generate the SDD export
-        const result = await generateProjectSDDFallback(
-          projectId,
-          PARTITION_ID,
-          projectName,
-          captureStream
-        )
-
-        if (!result.success) {
-          console.error(
-            `❌ Project ${projectId}: Export failed - ${result.error}`
-          )
-          resolve({ success: false, error: result.error })
-        }
-      } catch (error) {
-        console.error(`❌ Project ${projectId}: ${error.message}`)
-        resolve({ success: false, error: error.message })
+    let zipStream
+    try {
+      const project = await getProject(projectId)
+      if (!project || !project.project_id) {
+        console.error(`❌ Project ${projectId} not found`)
+        return { success: false, error: 'Project not found' }
       }
-    })
+
+      const projectSizeMB = project.disk_usage
+        ? Math.round(project.disk_usage / 1024 / 1024)
+        : 0
+      console.log(`📤 Uploading project ${projectId} of size ${projectSizeMB}MB`)
+
+      const s3Key = `sdd_exports/${projectId}_morphobank.zip`
+      const bucketName = process.env.AWS_S3_DEFAULT_BUCKET || 'mb4-data'
+
+      // Counts bytes on their way to S3 and logs progress every 500 MB.
+      let bytes = 0
+      let nextLog = 500 * MB
+      zipStream = new Transform({
+        transform(chunk, _enc, done) {
+          bytes += chunk.length
+          if (bytes >= nextLog) {
+            console.log(`… project ${projectId}: ${Math.round(bytes / MB)}MB zipped`)
+            nextLog += 500 * MB
+          }
+          done(null, chunk)
+        },
+      })
+
+      const upload = s3Service.uploadStream(
+        bucketName,
+        s3Key,
+        zipStream,
+        'application/zip'
+      )
+      // Keep a rejection from going unhandled while the export is still running.
+      upload.catch(() => {})
+
+      const exporter = new SDDExporter(projectId, PARTITION_ID, () => {})
+      await exporter.exportAsZip(zipStream)
+      await upload
+
+      console.log(
+        `✅ Project ${projectId} completed (${Math.round(bytes / MB)}MB)`
+      )
+      return { success: true }
+    } catch (error) {
+      zipStream?.destroy(error)
+      console.error(`❌ Project ${projectId}: ${error.message}`)
+      return { success: false, error: error.message }
+    }
   }
 
   async function uploadProjectSDD() {
@@ -218,8 +181,10 @@ async function main() {
   await uploadProjectSDD()
 }
 
-// Run the main function
-main().catch((error) => {
-  console.error('❌ Script failed:', error.message)
-  process.exit(1)
-})
+// Exit explicitly: the open DB pool would otherwise keep the process alive.
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error('❌ Script failed:', error.message)
+    process.exit(1)
+  })
