@@ -21,6 +21,7 @@ import axios from 'axios'
 import FormData from 'form-data'
 import { getRoles } from '../services/user-roles-service.js'
 import * as taskQueueService from '../services/task-queue-service.js'
+import * as curatorPdfJobService from '../services/curator-pdf-job-service.js'
 import path from 'path'
 import config from '../config.js'
 import stream from 'stream'
@@ -1215,70 +1216,148 @@ export async function convertCsvToMatrix(req, res) {
  * This acts as a proxy to the curator service for better security and architecture
  */
 export async function processPdf(req, res) {
+  const request = parsePdfRequest(req)
+  if (request.error) {
+    await removeUploadedFile(req.file)
+    return res.status(request.error.httpStatus).json(request.error.body)
+  }
+
   try {
-    const file = req.file
-    if (!file) {
-      return res.status(400).json({
-        success: false,
-        message: 'A PDF or Word (.docx) file is required',
-      })
-    }
+    res.json(await callCuratorProcessPdf(req.file, request.params))
+  } catch (error) {
+    const failure = curatorErrorToFailure(error)
+    res.status(failure.httpStatus).json(failure.body)
+  }
+}
 
-    // Validate file type
-    const fileExt = path.extname(file.originalname).toLowerCase()
-    if (!['.pdf', '.docx'].includes(fileExt)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid file type. Only PDF and Word (.docx) files are supported.',
-      })
-    }
+/**
+ * Start AI character extraction as a background job and return its id at once.
+ * The client polls getPdfJob for the result. Extraction can take several
+ * minutes, longer than the proxies in front of the service keep a request open.
+ */
+export async function startPdfJob(req, res) {
+  const request = parsePdfRequest(req)
+  if (request.error) {
+    await removeUploadedFile(req.file)
+    return res.status(request.error.httpStatus).json(request.error.body)
+  }
 
-    // Extract form fields
-    const {
-      total_characters,
+  const jobId = curatorPdfJobService.startJob(
+    () => callCuratorProcessPdf(req.file, request.params),
+    curatorErrorToFailure
+  )
+  if (!jobId) {
+    await removeUploadedFile(req.file)
+    return res.status(503).json({
+      success: false,
+      message:
+        'Too many documents are being processed right now. Please try again in a few minutes.',
+    })
+  }
+
+  res.status(202).json({ success: true, jobId })
+}
+
+/**
+ * Status of a background extraction job. While it runs: { status: 'running' }.
+ * When done: { status: 'done', result } where result is what processPdf returns.
+ * When failed: { status: 'failed', httpStatus, error } where error is the body
+ * processPdf would have returned with that status.
+ */
+export async function getPdfJob(req, res) {
+  const job = curatorPdfJobService.getJob(req.params.jobId)
+  if (!job) {
+    return res.status(404).json({
+      success: false,
+      message:
+        'This document processing job was not found. It may have expired; please upload the document again.',
+    })
+  }
+
+  const response = {
+    success: true,
+    status: job.status,
+    elapsedSeconds: job.elapsedSeconds,
+  }
+  if (job.status === 'done') {
+    response.result = job.result
+  } else if (job.status === 'failed') {
+    response.httpStatus = job.failure.httpStatus
+    response.error = job.failure.body
+  }
+  res.json(response)
+}
+
+// Validates the upload and form fields of a process-pdf request. Returns
+// { params } or { error: { httpStatus, body } }.
+function parsePdfRequest(req) {
+  const file = req.file
+  if (!file) {
+    return pdfRequestError('A PDF or Word (.docx) file is required')
+  }
+
+  const fileExt = path.extname(file.originalname).toLowerCase()
+  if (!['.pdf', '.docx'].includes(fileExt)) {
+    return pdfRequestError(
+      'Invalid file type. Only PDF and Word (.docx) files are supported.'
+    )
+  }
+
+  const {
+    total_characters,
+    page_range,
+    zero_indexed,
+    extraction_model,
+    evaluation_model,
+  } = req.body
+
+  const totalChars = total_characters ? parseInt(total_characters, 10) : 1000
+  if (isNaN(totalChars) || totalChars < 1) {
+    return pdfRequestError('total_characters must be a valid positive integer')
+  }
+
+  return {
+    params: {
+      totalChars,
       page_range,
       zero_indexed,
       extraction_model,
       evaluation_model,
-    } = req.body
+    },
+  }
+}
 
-    // Validate total_characters
-    const totalChars = total_characters
-      ? parseInt(total_characters, 10)
-      : 1000
-    if (isNaN(totalChars) || totalChars < 1) {
-      return res.status(400).json({
-        success: false,
-        message: 'total_characters must be a valid positive integer',
-      })
-    }
+function pdfRequestError(message) {
+  return { error: { httpStatus: 400, body: { success: false, message } } }
+}
 
-    // Prepare form data for curator API
-    const formData = new FormData()
-    formData.append('pdf_file', fs.createReadStream(file.path), {
-      filename: file.originalname,
-      contentType: file.mimetype,
-    })
-    formData.append('total_characters', totalChars.toString())
+// Sends the uploaded document to the curator API and returns its response body.
+// The uploaded file is removed afterwards whether or not the call succeeds.
+async function callCuratorProcessPdf(file, params) {
+  const formData = new FormData()
+  formData.append('pdf_file', fs.createReadStream(file.path), {
+    filename: file.originalname,
+    contentType: file.mimetype,
+  })
+  formData.append('total_characters', params.totalChars.toString())
 
-    // Add optional fields
-    if (page_range) {
-      formData.append('page_range', page_range)
-    }
-    if (zero_indexed !== undefined) {
-      formData.append('zero_indexed', zero_indexed)
-    }
-    if (extraction_model) {
-      formData.append('extraction_model', extraction_model)
-    }
-    if (evaluation_model) {
-      formData.append('evaluation_model', evaluation_model)
-    }
+  if (params.page_range) {
+    formData.append('page_range', params.page_range)
+  }
+  if (params.zero_indexed !== undefined) {
+    formData.append('zero_indexed', params.zero_indexed)
+  }
+  if (params.extraction_model) {
+    formData.append('extraction_model', params.extraction_model)
+  }
+  if (params.evaluation_model) {
+    formData.append('evaluation_model', params.evaluation_model)
+  }
 
-    // Call the curator API
-    const curatorUrl = config.curator.url || 'http://localhost:8001'
-    console.log(`Calling curator API at ${curatorUrl}/api/process-pdf`)
+  const curatorUrl = config.curator.url || 'http://localhost:8001'
+  console.log(`Calling curator API at ${curatorUrl}/api/process-pdf`)
 
+  try {
     const response = await axios.post(
       `${curatorUrl}/api/process-pdf`,
       formData,
@@ -1291,64 +1370,72 @@ export async function processPdf(req, res) {
         timeout: 300000, // 5 minute timeout for large documents
       }
     )
+    return response.data
+  } finally {
+    await removeUploadedFile(file)
+  }
+}
 
-    // Clean up uploaded file
-    try {
-      await fs.promises.unlink(file.path)
-    } catch (unlinkError) {
-      console.warn('Failed to clean up temporary file:', unlinkError)
-    }
+async function removeUploadedFile(file) {
+  if (!file?.path) {
+    return
+  }
+  try {
+    await fs.promises.unlink(file.path)
+  } catch (unlinkError) {
+    console.warn('Failed to clean up temporary file:', unlinkError.message)
+  }
+}
 
-    // Return curator API response
-    res.json(response.data)
-  } catch (error) {
-    // Clean up uploaded file on error
-    if (req.file?.path) {
-      try {
-        await fs.promises.unlink(req.file.path)
-      } catch (unlinkError) {
-        console.warn('Failed to clean up temporary file:', unlinkError.message)
-      }
-    }
+// Maps an error from callCuratorProcessPdf to the { httpStatus, body } the
+// client receives.
+function curatorErrorToFailure(error) {
+  const curatorUrl = config.curator.url || 'http://localhost:8001'
+  console.error(
+    `Document processing failed: ${error.code || 'ERROR'} - ${error.message}`,
+    `[Curator URL: ${curatorUrl}]`
+  )
 
-    // Log error concisely
-    const curatorUrl = config.curator.url || 'http://localhost:8001'
+  if (error.response) {
+    // Curator API returned an error
     console.error(
-      `Document processing failed: ${error.code || 'ERROR'} - ${error.message}`,
-      `[Curator URL: ${curatorUrl}]`
+      `Curator API error: ${error.response.status} - ${
+        error.response.data?.detail || error.response.data?.message
+      }`
     )
-
-    // Handle different types of errors
-    if (error.response) {
-      // Curator API returned an error
-      console.error(
-        `Curator API error: ${error.response.status} - ${
-          error.response.data?.detail || error.response.data?.message
-        }`
-      )
-      return res.status(error.response.status).json({
+    return {
+      httpStatus: error.response.status,
+      body: {
         success: false,
         message:
           error.response.data?.detail ||
           error.response.data?.message ||
           'Curator API error',
         detail: error.response.data,
-      })
-    } else if (error.code === 'ECONNREFUSED') {
-      return res.status(503).json({
+      },
+    }
+  } else if (error.code === 'ECONNREFUSED') {
+    return {
+      httpStatus: 503,
+      body: {
         success: false,
         message: `Curator service is unavailable at ${curatorUrl}. Please ensure the service is running.`,
-      })
-    } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
-      return res.status(504).json({
+      },
+    }
+  } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+    return {
+      httpStatus: 504,
+      body: {
         success: false,
         message: 'Curator service request timed out. Please try again.',
-      })
-    } else {
-      return res.status(500).json({
-        success: false,
-        message: error.message || 'Failed to process document',
-      })
+      },
     }
+  }
+  return {
+    httpStatus: 500,
+    body: {
+      success: false,
+      message: error.message || 'Failed to process document',
+    },
   }
 }
